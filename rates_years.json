@@ -1,0 +1,48 @@
+{
+  "note": "Ставки ZUS по годам для калькулятора. Проценты społecznych неизменны с 2022. Сверено 2026-07-21 (zus.pl, публикации).",
+  "spoleczne_rates": {
+    "emerytalna": 0.1952,
+    "rentowa": 0.08,
+    "wypadkowa": 0.0167,
+    "chorobowa": 0.0245,
+    "fp_fs": 0.0245
+  },
+  "years": {
+    "2026": {
+      "min_wage": 4806.0,
+      "pref_base": 1441.8,
+      "duzy_base": 5652.0,
+      "wakacje": true,
+      "zdrowotna": {
+        "min_monthly": 432.54,
+        "skala_rate": 0.09,
+        "liniowy_rate": 0.049,
+        "liniowy_deduct_limit_year": 14100.0,
+        "ryczalt_deduct_share": 0.5,
+        "ryczalt_tiers": [
+          { "max_revenue": 60000, "monthly": 498.35 },
+          { "max_revenue": 300000, "monthly": 830.58 },
+          { "max_revenue": null, "monthly": 1495.04 }
+        ]
+      }
+    },
+    "2025": {
+      "min_wage": 4666.0,
+      "pref_base": 1399.8,
+      "duzy_base": 5203.8,
+      "wakacje": true,
+      "zdrowotna": {
+        "min_monthly": 314.96,
+        "skala_rate": 0.09,
+        "liniowy_rate": 0.049,
+        "liniowy_deduct_limit_year": 12900.0,
+        "ryczalt_deduct_share": 0.5,
+        "ryczalt_tiers": [
+          { "max_revenue": 60000, "monthly": 461.66 },
+          { "max_revenue": 300000, "monthly": 769.43 },
+          { "max_revenue": null, "monthly": 1384.97 }
+        ]
+      }
+    }
+  }
+}

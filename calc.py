@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 RATES = json.loads((Path(__file__).parent / "rates_2026.json").read_text(encoding="utf-8"))
+YEARS = json.loads((Path(__file__).parent / "rates_years.json").read_text(encoding="utf-8"))
 
 STAGES = ("ulga", "pref", "duzy")
 FORMS = ("skala", "liniowy", "ryczalt")
@@ -17,16 +18,21 @@ def _r2(x: float) -> float:
     return round(x + 1e-9, 2)
 
 
-def spoleczne_monthly(stage: str, chorobowe: bool = False) -> dict:
+def year_rates(year: int) -> dict:
+    return YEARS["years"][str(year)]
+
+
+def spoleczne_monthly(stage: str, chorobowe: bool = False, year: int = 2026) -> dict:
     """Składki społeczne + FP/FS в месяц по режиму ZUS."""
     assert stage in STAGES
-    r = RATES["spoleczne_rates"]
+    r = YEARS["spoleczne_rates"]
+    y = year_rates(year)
     if stage == "ulga":
         base, fp = 0.0, False
     elif stage == "pref":
-        base, fp = RATES["pref_base"], False  # FP не платится: база ниже минималки
+        base, fp = y["pref_base"], False  # FP не платится: база ниже минималки
     else:
-        base, fp = RATES["duzy_base"], True
+        base, fp = y["duzy_base"], True
     parts = {
         "emerytalna": base * r["emerytalna"],
         "rentowa": base * r["rentowa"],
@@ -39,14 +45,14 @@ def spoleczne_monthly(stage: str, chorobowe: bool = False) -> dict:
     return parts
 
 
-def zdrowotna_monthly(form: str, annual_income: float) -> float:
+def zdrowotna_monthly(form: str, annual_income: float, year: int = 2026) -> float:
     """Składka zdrowotna в месяц.
 
     skala/liniowy: annual_income = годовой dochód (доход минус расходы и społeczne);
     ryczałt: annual_income = годовой przychód (выручка).
     """
     assert form in FORMS
-    z = RATES["zdrowotna"]
+    z = year_rates(year)["zdrowotna"]
     if form == "ryczalt":
         for tier in z["ryczalt_tiers"]:
             if tier["max_revenue"] is None or annual_income <= tier["max_revenue"]:

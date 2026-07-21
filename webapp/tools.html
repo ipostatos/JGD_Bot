@@ -44,19 +44,22 @@ const CATS = [
     { t: 'Фото для MOS 2', d: 'обрезка фото под требования', u: T + 'mos2/photo.html' },
   ]},
   { t: '📊 Данные', items: [
+    { t: 'Składki ZUS по годам', d: 'наш калькулятор: 2025 · 2026, все режимы и формы', u: 'calc.html' },
     { t: 'Важные даты предпринимателя', d: 'сводная таблица сроков', u: 'https://docs.google.com/spreadsheets/d/1UGRsxqBA7DoO3wNmzuvD8TxAsqiIv_jhyw38wQfaH10/edit' },
-    { t: 'Инфографика składek ZUS (ryczałt)', d: 'наглядно по годам', u: T + 'zus' },
     { t: 'Калькулятор Ryczałt (таблица)', d: 'вкл. версию с разными ставками', u: 'https://docs.google.com/spreadsheets/d/14Y0ReOUMWA17pt931vgY2R0pSFYzqYOQ-XBzmkhllOw/edit' },
   ]},
 ];
 document.getElementById('cats').innerHTML = CATS.map(c => `
   <div class="card" style="margin-bottom:10px;padding:var(--sp-3) var(--sp-4)">
     <div class="h2">${c.t}</div>
-    ${c.items.map(i => `
+    ${c.items.map(i => {
+      const ext = i.u.startsWith('http');
+      return `
       <a class="row-card" style="margin:6px 0 0;background:var(--bg);border:none"
-         href="${i.u}" target="_blank" rel="noopener">
+         href="${i.u}"${ext ? ' target="_blank" rel="noopener"' : ''}>
         <span class="body"><span class="t" style="font-size:14px">${i.hot ? '⭐ ' : ''}${i.t}</span>
-        <span class="d">${i.d}</span></span><span class="chev">↗</span></a>`).join('')}
+        <span class="d">${i.d}</span></span><span class="chev">${ext ? '↗' : '›'}</span></a>`;
+    }).join('')}
   </div>`).join('');
 </script>
 </body>

@@ -11,7 +11,7 @@
 </head>
 <body>
 <h1>🧮 Калькуляторы</h1>
-<p class="sub">Ставки 2026 · данные проверены <span id="upd"></span></p>
+<p class="sub">Ставки 2025–2026 · данные проверены <span id="upd"></span></p>
 
 <div class="seg" id="tabs" style="margin-bottom:14px">
   <button data-t="zus" class="on">ZUS</button>
@@ -22,6 +22,12 @@
 <!-- ═══ ZUS ═══ -->
 <section id="tab-zus">
   <div class="card" style="margin-bottom:10px">
+    <div class="field"><label>Год</label>
+      <div class="seg" id="zyear">
+        <button data-v="2026" class="on">2026</button>
+        <button data-v="2025">2025</button>
+      </div>
+    </div>
     <div class="field"><label>Режим ZUS</label>
       <div class="seg" id="zstage">
         <button data-v="ulga" class="on">Ulga na start</button>
@@ -116,14 +122,15 @@ ratesReady.then(() => {
   // ── ZUS ──
   const zres = document.getElementById('zres');
   function zus() {
+    const year = +segVal('zyear');
     const stage = segVal('zstage'), form = segVal('zform');
     const chor = document.getElementById('zchor').checked;
     const inc = +document.getElementById('zinc').value || 0;
     document.getElementById('zinc-label').textContent = form === 'ryczalt'
       ? 'Годовой przychód (выручка), zł'
       : 'Годовой dochód (доход = выручка − расходы), zł';
-    const s = spoleczneMonthly(stage, chor);
-    const zdr = zdrowotnaMonthly(form, inc);
+    const s = spoleczneMonthly(stage, chor, year);
+    const zdr = zdrowotnaMonthly(form, inc, year);
     const rows = [];
     if (stage === 'ulga')
       rows.push(`<div class="res-row"><span>Składki społeczne</span><span class="v">0 zł <span class="muted">(льгота 6 мес)</span></span></div>`);
@@ -138,9 +145,11 @@ ratesReady.then(() => {
       rows.push(`<div class="res-row"><span class="muted">На Uldze na start chorobową подключить нельзя</span><span></span></div>`);
     rows.push(`<div class="res-row"><span>Zdrowotna (${form})</span><span class="v">${fmtZl(zdr)}</span></div>`);
     rows.push(`<div class="res-row total"><span><b>Итого в месяц</b></span><span class="v">${fmtZl(s.total + zdr)}</span></div>`);
+    if (stage !== 'ulga' && s.total > 0)
+      rows.push(`<div class="res-row" style="border:none"><span class="muted">🏖 Месяц <a href="article.html?id=zus_vacation">ZUS-каникул</a> экономит</span><span class="v" style="color:var(--ok)">${fmtZl(s.total)}</span></div>`);
     zres.innerHTML = rows.join('');
   }
-  segInit('zstage', zus); segInit('zform', zus);
+  segInit('zyear', zus); segInit('zstage', zus); segInit('zform', zus);
   document.getElementById('zchor').addEventListener('change', zus);
   document.getElementById('zinc').addEventListener('input', zus);
   zus();

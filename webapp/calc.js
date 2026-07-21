@@ -1,16 +1,20 @@
 /* Расчётное ядро — JS-зеркало calc.py. Ставки только из data/rates_2026.json. */
 (function () {
-  let R = null;
-  window.ratesReady = fetch('data/rates_2026.json').then(r => r.json())
-    .then(j => { R = j; window.RATES = j; return j; });
+  let R = null, Y = null;
+  window.ratesReady = Promise.all([
+    fetch('data/rates_2026.json').then(r => r.json()),
+    fetch('data/rates_years.json').then(r => r.json()),
+  ]).then(([j, y]) => { R = j; Y = y; window.RATES = j; window.YEARS = y; return j; });
 
   const r2 = (x) => Math.round((x + 1e-9) * 100) / 100;
+  const yr = (year) => Y.years[String(year || 2026)];
 
-  window.spoleczneMonthly = function (stage, chorobowe) {
-    const rr = R.spoleczne_rates;
+  window.spoleczneMonthly = function (stage, chorobowe, year) {
+    const rr = Y.spoleczne_rates;
+    const y = yr(year);
     let base = 0, fp = false;
-    if (stage === 'pref') base = R.pref_base;
-    if (stage === 'duzy') { base = R.duzy_base; fp = true; }
+    if (stage === 'pref') base = y.pref_base;
+    if (stage === 'duzy') { base = y.duzy_base; fp = true; }
     const p = {
       emerytalna: r2(base * rr.emerytalna),
       rentowa: r2(base * rr.rentowa),
@@ -22,8 +26,8 @@
     return p;
   };
 
-  window.zdrowotnaMonthly = function (form, annualIncome) {
-    const z = R.zdrowotna;
+  window.zdrowotnaMonthly = function (form, annualIncome, year) {
+    const z = yr(year).zdrowotna;
     if (form === 'ryczalt') {
       for (const t of z.ryczalt_tiers)
         if (t.max_revenue === null || annualIncome <= t.max_revenue) return t.monthly;

@@ -84,3 +84,25 @@ def test_vat_limit_prorated_midyear():
 
 def test_vat_limit_exceeded():
     assert calc.vat_limit(250_000)["exceeded"]
+
+
+def test_year_2025_spoleczne():
+    p = calc.spoleczne_monthly("duzy", year=2025)
+    assert p["emerytalna"] == 1015.78  # 5203.80 * 19.52%
+    assert p["rentowa"] == 416.3
+    pref = calc.spoleczne_monthly("pref", year=2025)
+    assert pref["emerytalna"] == 273.24  # 1399.80 * 19.52%
+
+
+def test_year_2025_zdrowotna():
+    assert calc.zdrowotna_monthly("ryczalt", 50_000, year=2025) == 461.66
+    assert calc.zdrowotna_monthly("ryczalt", 200_000, year=2025) == 769.43
+    assert calc.zdrowotna_monthly("ryczalt", 400_000, year=2025) == 1384.97
+    # минималка 2025 = 9% от 75% минималки 4666
+    assert calc.zdrowotna_monthly("skala", 10_000, year=2025) == 314.96
+
+
+def test_year_2026_matches_default():
+    assert calc.spoleczne_monthly("duzy") == calc.spoleczne_monthly("duzy", year=2026)
+    assert calc.zdrowotna_monthly("ryczalt", 100_000) == \
+        calc.zdrowotna_monthly("ryczalt", 100_000, year=2026)

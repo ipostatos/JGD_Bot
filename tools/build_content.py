@@ -194,6 +194,7 @@ def main():
         shutil.copytree(DOCS / "images", OUT / "gimg")
     # ставки нужны webapp-у как данные
     shutil.copy(ROOT / "rates_2026.json", OUT / "rates_2026.json")
+    shutil.copy(ROOT / "rates_years.json", OUT / "rates_years.json")
 
     print(f"OK: {len(sections)} секций, {n_articles} статей, "
           f"search {len(search)} записей -> {OUT}")
