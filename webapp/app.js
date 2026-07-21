@@ -13,7 +13,7 @@
   window.renderDock = function (active) {
     const items = [
       { k: 'home', href: 'index.html', ic: '🏠', t: 'Главная' },
-      { k: 'guide', href: 'guide.html', ic: '📖', t: 'Гайд' },
+      { k: 'guide', href: 'guide.html', ic: 'ℹ️', t: '' },
       { k: 'calc', href: 'calc.html', ic: '🧮', t: 'Расчёты' },
       { k: 'plan', href: 'plan.html', ic: '📅', t: 'План' },
       { k: 'about', href: 'about.html', ic: '⭐', t: 'Ещё' },

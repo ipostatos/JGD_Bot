@@ -10,6 +10,8 @@
 .dock a.on{ color:var(--accent) }
 .dock .di{ font-size:20px; line-height:1 }
 .dock .dt{ font-size:10px; font-weight:600 }
+.dock .dt:empty{ display:none }
+.dock a:has(.dt:empty){ justify-content:center }
 body.has-dock{ padding-bottom:84px }
 
 /* ── главный экран (паттерн ISSA home) ── */
