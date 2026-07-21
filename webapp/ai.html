@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>JDG Гид — AI-ассистент</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="jdg.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  .msg{ margin-bottom:10px; max-width:92% }
+  .msg.q{ margin-left:auto }
+  .msg.q .bub{ background:var(--accent); color:var(--accent-text);
+    border-radius:16px 16px 4px 16px; padding:10px 14px }
+  .msg.a .bub{ background:var(--card); border:1px solid var(--border);
+    border-radius:16px 16px 16px 4px; padding:12px 14px; white-space:pre-wrap;
+    font-size:var(--fs-body); line-height:1.5 }
+  .msg .srcs{ margin-top:8px; display:flex; gap:6px; flex-wrap:wrap }
+  .askbar{ position:fixed; left:0; right:0; bottom:64px; padding:8px 16px;
+    background:var(--bg); border-top:1px solid var(--border); display:flex; gap:8px }
+  .askbar input{ flex:1; padding:12px 14px; font-size:var(--fs-body);
+    color:var(--text); background:var(--card); border:1px solid var(--border);
+    border-radius:var(--r-pill); outline:none }
+  .askbar button{ width:46px; height:46px; border:none; border-radius:50%;
+    background:var(--accent); color:var(--accent-text); cursor:pointer;
+    display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto }
+  .askbar button:disabled{ opacity:.5 }
+  .askbar button svg{ width:20px; height:20px }
+  body{ padding-bottom:150px }
+  .hint-chips{ display:flex; gap:6px; flex-wrap:wrap; margin-top:10px }
+  .hint-chips .chip{ cursor:pointer; padding:7px 12px; font-size:13px }
+  .typing i{ display:inline-block; width:6px; height:6px; border-radius:50%;
+    background:var(--hint); margin-right:3px; animation:tp 1s infinite }
+  .typing i:nth-child(2){ animation-delay:.2s } .typing i:nth-child(3){ animation-delay:.4s }
+  @keyframes tp{ 0%,100%{opacity:.3} 50%{opacity:1} }
+</style>
+</head>
+<body>
+<div class="hero"><span class="logo emi" data-icon="bot"></span><h1>AI-ассистент</h1></div>
+<p class="sub">Отвечает по базе гайда · <span id="left">10</span> вопросов сегодня</p>
+
+<div id="chat">
+  <div class="msg a"><div class="bub">Привет! Я отвечаю на вопросы про JDG по базе гайда сообщества: ZUS, налоги, регистрация, декларации, легализация.
+
+Я справочный помощник, не бухгалтер — в сложных случаях сверяйся со специалистом или чатом @JDG_PBH.</div>
+  <div class="hint-chips">
+    <span class="chip" data-q="Сколько я буду платить ZUS в первый год?">ZUS в первый год</span>
+    <span class="chip" data-q="Что выгоднее: ryczałt или skala для IT-услуг?">Ryczałt или skala?</span>
+    <span class="chip" data-q="Когда я обязан зарегистрироваться как плательщик VAT?">Когда нужен VAT</span>
+    <span class="chip" data-q="Как оплатить składki ZUS через eZUS?">Как оплатить ZUS</span>
+  </div></div>
+</div>
+
+<div class="askbar">
+  <input id="q" type="text" placeholder="Вопрос про JDG…" maxlength="500" autocomplete="off">
+  <button id="send"></button>
+</div>
+
+<script src="icons.js"></script>
+<script src="app.js"></script>
+<script>
+renderDock('home');
+if (tg && tg.BackButton) { tg.BackButton.show(); tg.BackButton.onClick(() => location.href = 'index.html'); }
+const $ = id => document.getElementById(id);
+$('send').innerHTML = Icons.svg('send');
+const chat = $('chat');
+
+function add(kind, html) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + kind;
+  div.innerHTML = html;
+  chat.appendChild(div);
+  window.scrollTo(0, document.body.scrollHeight);
+  return div;
+}
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+// ответы модели: после экранирования разрешаем только **жирный**
+const fmt = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+
+let busy = false;
+async function askAI(question) {
+  if (busy || !question.trim()) return;
+  if (!tg || !tg.initData) {
+    add('a', '<div class="bub">Открой ассистента через Telegram, чтобы задавать вопросы.</div>');
+    return;
+  }
+  busy = true; $('send').disabled = true; $('q').value = '';
+  add('q', `<div class="bub">${esc(question)}</div>`);
+  const wait = add('a', '<div class="bub typing"><i></i><i></i><i></i></div>');
+  haptic('medium');
+  try {
+    const r = await fetch('/api/ask', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: tg.initData, question, profile: getProfile() }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.detail || 'Ошибка');
+    const srcs = (data.sources || []).map(s =>
+      `<a class="chip" style="color:var(--link)" href="article.html?id=${s.id}">${s.title}</a>`).join('');
+    wait.innerHTML = `<div class="bub">${fmt(data.answer)}</div>` +
+      (srcs ? `<div class="srcs">${srcs}</div>` : '');
+    if (typeof data.left === 'number') $('left').textContent = data.left;
+  } catch (e) {
+    wait.innerHTML = `<div class="bub">⚠️ ${esc(e.message || 'Не получилось, попробуй ещё раз')}</div>`;
+  }
+  busy = false; $('send').disabled = false;
+  window.scrollTo(0, document.body.scrollHeight);
+}
+
+$('send').onclick = () => askAI($('q').value);
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') askAI($('q').value); });
+chat.addEventListener('click', e => {
+  const c = e.target.closest('.chip[data-q]');
+  if (c) askAI(c.dataset.q);
+});
+</script>
+</body>
+</html>

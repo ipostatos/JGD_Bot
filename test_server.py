@@ -118,6 +118,17 @@ def test_news_and_subs_api():
         assert r.status_code == 200
 
 
+def test_ask_api_auth_and_pages():
+    good = make_init_data(os.environ["BOT_TOKEN"])
+    with client() as c:
+        assert c.get("/ai.html").status_code == 200
+        r = c.post("/api/ask", json={"initData": "bad", "question": "test"})
+        assert r.status_code == 401
+        # короткий вопрос отклоняется до похода в API
+        r = c.post("/api/ask", json={"initData": good, "question": "??"})
+        assert r.status_code == 400
+
+
 def test_verify_init_data_roundtrip():
     token = os.environ["BOT_TOKEN"]
     user = server.verify_init_data(make_init_data(token, 777))

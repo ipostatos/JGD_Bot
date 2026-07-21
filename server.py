@@ -228,6 +228,20 @@ async def unsubscribe(req: Request):
     return {"ok": True}
 
 
+@app.post("/api/ask")
+async def api_ask(req: Request):
+    import ai
+    body = await req.json()
+    user = verify_init_data(body.get("initData", ""))
+    if user is None:
+        raise HTTPException(401, "bad initData")
+    res = await ai.ask(user["id"], body.get("question", ""),
+                       body.get("profile") or None)
+    if "error" in res:
+        raise HTTPException(429 if "Лимит" in res["error"] else 400, res["error"])
+    return res
+
+
 TMP_DIR = ROOT / "tmp_files"
 TMP_TTL = 3600  # секунда жизни временного файла
 TMP_MAX = 25 * 1024 * 1024
