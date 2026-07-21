@@ -33,14 +33,25 @@ ICON_EMOJI = {
     "fontawesome-brands-youtube": "▶️", "material-web": "\U0001f310",
 }
 
-# эмодзи секций для домашнего экрана и карточек
-SECTION_ICONS = {
-    "Главная": "\U0001f3e0", "PESEL": "\U0001fab6", "Profil Zaufany": "\U0001f510",
-    "Регистрация": "\U0001f4dd", "ZUS": "\U0001f3e5", "Налоги": "\U0001f4b0",
-    "Декларации": "\U0001f4c4", "Легализация": "\U0001f6c2",
-    "Рабочий процесс": "\U0001f501", "Как отправить письмо в налоговую": "✉️",
-    "inFakt": "\U0001f9fe", "wFirma": "\U0001f9ee", "Словарь": "\U0001f4d6",
-    "F.A.Q.": "❓", "Что нового": "\U0001f195", "Поддержать": "❤️",
+# Lucide-иконка и тон плашки для каждой секции (дизайн-система ISSA).
+# Секции «reference» уходят в блок «Справочное» на странице гайда.
+SECTION_META = {
+    "Главная": ("house", "blue", False),
+    "PESEL": ("id-card", "blue", False),
+    "Profil Zaufany": ("lock", "violet", False),
+    "Регистрация": ("clipboard-list", "green", False),
+    "ZUS": ("shield-check", "amber", False),
+    "Налоги": ("coins", "gold", False),
+    "Декларации": ("file-check", "cyan", False),
+    "Легализация": ("flag", "violet", False),
+    "Рабочий процесс": ("refresh-cw", "green", False),
+    "Как отправить письмо в налоговую": ("send", "blue", False),
+    "inFakt": ("file-text", "cyan", False),
+    "wFirma": ("file-text", "violet", False),
+    "Словарь": ("book-marked", "cyan", True),
+    "F.A.Q.": ("circle-help", "amber", True),
+    "Что нового": ("bell", "red", True),
+    "Поддержать": ("heart", "red", True),
 }
 
 
@@ -174,16 +185,16 @@ def main():
                 "desc": meta.get("description", "")}
 
     for item in nav:
-        icon = SECTION_ICONS.get(item["title"], "\U0001f4c1")
+        icon, tone, ref = SECTION_META.get(item["title"], ("file-text", "blue", False))
+        meta = {"title": item["title"], "icon": icon, "tone": tone, "ref": ref}
         if "items" in item:
             arts = [a for a in (render(e) for e in item["items"]) if a]
             if arts:
-                sections.append({"title": item["title"], "icon": icon, "items": arts})
+                sections.append({**meta, "items": arts})
         else:
             art = render(item)
             if art:
-                sections.append({"title": item["title"], "icon": icon,
-                                 "items": [art], "single": True})
+                sections.append({**meta, "items": [art], "single": True})
 
     (OUT / "content.json").write_text(
         json.dumps({"sections": sections}, ensure_ascii=False), encoding="utf-8")

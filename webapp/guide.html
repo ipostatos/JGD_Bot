@@ -10,13 +10,12 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-<div class="hero"><span class="logo emi" data-icon="book-open"></span><h1>Гайд</h1></div>
-<p class="sub">38 статей сообщества JDG PBH — от PESEL до деклараций</p>
+<div id="head"></div>
 
-<input id="q" class="search-box" type="search" placeholder="🔍 Поиск: ZUS, VAT, ryczałt…" autocomplete="off">
+<input id="q" class="search-box" type="search" placeholder="Поиск: ZUS, VAT, ryczałt…" autocomplete="off">
 <div id="hits" class="card hidden" style="padding:0;margin-top:8px;max-height:60vh;overflow-y:auto"></div>
 
-<div id="sections" style="margin-top:14px"></div>
+<div id="list"></div>
 
 <p class="foot">Первоисточник: <a href="https://sobolevbel.github.io/jdg/" target="_blank" rel="noopener">sobolevbel.github.io/jdg</a> (CC0) · вопросы — в чат <a href="https://t.me/JDG_PBH" target="_blank" rel="noopener">@JDG_PBH</a></p>
 
@@ -24,29 +23,58 @@
 <script src="app.js"></script>
 <script>
 renderDock('guide');
+const secIdx = qs.get('sec');
 
-loadJSON('data/content.json').then(({sections}) => {
-  const host = document.getElementById('sections');
-  host.innerHTML = sections
-    .filter(s => !['Главная','Поддержать'].includes(s.title))
-    .map(s => {
-      if (s.single) {
-        const a = s.items[0];
-        return `<a class="row-card" href="article.html?id=${a.id}">
-          <span class="ic">${s.icon}</span>
-          <span class="body"><span class="t">${s.title}</span>
-          <span class="d">${a.desc || ''}</span></span><span class="chev">›</span></a>`;
-      }
-      const inner = s.items.map(a =>
-        `<a class="row-card" style="margin:6px 0 0;border:none;background:var(--bg)"
-            href="article.html?id=${a.id}">
-          <span class="body"><span class="t" style="font-size:14px">${a.title}</span></span>
-          <span class="chev">›</span></a>`).join('');
-      return `<details class="card" style="margin-bottom:8px;padding:var(--sp-3) var(--sp-4)">
-        <summary style="cursor:pointer;font-weight:700;font-size:var(--fs-h2)">
-          ${s.icon} ${s.title} <span class="muted" style="font-weight:400;font-size:12px">· ${s.items.length}</span></summary>
-        ${inner}</details>`;
-    }).join('');
+function rowCard(href, tone, icon, title, desc, count) {
+  return `<a class="row-card" href="${href}">
+    <span class="ic-tile ${tone}">${Icons.svg(icon)}</span>
+    <span class="body"><span class="t">${title}</span>
+    <span class="d clamp2">${desc || ''}</span></span>
+    <span class="chev">${count ? `<span class="chip">${count}</span>` : '›'}</span></a>`;
+}
+
+loadJSON('data/content.json').then(({ sections }) => {
+  const secs = sections.filter(s => !['Главная', 'Поддержать'].includes(s.title));
+  const head = document.getElementById('head');
+  const list = document.getElementById('list');
+
+  if (secIdx !== null && secs[+secIdx]) {
+    // ── уровень 2: статьи секции ──
+    const s = secs[+secIdx];
+    head.innerHTML = `<div class="hero">
+      <span class="ic-tile ${s.tone}" style="align-self:center">${Icons.svg(s.icon)}</span>
+      <h1 style="align-self:center">${s.title}</h1></div>
+      <p class="sub">${s.items.length} ${s.items.length === 1 ? 'статья' : s.items.length < 5 ? 'статьи' : 'статей'} · по порядку действий</p>`;
+    list.innerHTML = s.items.map((a, i) =>
+      `<a class="row-card" href="article.html?id=${a.id}">
+        <span class="num">${i + 1}</span>
+        <span class="body"><span class="t" style="font-size:15px">${a.title}</span>
+        ${a.desc ? `<span class="d clamp2">${a.desc}</span>` : ''}</span>
+        <span class="chev">›</span></a>`).join('');
+    if (tg && tg.BackButton) {
+      tg.BackButton.show();
+      tg.BackButton.onClick(() => location.href = 'guide.html');
+    }
+  } else {
+    // ── уровень 1: разделы гайда ──
+    head.innerHTML = `<div class="hero"><span class="logo emi" data-icon="book-open"></span><h1>Гайд</h1></div>
+      <p class="sub">Путь предпринимателя — по шагам, от документов до деклараций</p>`;
+    const main = secs.filter(s => !s.ref), ref = secs.filter(s => s.ref);
+    const render = (s) => {
+      const i = secs.indexOf(s);
+      if (s.single)
+        return rowCard(`article.html?id=${s.items[0].id}`, s.tone, s.icon,
+          s.title, s.items[0].desc);
+      return rowCard(`guide.html?sec=${i}`, s.tone, s.icon, s.title,
+        s.items.map(a => a.title).slice(0, 3).join(' · '), s.items.length);
+    };
+    list.innerHTML =
+      `<div class="section-title">Путь предпринимателя</div>` +
+      main.map(render).join('') +
+      `<div class="section-title">Справочное</div>` +
+      ref.map(render).join('');
+    Icons.hydrate();
+  }
 });
 
 // поиск: индекс грузим лениво при первом фокусе
