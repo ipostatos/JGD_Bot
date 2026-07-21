@@ -1,5 +1,10 @@
 /* Дополнения к theme.css, специфичные для JDG Гид. Подключать ПОСЛЕ theme.css. */
 
+/* ссылки — всегда цвет темы Telegram (дефолтный синий нечитаем на тёмной) */
+a{ color:var(--link) }
+.foot a,.sub a{ color:var(--link); text-decoration:underline;
+  text-decoration-color:color-mix(in srgb, var(--link) 45%, transparent) }
+
 /* ── нижний dock ── */
 .dock{ position:fixed; left:0; right:0; bottom:0; z-index:100;
   display:flex; justify-content:space-around;
