@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>JDG Гид — мой план</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="jdg.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+<h1>📅 Мой план</h1>
+<p class="sub">Этапы ZUS, дедлайны и чек-листы под твой профиль</p>
+
+<div class="card" style="margin-bottom:12px">
+  <div class="h2">Профиль</div>
+  <div class="field"><label>Дата регистрации JDG</label>
+    <input id="preg" type="date"></div>
+  <div class="field"><label>Форма налогообложения</label>
+    <div class="seg" id="pform">
+      <button data-v="ryczalt">Ryczałt</button>
+      <button data-v="skala">Skala</button>
+      <button data-v="liniowy">Liniowy</button>
+    </div></div>
+  <label class="chk" style="border:none"><input id="pvat" type="checkbox">
+    <span class="tt">Я — czynny podatnik VAT</span></label>
+  <label class="chk" style="border:none"><input id="pulga" type="checkbox" checked>
+    <span class="tt">Использую Ulga na Start</span></label>
+</div>
+
+<div id="stages-card" class="card hidden" style="margin-bottom:12px">
+  <div class="h2">Этапы ZUS</div>
+  <div class="stage-line" id="stageline"></div>
+  <div id="stagenote" class="muted" style="font-size:13px"></div>
+</div>
+
+<div id="dl-card" class="card hidden" style="margin-bottom:12px">
+  <div class="h2">Ближайшие дедлайны</div>
+  <div id="deadlines"></div>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+  <div class="h2" id="chk1-h">Чек-лист: открываю JDG</div>
+  <div class="meter" style="margin-bottom:8px"><i id="chk1-m" style="width:0"></i></div>
+  <div id="chk1"></div>
+</div>
+
+<div class="card">
+  <div class="h2">Чек-лист: ежемесячная рутина</div>
+  <div class="meter" style="margin-bottom:8px"><i id="chk2-m" style="width:0"></i></div>
+  <div id="chk2"></div>
+</div>
+
+<p class="foot">Сроки этапов — ориентир по общим правилам; свою дату сверяй в <a href="article.html?id=zus_next_level">гайде о переходах</a> и eZUS</p>
+
+<script src="app.js"></script>
+<script>
+renderDock('plan');
+
+const CHECKLISTS = {
+  open: [
+    { id: 'pesel', t: 'Получить PESEL', a: 'pesel' },
+    { id: 'pz', t: 'Открыть Profil Zaufany', a: 'pz' },
+    { id: 'reg', t: 'Подать заявку на JDG через biznes.gov.pl', a: 'registration_jdg' },
+    { id: 'bank', t: 'Открыть фирменный банковский счёт' },
+    { id: 'zus', t: 'Зарегистрироваться в ZUS (ZUS ZZA / ZUA)', a: 'zus' },
+    { id: 'ezus', t: 'Настроить вход в eZUS', a: 'zus_login' },
+    { id: 'vat', t: 'Если нужно — зарегистрироваться в VAT (VAT-R)', a: 'registration_vat' },
+    { id: 'ksiegowosc', t: 'Выбрать бухгалтерию: inFakt / wFirma / бухгалтер', a: 'infakt_settings' },
+    { id: 'mos', t: 'Легализация: уведомить о смене основания пребывания (если нужно)', a: 'legalization' },
+  ],
+  monthly: [
+    { id: 'invoice', t: 'Выставить фактуры клиентам', a: 'workflow' },
+    { id: 'costs', t: 'Собрать документы расходов (koszty)' },
+    { id: 'dra', t: 'До 20-го: отчёт ZUS DRA + оплатить składki', a: 'declarations_zus' },
+    { id: 'zaliczka', t: 'До 20-го: аванс PIT / ryczałt за прошлый месяц', a: 'declarations_pit' },
+    { id: 'jpk', t: 'До 25-го: JPK_V7M (если VAT)', a: 'declarations_jpk_emikrofirma' },
+  ],
+};
+
+const p = getProfile();
+
+// ── профиль ──
+const preg = document.getElementById('preg');
+if (p.reg) preg.value = p.reg;
+if (p.vat) document.getElementById('pvat').checked = true;
+if (p.ulga === false) document.getElementById('pulga').checked = false;
+document.querySelectorAll('#pform button').forEach(b =>
+  b.classList.toggle('on', b.dataset.v === (p.form || 'ryczalt')));
+
+function saveProfile() {
+  setProfile({
+    reg: preg.value || null,
+    form: document.querySelector('#pform button.on').dataset.v,
+    vat: document.getElementById('pvat').checked,
+    ulga: document.getElementById('pulga').checked,
+  });
+  renderStages(); renderDeadlines();
+}
+preg.addEventListener('change', saveProfile);
+document.getElementById('pvat').addEventListener('change', saveProfile);
+document.getElementById('pulga').addEventListener('change', saveProfile);
+document.getElementById('pform').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#pform button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); haptic(); saveProfile();
+});
+
+// ── этапы ZUS ──
+const lastDay = (y, m) => new Date(y, m + 1, 0); // m: 0-based
+function addMonths(d, n) { return new Date(d.getFullYear(), d.getMonth() + n, d.getDate()); }
+const fmtD = (d) => d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+
+function stageDates(reg, useUlga) {
+  // ulga: 6 полных месяцев; месяц старта считается, только если старт 1-го числа
+  let ulgaEnd = null, base = reg;
+  if (useUlga) {
+    const extra = reg.getDate() === 1 ? 5 : 6;
+    ulgaEnd = lastDay(reg.getFullYear(), reg.getMonth() + extra);
+    base = new Date(ulgaEnd.getFullYear(), ulgaEnd.getMonth() + 1, 1);
+  }
+  // preferencyjne: 24 полных месяца
+  const prefEnd = lastDay(base.getFullYear(), base.getMonth() + (base.getDate() === 1 ? 23 : 24));
+  return { ulgaEnd, prefEnd };
+}
+
+function renderStages() {
+  const prof = getProfile();
+  const card = document.getElementById('stages-card');
+  if (!prof.reg) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  const reg = new Date(prof.reg + 'T00:00:00');
+  const { ulgaEnd, prefEnd } = stageDates(reg, prof.ulga);
+  const now = new Date();
+  const st = [];
+  if (prof.ulga) st.push({ t: 'Ulga na start', d: 'до ' + fmtD(ulgaEnd), end: ulgaEnd });
+  st.push({ t: 'Preferencyjne', d: 'до ' + fmtD(prefEnd), end: prefEnd });
+  st.push({ t: 'Duży ZUS', d: 'далее', end: null });
+  let cur = st.findIndex(s => s.end === null || now <= s.end);
+  document.getElementById('stageline').innerHTML = st.map((s, i) =>
+    `<div class="st ${i < cur ? 'past' : i === cur ? 'now' : ''}"><b>${s.t}</b>${s.d}</div>`).join('');
+  const curSt = st[cur];
+  let note = `Сейчас: <b>${curSt.t}</b>.`;
+  if (curSt.end) {
+    const days = Math.ceil((curSt.end - now) / 864e5);
+    note += ` До перехода на следующий режим ~${days} дн. — заявление в ZUS подаётся самостоятельно, не пропусти!`;
+  }
+  document.getElementById('stagenote').innerHTML = note;
+}
+
+// ── дедлайны ──
+function renderDeadlines() {
+  const prof = getProfile();
+  const card = document.getElementById('dl-card');
+  card.classList.remove('hidden');
+  const now = new Date();
+  const evs = [];
+  for (let k = 0; k < 3; k++) {
+    const m = new Date(now.getFullYear(), now.getMonth() + k, 1);
+    const mName = m.toLocaleDateString('ru-RU', { month: 'long' });
+    evs.push({ d: new Date(m.getFullYear(), m.getMonth(), 20),
+      t: 'ZUS DRA + składki', s: 'и аванс налога за прошлый месяц' });
+    if (prof.vat) evs.push({ d: new Date(m.getFullYear(), m.getMonth(), 25),
+      t: 'JPK_V7M за прошлый месяц', s: 'декларация VAT (' + mName + ')' });
+  }
+  evs.push({ d: new Date(now.getMonth() < 4 ? now.getFullYear() : now.getFullYear() + 1, 3, 30),
+    t: 'Годовая декларация PIT', s: prof.form === 'ryczalt' ? 'PIT-28' : prof.form === 'liniowy' ? 'PIT-36L' : 'PIT-36' });
+  const prof2 = getProfile();
+  if (prof2.reg) {
+    const { ulgaEnd, prefEnd } = stageDates(new Date(prof2.reg + 'T00:00:00'), prof2.ulga);
+    if (prof2.ulga && ulgaEnd >= now) evs.push({ d: ulgaEnd, t: 'Конец Ulga na Start', s: 'подать ZUS ZUA (переход на preferencyjne)', hot: true });
+    if (prefEnd >= now) evs.push({ d: prefEnd, t: 'Конец Preferencyjnych', s: 'переход на Duży ZUS', hot: true });
+  }
+  const up = evs.filter(e => e.d >= new Date(now.getFullYear(), now.getMonth(), now.getDate()))
+    .sort((a, b) => a.d - b.d).slice(0, 5);
+  document.getElementById('deadlines').innerHTML = up.map(e => {
+    const days = Math.ceil((e.d - now) / 864e5);
+    return `<div class="deadline ${days <= 7 || e.hot ? 'soon' : ''}">
+      <div class="dd">${e.d.getDate()}.${String(e.d.getMonth() + 1).padStart(2, '0')}<small>${days} дн.</small></div>
+      <div class="body"><div class="t">${e.hot ? '🔥 ' : ''}${e.t}</div><div class="d">${e.s}</div></div>
+    </div>`;
+  }).join('') || '<div class="state">Заполни профиль — покажу твои сроки</div>';
+}
+
+// ── чек-листы ──
+function renderChecklist(hostId, meterId, key, items) {
+  const done = JSON.parse(localStorage.getItem('jdg_chk_' + key) || '{}');
+  const host = document.getElementById(hostId);
+  host.innerHTML = items.map(i => `
+    <label class="chk ${done[i.id] ? 'done' : ''}" data-id="${i.id}">
+      <input type="checkbox" ${done[i.id] ? 'checked' : ''}>
+      <span class="tt">${i.t}${i.a ? ` <a href="article.html?id=${i.a}" onclick="event.stopPropagation()">гайд ›</a>` : ''}</span>
+    </label>`).join('');
+  const upd = () => {
+    const n = items.filter(i => done[i.id]).length;
+    document.getElementById(meterId).style.width = (n / items.length * 100) + '%';
+  };
+  host.addEventListener('change', (e) => {
+    const row = e.target.closest('.chk'); if (!row) return;
+    done[row.dataset.id] = e.target.checked;
+    row.classList.toggle('done', e.target.checked);
+    localStorage.setItem('jdg_chk_' + key, JSON.stringify(done));
+    haptic(); upd();
+  });
+  upd();
+}
+renderChecklist('chk1', 'chk1-m', 'open', CHECKLISTS.open);
+renderChecklist('chk2', 'chk2-m', 'monthly', CHECKLISTS.monthly);
+
+renderStages(); renderDeadlines();
+</script>
+</body>
+</html>

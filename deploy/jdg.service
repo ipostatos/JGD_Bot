@@ -1,0 +1,13 @@
+[Unit]
+Description=JDG Guide bot + Mini App (FastAPI + aiogram)
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/jdg
+ExecStart=/opt/jdg/venv/bin/uvicorn server:app --host 127.0.0.1 --port 4400
+Restart=always
+RestartSec=3
+EnvironmentFile=/opt/jdg/.env
+
+[Install]
+WantedBy=multi-user.target

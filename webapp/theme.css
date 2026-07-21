@@ -1,0 +1,170 @@
+/* ===========================================================================
+   ISSA Trainer — единая дизайн-система Mini App (нативный стиль Telegram).
+   Подключать ПЕРВЫМ среди стилей:  <link rel="stylesheet" href="theme.css">
+   Страницы могут переопределять/дополнять своими <style> после него.
+   =========================================================================== */
+
+:root{
+  /* цвета берём из темы Telegram, с тёмным fallback по умолчанию */
+  --bg: var(--tg-theme-bg-color, #17212b);
+  --text: var(--tg-theme-text-color, #fff);
+  --hint: var(--tg-theme-hint-color, #8a9aa9);
+  --card: var(--tg-theme-secondary-bg-color, #232e3c);
+  --accent: var(--tg-theme-button-color, #50a8eb);
+  --accent-text: var(--tg-theme-button-text-color, #fff);
+  --link: var(--tg-theme-link-color, var(--accent));
+  --border: rgba(255,255,255,.10);
+  --ok: #4caf72;
+  --warn: #e0a13a;
+  --bad: #e5544b;
+
+  /* шкала отступов и радиусов — единая по всему приложению */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px; --sp-5: 20px; --sp-6: 28px;
+  --r-sm: 10px; --r-md: 14px; --r-lg: 18px; --r-pill: 999px;
+  --shadow: 0 1px 3px rgba(0,0,0,.18);
+
+  /* типографика */
+  --fs-h1: 22px; --fs-h2: 17px; --fs-body: 15px; --fs-sm: 13px; --fs-xs: 11px;
+}
+
+/* Светлый системный режим: если Telegram НЕ передал тему — светлый fallback,
+   иначе при системной светлой теме был бы белый текст на белом фоне. */
+@media (prefers-color-scheme: light){
+  :root{
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --text: var(--tg-theme-text-color, #1a1a1a);
+    --hint: var(--tg-theme-hint-color, #7d8a99);
+    --card: var(--tg-theme-secondary-bg-color, #f1f3f5);
+    --accent: var(--tg-theme-button-color, #3390ec);
+    --accent-text: var(--tg-theme-button-text-color, #ffffff);
+    --border: rgba(0,0,0,.10);
+    --shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+}
+
+*{ box-sizing:border-box }
+
+body{
+  margin:0; padding: var(--sp-5) var(--sp-4);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:var(--bg); color:var(--text); line-height:1.5;
+  -webkit-tap-highlight-color:transparent;
+  text-size-adjust:100%; -webkit-text-size-adjust:100%;
+}
+
+/* ── типографика ── */
+.h1, h1{ font-size:var(--fs-h1); font-weight:800; margin:0 0 var(--sp-1) }
+.h2{ font-size:var(--fs-h2); font-weight:700; margin:0 0 var(--sp-2) }
+.sub{ color:var(--hint); font-size:var(--fs-sm); margin:0 0 var(--sp-5) }
+.muted{ color:var(--hint) }
+.foot{ color:var(--hint); font-size:var(--fs-xs); text-align:center;
+  margin-top:var(--sp-6); line-height:1.5 }
+
+/* ── карточки ── */
+.card{ background:var(--card); border:1px solid var(--border);
+  border-radius:var(--r-lg); padding:var(--sp-4); box-shadow:var(--shadow) }
+
+/* кликабельная карточка-строка (раздел/действие) */
+.row-card{ display:flex; align-items:center; gap:var(--sp-3);
+  text-decoration:none; color:var(--text); background:var(--card);
+  border:1px solid var(--border); border-radius:var(--r-md);
+  padding:var(--sp-3) var(--sp-4); margin-bottom:var(--sp-2);
+  transition:transform .12s }
+.row-card:active{ transform:scale(.99) }
+.row-card .ic{ font-size:24px; line-height:1; flex:0 0 auto }
+.row-card .body{ flex:1; min-width:0 }
+.row-card .t{ font-size:var(--fs-h2); font-weight:700 }
+.row-card .d{ color:var(--hint); font-size:var(--fs-sm); margin-top:2px; line-height:1.4 }
+.row-card .chev{ color:var(--hint); flex:0 0 auto; font-size:18px }
+
+/* ── кнопки ── */
+.btn{ display:inline-flex; align-items:center; justify-content:center; gap:var(--sp-2);
+  width:100%; padding:14px var(--sp-4); font-size:var(--fs-body); font-weight:700;
+  border:none; border-radius:var(--r-md); background:var(--accent);
+  color:var(--accent-text); cursor:pointer; text-decoration:none }
+.btn:active{ transform:scale(.99) }
+.btn.ghost{ background:transparent; color:var(--text); border:1px solid var(--border) }
+.btn.sm{ padding:10px var(--sp-3); font-size:var(--fs-sm) }
+
+/* ── шкала прогресса ── */
+.meter{ height:8px; background:var(--border); border-radius:var(--r-pill); overflow:hidden }
+.meter > i{ display:block; height:100%; border-radius:var(--r-pill); background:var(--accent);
+  transition:width .25s }
+.meter.ok > i{ background:var(--ok) } .meter.warn > i{ background:var(--warn) }
+.meter.bad > i{ background:var(--bad) }
+
+/* ── бейдж/чип ── */
+.chip{ display:inline-block; font-size:var(--fs-xs); color:var(--hint);
+  background:var(--bg); border:1px solid var(--border); border-radius:var(--r-pill);
+  padding:2px 9px }
+
+/* ── состояния (пусто/ошибка) ── */
+.state{ color:var(--hint); font-size:var(--fs-body); text-align:center;
+  padding:24px var(--sp-2); line-height:1.5 }
+
+/* ── цветные плашки для иконок (SVG Lucide или эмодзи) ──
+   Подложка — мягкий акцент, сама иконка (SVG) красится в насыщенный тон через
+   currentColor. Читается в тёмной и светлой теме. */
+.ic-tile{ --tone: var(--accent); display:inline-flex; align-items:center; justify-content:center;
+  width:40px; height:40px; border-radius:11px; font-size:20px; flex:0 0 auto;
+  color:var(--tone); background:color-mix(in srgb, var(--tone) 16%, transparent) }
+.ic-tile svg{ width:22px; height:22px }
+.ic-tile.blue  { --tone:#3390ec }
+.ic-tile.green { --tone:#4caf72 }
+.ic-tile.amber { --tone:#e0a13a }
+.ic-tile.violet{ --tone:#8e7bef }
+.ic-tile.red   { --tone:#e5544b }
+.ic-tile.cyan  { --tone:#2bb6c4 }
+.ic-tile.gold  { --tone:#e3b341 }
+
+/* ── кольцо прогресса (готовность) — conic-gradient, без SVG ── */
+.ring{ --p:0; --ring-color:var(--accent); position:relative;
+  width:92px; height:92px; border-radius:50%; flex:0 0 auto;
+  background:conic-gradient(var(--ring-color) calc(var(--p)*1%), var(--border) 0) }
+.ring::before{ content:""; position:absolute; inset:9px; border-radius:50%; background:var(--card) }
+.ring .ring-val{ position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; line-height:1 }
+.ring .ring-num{ font-size:22px; font-weight:800 }
+.ring .ring-cap{ font-size:10px; color:var(--hint); margin-top:2px }
+
+/* ── медальоны достижений (бейджи) ── */
+.badge{ display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px }
+.badge .medal{ position:relative; width:64px; height:64px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center; font-size:28px;
+  background:var(--card); border:3px solid var(--border) }
+.badge.bronze .medal{ border-color:#cd7f32; background:color-mix(in srgb,#cd7f32 16%,var(--card)) }
+.badge.silver .medal{ border-color:#9aa7b4; background:color-mix(in srgb,#9aa7b4 16%,var(--card)) }
+.badge.gold   .medal{ border-color:#e3b341; background:color-mix(in srgb,#e3b341 18%,var(--card)) }
+.badge.locked .medal{ filter:grayscale(1) opacity(.45); border-color:var(--border); background:var(--bg) }
+.badge .bt{ font-size:12px; font-weight:700; line-height:1.2 }
+.badge .bd{ font-size:10px; color:var(--hint); line-height:1.25 }
+/* мини-индикатор прогресса под закрытым бейджем */
+.badge .bprog{ width:48px; height:4px; background:var(--border); border-radius:3px; overflow:hidden }
+.badge .bprog>i{ display:block; height:100%; background:var(--accent) }
+
+/* всплывашка «получен бейдж» */
+.badge-toast{ position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(120%);
+  background:var(--card); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow);
+  padding:10px 14px; display:flex; align-items:center; gap:10px; z-index:9998; transition:transform .35s;
+  max-width:90%; }
+.badge-toast.show{ transform:translateX(-50%) translateY(0) }
+.badge-toast .em{ font-size:24px }
+.badge-toast .tt{ font-size:13px } .badge-toast .tt b{ display:block }
+
+/* инлайн-иконка перед текстом (заголовки, плитки, кнопки) — с отступом справа */
+.emi{ display:inline-flex; align-items:center; vertical-align:-2px; margin-right:7px }
+.emi svg{ width:1em; height:1em }
+/* иконка-одиночка в кнопке (без текста) — центрируем: убираем отступ «под текст» */
+.btn > .emi:only-child{ margin-right:0 }
+
+.hidden{ display:none !important }
+
+/* ── выбор языка (i18n) ── */
+.lang-overlay{ position:fixed; inset:0; z-index:1000; display:flex; align-items:center;
+  justify-content:center; padding:24px; background:rgba(0,0,0,.55) }
+.lang-box{ width:100%; max-width:340px }
+.lang-list{ display:flex; flex-direction:column; gap:10px }
+.lang-chip{ font-size:13px; font-weight:700; color:var(--hint); background:transparent;
+  border:1px solid var(--border); border-radius:999px; padding:4px 12px; cursor:pointer;
+  line-height:1.2 }
+.lang-chip:active{ transform:scale(.97) }

@@ -1,0 +1,41 @@
+{
+  "year": 2026,
+  "updated": "2026-07-21",
+  "sources": [
+    "https://www.zus.pl", "https://www.podatki.gov.pl",
+    "https://sobolevbel.github.io/jdg/zus/ (таблица 2026, сверено 2026-07-21)"
+  ],
+  "min_wage": 4806.0,
+  "avg_wage_forecast": 9420.0,
+  "duzy_base": 5652.0,
+  "pref_base": 1441.8,
+  "spoleczne_rates": {
+    "emerytalna": 0.1952,
+    "rentowa": 0.08,
+    "wypadkowa": 0.0167,
+    "chorobowa": 0.0245,
+    "fp_fs": 0.0245
+  },
+  "zdrowotna": {
+    "min_monthly": 432.54,
+    "skala_rate": 0.09,
+    "liniowy_rate": 0.049,
+    "liniowy_deduct_limit_year": 14100.0,
+    "ryczalt_deduct_share": 0.5,
+    "avg_wage_q4_2025": 9228.64,
+    "ryczalt_tiers": [
+      { "max_revenue": 60000, "monthly": 498.35 },
+      { "max_revenue": 300000, "monthly": 830.58 },
+      { "max_revenue": null, "monthly": 1495.04 }
+    ]
+  },
+  "pit": {
+    "free_amount": 30000.0,
+    "skala_threshold": 120000.0,
+    "skala_rate1": 0.12,
+    "skala_rate2": 0.32,
+    "liniowy_rate": 0.19,
+    "ryczalt_common_rates": [0.02, 0.03, 0.055, 0.085, 0.12, 0.125, 0.14, 0.15, 0.17]
+  },
+  "vat_exemption_limit": 240000.0
+}

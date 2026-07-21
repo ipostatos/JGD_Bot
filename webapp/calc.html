@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>JDG Гид — калькуляторы</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="jdg.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+<h1>🧮 Калькуляторы</h1>
+<p class="sub">Ставки 2026 · данные проверены <span id="upd"></span></p>
+
+<div class="seg" id="tabs" style="margin-bottom:14px">
+  <button data-t="zus" class="on">ZUS</button>
+  <button data-t="cmp">Формы налога</button>
+  <button data-t="vat">Лимит VAT</button>
+</div>
+
+<!-- ═══ ZUS ═══ -->
+<section id="tab-zus">
+  <div class="card" style="margin-bottom:10px">
+    <div class="field"><label>Режим ZUS</label>
+      <div class="seg" id="zstage">
+        <button data-v="ulga" class="on">Ulga na start</button>
+        <button data-v="pref">Preferencyjne</button>
+        <button data-v="duzy">Duży ZUS</button>
+      </div>
+    </div>
+    <div class="field"><label>Форма налогообложения (для składki zdrowotnej)</label>
+      <div class="seg" id="zform">
+        <button data-v="ryczalt" class="on">Ryczałt</button>
+        <button data-v="skala">Skala</button>
+        <button data-v="liniowy">Liniowy</button>
+      </div>
+    </div>
+    <div class="field"><label id="zinc-label">Годовой przychód (выручка), zł</label>
+      <input id="zinc" type="number" inputmode="numeric" value="120000" min="0" step="1000">
+    </div>
+    <label class="chk" style="border:none"><input id="zchor" type="checkbox">
+      <span class="tt">Добровольная chorobowa (больничные/декрет)</span></label>
+  </div>
+  <div class="card" id="zres"></div>
+  <p class="foot" style="margin-top:10px">Подробно: <a href="article.html?id=zus">про ZUS</a> · <a href="article.html?id=zus_next_level">переходы между режимами</a></p>
+</section>
+
+<!-- ═══ Сравнение форм ═══ -->
+<section id="tab-cmp" class="hidden">
+  <div class="card" style="margin-bottom:10px">
+    <div class="field"><label>Выручка в месяц (netto, без VAT), zł</label>
+      <input id="crev" type="number" inputmode="numeric" value="20000" min="0" step="500"></div>
+    <div class="field"><label>Расходы в месяц (koszty), zł</label>
+      <input id="ccost" type="number" inputmode="numeric" value="1500" min="0" step="100"></div>
+    <div class="field"><label>Ставка ryczałt (зависит от PKD; IT-услуги обычно 12%)</label>
+      <select id="cryc">
+        <option value="0.02">2%</option><option value="0.03">3%</option>
+        <option value="0.055">5,5%</option><option value="0.085">8,5%</option>
+        <option value="0.12" selected>12%</option><option value="0.125">12,5%</option>
+        <option value="0.14">14%</option><option value="0.15">15%</option>
+        <option value="0.17">17%</option>
+      </select></div>
+    <div class="field"><label>Режим ZUS</label>
+      <div class="seg" id="cstage">
+        <button data-v="ulga">Ulga na start</button>
+        <button data-v="pref" class="on">Preferencyjne</button>
+        <button data-v="duzy">Duży ZUS</button>
+      </div>
+    </div>
+  </div>
+  <div id="cres"></div>
+  <p class="foot" style="margin-top:10px">Оценка «на салфетке» за год: без учёта kwoty wolnej у супругов, IP&nbsp;Box, ulg и т.п. Подробно: <a href="article.html?id=taxes">про налоги</a></p>
+</section>
+
+<!-- ═══ VAT ═══ -->
+<section id="tab-vat" class="hidden">
+  <div class="card" style="margin-bottom:10px">
+    <div class="field"><label>Выручка с начала года, zł</label>
+      <input id="vytd" type="number" inputmode="numeric" value="80000" min="0" step="1000"></div>
+    <label class="chk" style="border:none"><input id="vmid" type="checkbox">
+      <span class="tt">JDG открыто в этом году</span></label>
+    <div class="field hidden" id="vdate-f"><label>Дата открытия</label>
+      <input id="vdate" type="date" value="2026-03-01"></div>
+  </div>
+  <div class="card" id="vres"></div>
+  <p class="foot" style="margin-top:10px">Лимит zwolnienia podmiotowego z VAT в 2026 — 240 000 zł/год (до 2026 было 200 000). Подробно: <a href="article.html?id=registration_vat">регистрация VAT</a></p>
+</section>
+
+<script src="app.js"></script>
+<script src="calc.js"></script>
+<script>
+renderDock('calc');
+
+function segInit(id, cb) {
+  const seg = document.getElementById(id);
+  seg.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    seg.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); haptic(); cb();
+  });
+}
+const segVal = (id) => document.querySelector('#' + id + ' button.on').dataset.v;
+
+// вкладки
+segInit('tabs', () => {
+  const t = segVal('tabs') || document.querySelector('#tabs button.on').dataset.t;
+  ['zus', 'cmp', 'vat'].forEach(k =>
+    document.getElementById('tab-' + k).classList.toggle('hidden', k !== t));
+});
+document.querySelectorAll('#tabs button').forEach(b => b.dataset.v = b.dataset.t);
+
+ratesReady.then(() => {
+  document.getElementById('upd').textContent = RATES.updated;
+
+  // ── ZUS ──
+  const zres = document.getElementById('zres');
+  function zus() {
+    const stage = segVal('zstage'), form = segVal('zform');
+    const chor = document.getElementById('zchor').checked;
+    const inc = +document.getElementById('zinc').value || 0;
+    document.getElementById('zinc-label').textContent = form === 'ryczalt'
+      ? 'Годовой przychód (выручка), zł'
+      : 'Годовой dochód (доход = выручка − расходы), zł';
+    const s = spoleczneMonthly(stage, chor);
+    const zdr = zdrowotnaMonthly(form, inc);
+    const rows = [];
+    if (stage === 'ulga')
+      rows.push(`<div class="res-row"><span>Składki społeczne</span><span class="v">0 zł <span class="muted">(льгота 6 мес)</span></span></div>`);
+    else {
+      rows.push(`<div class="res-row"><span>Emerytalna</span><span class="v">${fmtZl(s.emerytalna)}</span></div>`);
+      rows.push(`<div class="res-row"><span>Rentowa</span><span class="v">${fmtZl(s.rentowa)}</span></div>`);
+      rows.push(`<div class="res-row"><span>Wypadkowa</span><span class="v">${fmtZl(s.wypadkowa)}</span></div>`);
+      if (s.fp_fs) rows.push(`<div class="res-row"><span>Fundusz Pracy</span><span class="v">${fmtZl(s.fp_fs)}</span></div>`);
+      if (chor) rows.push(`<div class="res-row"><span>Chorobowa (добров.)</span><span class="v">${fmtZl(s.chorobowa)}</span></div>`);
+    }
+    if (stage === 'ulga' && chor)
+      rows.push(`<div class="res-row"><span class="muted">На Uldze na start chorobową подключить нельзя</span><span></span></div>`);
+    rows.push(`<div class="res-row"><span>Zdrowotna (${form})</span><span class="v">${fmtZl(zdr)}</span></div>`);
+    rows.push(`<div class="res-row total"><span><b>Итого в месяц</b></span><span class="v">${fmtZl(s.total + zdr)}</span></div>`);
+    zres.innerHTML = rows.join('');
+  }
+  segInit('zstage', zus); segInit('zform', zus);
+  document.getElementById('zchor').addEventListener('change', zus);
+  document.getElementById('zinc').addEventListener('input', zus);
+  zus();
+
+  // ── сравнение форм ──
+  const cres = document.getElementById('cres');
+  const NAMES = { skala: 'Skala 12/32%', liniowy: 'Liniowy 19%', ryczalt: 'Ryczałt' };
+  function cmp() {
+    const rev = (+document.getElementById('crev').value || 0) * 12;
+    const cost = (+document.getElementById('ccost').value || 0) * 12;
+    const rate = +document.getElementById('cryc').value;
+    const r = compareForms(rev, cost, segVal('cstage'), false, rate);
+    cres.innerHTML = ['ryczalt', 'liniowy', 'skala'].map(f => {
+      const d = r[f], win = r.best === f;
+      return `<div class="card ${win ? 'win' : ''}" style="margin-bottom:8px">
+        <div class="res-row" style="border:none;padding-bottom:2px">
+          <span><b>${NAMES[f]}${f === 'ryczalt' ? ' ' + (rate * 100).toLocaleString('pl-PL') + '%' : ''}</b>
+          ${win ? '<span class="tag"> · выгоднее всего</span>' : ''}</span></div>
+        <div class="res-row"><span>Налог / год</span><span class="v">${fmtZl(d.tax)}</span></div>
+        <div class="res-row"><span>Zdrowotna / год</span><span class="v">${fmtZl(d.zdrowotna)}</span></div>
+        <div class="res-row"><span>Społeczne / год</span><span class="v">${fmtZl(d.spoleczne)}</span></div>
+        <div class="res-row total"><span><b>На руки / мес</b></span><span class="v">${fmtZl(d.net / 12)}</span></div>
+      </div>`;
+    }).join('');
+  }
+  segInit('cstage', cmp);
+  ['crev', 'ccost', 'cryc'].forEach(id =>
+    document.getElementById(id).addEventListener('input', cmp));
+  cmp();
+
+  // ── VAT ──
+  const vres = document.getElementById('vres');
+  function vat() {
+    const ytd = +document.getElementById('vytd').value || 0;
+    const mid = document.getElementById('vmid').checked;
+    document.getElementById('vdate-f').classList.toggle('hidden', !mid);
+    const v = vatLimit(ytd, mid ? document.getElementById('vdate').value : null);
+    const pct = Math.min(v.used / v.limit * 100, 100);
+    const tone = v.exceeded ? 'bad' : pct > 80 ? 'warn' : 'ok';
+    vres.innerHTML = `
+      <div class="res-row"><span>Твой лимит${mid ? ' (пропорционально)' : ''}</span><span class="v">${fmtZl(v.limit)}</span></div>
+      <div class="res-row"><span>Использовано</span><span class="v">${fmtZl(v.used)}</span></div>
+      <div class="res-row total"><span><b>${v.exceeded ? 'Лимит превышен!' : 'Осталось'}</b></span>
+        <span class="v">${v.exceeded ? '⚠️ нужна регистрация VAT' : fmtZl(v.left)}</span></div>
+      <div class="meter ${tone}" style="margin-top:10px"><i style="width:${pct}%"></i></div>
+      <div class="muted" style="font-size:12px;margin-top:6px">${pct.toFixed(0)}% лимита</div>`;
+  }
+  ['vytd', 'vdate'].forEach(id => document.getElementById(id).addEventListener('input', vat));
+  document.getElementById('vmid').addEventListener('change', vat);
+  vat();
+});
+</script>
+</body>
+</html>

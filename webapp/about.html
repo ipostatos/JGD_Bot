@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>JDG Гид — о проекте</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="jdg.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+<h1>⭐ О проекте</h1>
+<p class="sub">JDG Гид — Mini App сообщества JDG PBH</p>
+
+<div class="card" style="margin-bottom:12px">
+  <div class="h2">❤️ Поддержать проект</div>
+  <p class="muted" style="font-size:14px;margin:0 0 10px">
+    Гайд и бот развиваются силами сообщества. Звёзды помогают оплачивать сервер и мотивируют.</p>
+  <div class="seg" id="tips">
+    <button data-a="25">⭐ 25</button>
+    <button data-a="50">⭐ 50</button>
+    <button data-a="100">⭐ 100</button>
+    <button data-a="250">⭐ 250</button>
+  </div>
+  <div id="tipmsg" class="muted" style="font-size:13px;margin-top:8px"></div>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+  <div class="h2">Сообщество</div>
+  <a class="row-card" style="margin:8px 0 0;background:var(--bg);border:none" href="https://t.me/JDG_PBH" target="_blank" rel="noopener">
+    <span class="ic">💬</span><span class="body"><span class="t" style="font-size:15px">Чат JDG PBH</span>
+    <span class="d">задать вопрос живым людям</span></span><span class="chev">›</span></a>
+  <a class="row-card" style="margin:6px 0 0;background:var(--bg);border:none" href="https://sobolevbel.github.io/jdg/" target="_blank" rel="noopener">
+    <span class="ic">🌐</span><span class="body"><span class="t" style="font-size:15px">Гайд-сайт</span>
+    <span class="d">первоисточник контента (CC0)</span></span><span class="chev">›</span></a>
+  <a class="row-card" style="margin:6px 0 0;background:var(--bg);border:none" href="https://t.me/chatlyfy_bot" target="_blank" rel="noopener">
+    <span class="ic">🔎</span><span class="body"><span class="t" style="font-size:15px">@chatlyfy_bot</span>
+    <span class="d">поиск по истории чата</span></span><span class="chev">›</span></a>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+  <div class="h2">Что дальше</div>
+  <p class="muted" style="font-size:14px;margin:0">
+    🔔 Мониторинг biznes.gov.pl, podatki.gov.pl и zus.pl с пушами «это касается тебя» ·
+    🤖 AI-ассистент по базе гайда · 🧾 подключение inFakt — реальные суммы налогов и взносов прямо в боте.</p>
+</div>
+
+<p class="foot">Данные и ставки: 2026 год · контент гайда — CC0, сообщество JDG PBH<br>
+Информация справочная; не является налоговой или юридической консультацией.<br>
+Перед важными решениями сверяйся с бухгалтером.</p>
+
+<script src="app.js"></script>
+<script>
+renderDock('about');
+const msg = document.getElementById('tipmsg');
+document.getElementById('tips').addEventListener('click', async (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  haptic('medium');
+  if (!tg || !tg.initData) { msg.textContent = 'Открой через Telegram, чтобы задонатить ⭐'; return; }
+  msg.textContent = 'Создаю счёт…';
+  try {
+    const r = await fetch('/api/tips', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: +b.dataset.a, initData: tg.initData }),
+    });
+    if (!r.ok) throw 0;
+    const { link } = await r.json();
+    tg.openInvoice(link, (st) => {
+      msg.textContent = st === 'paid' ? '❤️ Спасибо огромное!' : '';
+    });
+  } catch { msg.textContent = 'Не получилось создать счёт, попробуй позже'; }
+});
+</script>
+</body>
+</html>
