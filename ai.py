@@ -28,13 +28,26 @@ DAILY_GLOBAL_LIMIT = 300
 CONTEXT_ARTICLES = 3
 CONTEXT_CHARS = 5000
 
+FAQ_JSON = ROOT / "webapp" / "data" / "faq_data.json"
+
 _index = None
 
 
 def _load_index():
+    """Статьи гайда + (если собран faq_miner-ом) FAQ чата как псевдостатьи."""
     global _index
     if _index is None:
         _index = json.loads(SEARCH_JSON.read_text(encoding="utf-8"))
+        if FAQ_JSON.is_file():
+            try:
+                faq = json.loads(FAQ_JSON.read_text(encoding="utf-8"))
+                _index = _index + [
+                    {"id": f"chatfaq-{i}", "title": f"FAQ чата: {x['q'][:60]}",
+                     "text": (x["q"] + " " + x["a"]).lower()}
+                    for i, x in enumerate(faq)]
+                log.info("faq_data: +%d записей в индекс", len(faq))
+            except Exception as e:
+                log.warning("faq_data не прочитан: %s", e)
     return _index
 
 
@@ -55,8 +68,10 @@ STOP = {"как", "что", "это", "для", "или", "нужно", "мож�
 def retrieve(question: str, k: int = CONTEXT_ARTICLES):
     """Топ-k статей: TF с потолком × IDF (редкие слова весят больше) + заголовок."""
     import math
-    words = [w for w in re.findall(r"[a-zа-яё]{3,}", question.lower())
-             if w not in STOP]
+    raw = [w for w in re.findall(r"[a-zа-яё]{3,}", question.lower())
+           if w not in STOP]
+    # грубый стемминг: длинные слова матчим по префиксу (банка/банком → банк)
+    words = list({w if len(w) <= 6 else w[:6] for w in raw})
     if not words:
         return []
     idx = _load_index()

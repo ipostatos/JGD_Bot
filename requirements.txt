@@ -6,3 +6,4 @@ markdown>=3.6
 pymdown-extensions>=10.8
 pytest>=8.0
 httpx>=0.27
+cryptography>=42.0

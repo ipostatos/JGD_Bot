@@ -29,6 +29,23 @@
     <span class="tt">Использую Ulga na Start</span></label>
 </div>
 
+<div class="card" style="margin-bottom:12px" id="infakt-card">
+  <div class="h2"><span class="emi" style="color:var(--accent)" data-icon="file-text"></span>inFakt <span class="beta-badge">beta</span></div>
+  <div id="if-off">
+    <p class="muted" style="font-size:13px;margin:0 0 10px">
+      Подключи свой ключ API — покажу реальные продажи для лимита VAT и суммы ZUS/налога к оплате.
+      Ключ: inFakt → Ustawienia → Inne opcje → API. Храним зашифрованным, доступ только на чтение,
+      отключить можно в любой момент.</p>
+    <div class="field"><input id="if-key" type="password" placeholder="Ключ API inFakt" autocomplete="off"></div>
+    <button id="if-connect" class="btn sm">Подключить</button>
+    <div id="if-msg" class="muted" style="font-size:12px;margin-top:6px"></div>
+  </div>
+  <div id="if-on" class="hidden">
+    <div id="if-sums"></div>
+    <button id="if-disconnect" class="btn ghost sm" style="margin-top:8px">Отключить и удалить ключ</button>
+  </div>
+</div>
+
 <div id="stages-card" class="card hidden" style="margin-bottom:12px">
   <div class="h2">Этапы ZUS</div>
   <div class="stage-line" id="stageline"></div>
@@ -56,8 +73,79 @@
 
 <script src="icons.js"></script>
 <script src="app.js"></script>
+<script src="calc.js"></script>
 <script>
 renderDock('plan');
+
+// ── inFakt: реальные суммы ──
+(function () {
+  const $ = id => document.getElementById(id);
+  const IFKEY = 'jdg_infakt_on';
+  const inTg = tg && tg.initData;
+
+  async function ifApi(path, method, extra) {
+    const r = await fetch(path, {
+      method: method || 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ initData: tg.initData }, extra || {})),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.detail || 'Ошибка');
+    return data;
+  }
+
+  function showSums(s) {
+    $('if-off').classList.add('hidden');
+    $('if-on').classList.remove('hidden');
+    const rows = [];
+    if (typeof s.net_ytd === 'number') {
+      rows.push(`<div class="res-row"><span>Продажи netto с начала года</span><span class="v">${fmtZl(s.net_ytd)}</span></div>`);
+    }
+    if (s.zus && s.zus.total != null) {
+      rows.push(`<div class="res-row"><span>ZUS ${s.zus.period || 'за последний месяц'}</span><span class="v">${fmtZl(s.zus.total)} ${s.zus.paid ? '✅' : '⏳ до 20-го'}</span></div>`);
+    }
+    if (s.tax && s.tax.total != null) {
+      rows.push(`<div class="res-row"><span>Налог ${s.tax.period || 'за последний период'}</span><span class="v">${fmtZl(s.tax.total)} ${s.tax.paid ? '✅' : '⏳'}</span></div>`);
+    }
+    ratesReady.then(() => {
+      if (typeof s.net_ytd === 'number') {
+        const v = vatLimit(s.net_ytd, null);
+        const pct = Math.min(v.used / v.limit * 100, 100);
+        rows.push(`<div class="res-row" style="border:none"><span>Лимит VAT</span><span class="v">${pct.toFixed(0)}% из ${fmtZl(v.limit)}</span></div>
+          <div class="meter ${v.exceeded ? 'bad' : pct > 80 ? 'warn' : 'ok'}"><i style="width:${pct}%"></i></div>`);
+      }
+      $('if-sums').innerHTML = rows.join('') ||
+        '<div class="muted" style="font-size:13px">Подключено, но данных пока не видно — проверь, что в inFakt есть фактуры.</div>';
+    });
+  }
+
+  if (inTg && localStorage.getItem(IFKEY) === '1') {
+    ifApi('/api/infakt/summary').then(s => {
+      if (s.connected) showSums(s); else localStorage.removeItem(IFKEY);
+    }).catch(() => {});
+  }
+
+  $('if-connect').onclick = async () => {
+    if (!inTg) { $('if-msg').textContent = 'Открой через Telegram.'; return; }
+    const key = $('if-key').value.trim();
+    if (!key) return;
+    $('if-msg').textContent = 'Проверяю ключ…'; haptic('medium');
+    try {
+      await ifApi('/api/infakt/connect', 'POST', { api_key: key });
+      localStorage.setItem(IFKEY, '1');
+      $('if-key').value = '';
+      $('if-msg').textContent = '';
+      const s = await ifApi('/api/infakt/summary');
+      showSums(s);
+    } catch (e) { $('if-msg').textContent = e.message; }
+  };
+
+  $('if-disconnect').onclick = async () => {
+    try { await ifApi('/api/infakt', 'DELETE'); } catch (e) {}
+    localStorage.removeItem(IFKEY);
+    $('if-on').classList.add('hidden');
+    $('if-off').classList.remove('hidden');
+  };
+})();
 
 const CHECKLISTS = {
   open: [

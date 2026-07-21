@@ -97,7 +97,9 @@ async function askAI(question) {
     const data = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(data.detail || 'Ошибка');
     const srcs = (data.sources || []).map(s =>
-      `<a class="chip" style="color:var(--link)" href="article.html?id=${s.id}">${s.title}</a>`).join('');
+      s.id.startsWith('chatfaq')
+        ? `<span class="chip">${s.title}</span>`
+        : `<a class="chip" style="color:var(--link)" href="article.html?id=${s.id}">${s.title}</a>`).join('');
     wait.innerHTML = `<div class="bub">${fmt(data.answer)}</div>` +
       (srcs ? `<div class="srcs">${srcs}</div>` : '');
     if (typeof data.left === 'number') $('left').textContent = data.left;

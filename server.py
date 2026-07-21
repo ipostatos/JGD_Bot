@@ -242,6 +242,43 @@ async def api_ask(req: Request):
     return res
 
 
+@app.post("/api/infakt/connect")
+async def infakt_connect(req: Request):
+    import infakt
+    body = await req.json()
+    user = verify_init_data(body.get("initData", ""))
+    if user is None:
+        raise HTTPException(401, "bad initData")
+    api_key = (body.get("api_key") or "").strip()
+    if not (10 <= len(api_key) <= 200):
+        raise HTTPException(400, "Похоже, это не ключ inFakt")
+    if not await infakt.check_key(api_key):
+        raise HTTPException(400, "inFakt не принял ключ — проверь и попробуй снова")
+    infakt.save_key(user["id"], api_key)
+    return {"ok": True}
+
+
+@app.delete("/api/infakt")
+async def infakt_disconnect(req: Request):
+    import infakt
+    body = await req.json()
+    user = verify_init_data(body.get("initData", ""))
+    if user is None:
+        raise HTTPException(401, "bad initData")
+    infakt.delete_key(user["id"])
+    return {"ok": True}
+
+
+@app.post("/api/infakt/summary")
+async def infakt_summary(req: Request):
+    import infakt
+    body = await req.json()
+    user = verify_init_data(body.get("initData", ""))
+    if user is None:
+        raise HTTPException(401, "bad initData")
+    return await infakt.summary(user["id"])
+
+
 TMP_DIR = ROOT / "tmp_files"
 TMP_TTL = 3600  # секунда жизни временного файла
 TMP_MAX = 25 * 1024 * 1024

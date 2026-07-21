@@ -25,6 +25,22 @@ def test_parse_govpl_mf_fixture():
                       "KSeF obowiązkowy od lutego 2026")]
 
 
+def test_parse_zus_fixture():
+    html = '''
+    <a href="https://www.zus.pl/-/liwiusz-laska-prezesem-zus?redirect=%2Fx">
+      Liwiusz Laska prezesem ZUS</a>
+    <a href="/-/zmiany-w-skladkach-2027?redirect=%2Fy"><span>Zmiany w
+      sk&#322;adkach od 2027 roku</span></a>
+    <a href="https://www.zus.pl/-/liwiusz-laska-prezesem-zus?redirect=%2Fz">
+      Liwiusz Laska prezesem ZUS</a>
+    <a href="/o-zus/kalendarium">Kalendarium wydarzen w ZUS</a>'''
+    items = monitor.parse_zus(html)
+    assert items == [
+        ("https://www.zus.pl/-/liwiusz-laska-prezesem-zus", "Liwiusz Laska prezesem ZUS"),
+        ("https://www.zus.pl/-/zmiany-w-skladkach-2027", "Zmiany w składkach od 2027 roku"),
+    ]
+
+
 def test_db_subs_and_matching(tmp_path, monkeypatch):
     monkeypatch.setattr(monitor, "DB_PATH", tmp_path / "t.db")
     monitor.upsert_sub(1, "ryczalt", vat=False)

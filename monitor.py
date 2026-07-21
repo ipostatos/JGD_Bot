@@ -62,11 +62,31 @@ def parse_govpl_mf(html: str):
     return out
 
 
+def parse_zus(html: str):
+    """zus.pl: новости живут под /-/<slug> (Liferay friendly-URL) с ?redirect=."""
+    out, seen = [], set()
+    for m in re.finditer(
+            r'href="(?:https://www\.zus\.pl)?(/-/[^"?]+)[^"]*"[^>]*>(.*?)</a>',
+            html, re.S):
+        url = "https://www.zus.pl" + m.group(1)
+        title = html_mod.unescape(
+            re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", m.group(2))).strip())
+        if len(title) >= 15 and url not in seen:
+            seen.add(url)
+            out.append((url, title))
+    return out
+
+
 SOURCES = [
     {"id": "podatki", "label": "podatki.gov.pl",
      "url": "https://www.podatki.gov.pl/aktualnosci", "parse": parse_podatki},
     {"id": "mf", "label": "Min. Finansów",
      "url": "https://www.gov.pl/web/finanse/wiadomosci", "parse": parse_govpl_mf},
+    {"id": "zus_prasa", "label": "ZUS",
+     "url": "https://www.zus.pl/o-zus/aktualnosci/informacje-biura-prasowego",
+     "parse": parse_zus},
+    {"id": "zus_inne", "label": "ZUS",
+     "url": "https://www.zus.pl/o-zus/aktualnosci/inne", "parse": parse_zus},
 ]
 
 
