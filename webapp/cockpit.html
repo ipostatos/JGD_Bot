@@ -32,14 +32,14 @@
 </style>
 </head>
 <body>
-<div class="hero"><span class="logo emi" data-icon="clipboard-check"></span><h1>Кокпит</h1></div>
+<div class="hero"><span class="logo emi" data-icon="gauge"></span><h1>Кокпит</h1></div>
 <p class="sub">Закрытие месяца, независимая сверка ZUS и налога, платежи — на твоих данных inFakt</p>
 
 <div id="gate" class="card hidden">
   <div class="h2" style="margin-bottom:4px">Нужен ключ inFakt</div>
   <p class="muted" style="font-size:13px;margin:0 0 10px">
     Кокпит работает на твоих данных inFakt. Подключи ключ в разделе «Мой план» → inFakt.</p>
-  <a class="btn" href="plan.html"><span class="emi" data-icon="arrow-right"></span> Открыть «Мой план»</a>
+  <a class="btn" href="plan.html"><span class="emi" data-icon="chevron-right"></span> Открыть «Мой план»</a>
 </div>
 
 <div id="panel" class="hidden">
@@ -89,7 +89,10 @@ function setTab(t) {
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
+function showPanel() { $('gate').classList.add('hidden'); $('panel').classList.remove('hidden'); }
+
 async function run() {
+  showPanel();
   const out = $('out');
   out.innerHTML = '<div class="card muted">Считаю на данных inFakt…</div>';
   try {
