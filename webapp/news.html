@@ -36,7 +36,7 @@
 <script src="app.js"></script>
 <script>
 renderDock('home');
-if (tg && tg.BackButton) { tg.BackButton.show(); tg.BackButton.onClick(() => location.href = 'index.html'); }
+setupBack('index.html');
 
 const TOPIC_ICON = { 'ZUS': 'shield-check', 'VAT': 'file-check', 'PIT': 'coins',
   'ryczałt': 'coins', 'KSeF': 'file-text', 'легализация': 'flag' };

@@ -51,10 +51,7 @@ loadJSON('data/content.json').then(({ sections }) => {
         <span class="body"><span class="t" style="font-size:15px">${a.title}</span>
         ${a.desc ? `<span class="d clamp2">${a.desc}</span>` : ''}</span>
         <span class="chev">›</span></a>`).join('');
-    if (tg && tg.BackButton) {
-      tg.BackButton.show();
-      tg.BackButton.onClick(() => location.href = 'guide.html');
-    }
+    setupBack('guide.html');   // уровень 2 (?sec=N) → к списку разделов
   } else {
     // ── уровень 1: разделы гайда ──
     head.innerHTML = `<div class="hero"><span class="logo emi" data-icon="book-open"></span><h1>Гайд</h1></div>

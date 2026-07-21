@@ -24,10 +24,8 @@ const id = (qs.get('id') || 'index').replace(/[^\w-]/g, '');
 const art = document.getElementById('art');
 
 // системная кнопка «назад» Telegram
-if (tg && tg.BackButton) {
-  tg.BackButton.show();
-  tg.BackButton.onClick(() => history.length > 1 ? history.back() : location.href = 'index.html');
-}
+// __navBack (лайтбокс) обрабатывается внутри setupBack: сперва закрыть зум, потом уйти
+setupBack(() => history.length > 1 ? history.back() : location.replace('index.html'));
 
 fetch('data/articles/' + id + '.html')
   .then(r => { if (!r.ok) throw 0; return r.text(); })

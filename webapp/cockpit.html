@@ -65,7 +65,7 @@
 <script>
 const tg = window.Telegram?.WebApp;
 tg?.ready?.(); tg?.expand?.();
-if (tg?.BackButton) { tg.BackButton.show(); tg.BackButton.onClick(() => location.href = 'index.html'); }
+setupBack('index.html');
 Icons?.hydrate?.();
 
 let tab = 'close';

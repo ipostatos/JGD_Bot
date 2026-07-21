@@ -17,7 +17,8 @@
     border-radius:16px 16px 16px 4px; padding:12px 14px; white-space:pre-wrap;
     font-size:var(--fs-body); line-height:1.5 }
   .msg .srcs{ margin-top:8px; display:flex; gap:6px; flex-wrap:wrap }
-  .askbar{ position:fixed; left:0; right:0; bottom:64px; padding:8px 16px;
+  /* строка ввода: bottom задаётся из JS (высота dock либо над клавиатурой) */
+  .askbar{ position:fixed; left:0; right:0; bottom:84px; padding:8px 16px;
     background:var(--bg); border-top:1px solid var(--border); display:flex; gap:8px }
   .askbar input{ flex:1; padding:12px 14px; font-size:var(--fs-body);
     color:var(--text); background:var(--card); border:1px solid var(--border);
@@ -61,10 +62,39 @@
 <script src="app.js"></script>
 <script>
 renderDock('home');
-if (tg && tg.BackButton) { tg.BackButton.show(); tg.BackButton.onClick(() => location.href = 'index.html'); }
+setupBack('index.html');
 const $ = id => document.getElementById(id);
 $('send').innerHTML = Icons.svg('send');
 const chat = $('chat');
+
+// ── строка ввода и нижний бар при клавиатуре ──
+// Проблемы: askbar налипал на dock (фикс bottom:64px < реальной высоты dock с
+// safe-area), и оба прыгали при открытии клавиатуры. Решение: сажаем askbar точно
+// на измеренную высоту dock; когда клавиатура открыта (visualViewport меньше окна)
+// — поднимаем askbar над ней, dock прячем (иначе он за клавиатурой и «скачет»).
+const askbar = document.querySelector('.askbar');
+function layoutBar() {
+  const dock = document.querySelector('.dock');
+  const vv = window.visualViewport;
+  const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+  if (kb > 80) {                      // клавиатура открыта
+    if (dock) dock.style.display = 'none';
+    askbar.style.bottom = kb + 'px';
+    document.body.style.paddingBottom = (kb + askbar.offsetHeight + 16) + 'px';
+  } else {                            // покой: строго над dock
+    if (dock) dock.style.display = '';                       // сперва показать dock,
+    const dh = dock ? dock.getBoundingClientRect().height : 0; // потом мерить (иначе 0)
+    askbar.style.bottom = dh + 'px';
+    document.body.style.paddingBottom = (dh + askbar.offsetHeight + 16) + 'px';
+  }
+}
+layoutBar();
+if (window.visualViewport) {
+  visualViewport.addEventListener('resize', layoutBar);
+  visualViewport.addEventListener('scroll', layoutBar);
+}
+window.addEventListener('resize', layoutBar);
+window.addEventListener('orientationchange', () => setTimeout(layoutBar, 200));
 
 function add(kind, html) {
   const div = document.createElement('div');

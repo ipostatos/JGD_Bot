@@ -78,7 +78,19 @@ $("dl").innerHTML = Icons.svg("download");
 const params = new URLSearchParams(location.search);
 const rawFile = params.get("file") || "";
 document.title = params.get("title") || "Документ";
-if (tg && tg.BackButton) { tg.BackButton.show(); tg.BackButton.onClick(() => history.back()); }
+// надёжная «назад»: подписка на onClick И на событие (на разных клиентах приходит
+// только одно), гард от двойного вызова; детерминированный уход при пустой истории
+if (tg && tg.BackButton) {
+  const bb = tg.BackButton; let busy = false;
+  const goBack = () => {
+    if (busy) return; busy = true; setTimeout(() => busy = false, 0);
+    if (history.length > 1) history.back(); else location.replace('index.html');
+  };
+  bb.show();
+  try { bb.offClick && bb.offClick(goBack); } catch (e) {}
+  bb.onClick(goBack);
+  try { tg.onEvent && tg.onEvent('backButtonClicked', goBack); } catch (e) {}
+}
 
 // БЕЗОПАСНОСТЬ: только свои файлы из docs/ (same-origin, без обхода каталога),
 // иначе ?file=https://evil/x.pdf грузил бы чужой PDF в origin мини-аппа.

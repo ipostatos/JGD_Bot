@@ -30,6 +30,30 @@
   // авто-подстановка SVG по data-icon после загрузки DOM (паттерн ISSA)
   document.addEventListener('DOMContentLoaded', () => window.Icons && Icons.hydrate());
 
+  // Надёжная кнопка «Назад» (паттерн ISSA nav.js). Раньше страницы вешали только
+  // bb.onClick — но на части клиентов приходит ТОЛЬКО событие backButtonClicked
+  // (и наоборот), отсюда «иногда не срабатывает». Подписываемся на оба, гардом
+  // схлопываем двойной вызов. target: URL-строка или функция. Перед переходом
+  // даём шанс window.__navBack() (лайтбокс/внутренняя навигация страницы).
+  window.setupBack = function (target) {
+    if (!tg || !tg.BackButton) return;
+    const bb = tg.BackButton;
+    let busy = false;
+    function goBack() {
+      if (busy) return;
+      busy = true; setTimeout(() => busy = false, 0);
+      if (typeof window.__navBack === 'function') {
+        try { if (window.__navBack() === true) return; } catch (e) {}
+      }
+      if (typeof target === 'function') { target(); return; }
+      location.replace(target || 'index.html');  // href/history.back в webview ненадёжны
+    }
+    bb.show();
+    try { bb.offClick && bb.offClick(goBack); } catch (e) {}
+    bb.onClick(goBack);
+    try { tg.onEvent && tg.onEvent('backButtonClicked', goBack); } catch (e) {}
+  };
+
   window.loadJSON = async function (url) {
     const r = await fetch(url);
     if (!r.ok) throw new Error(url + ' -> ' + r.status);
