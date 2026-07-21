@@ -101,6 +101,23 @@ def test_tmpfile_flow():
         assert c.get("/tmpf/../server.py").status_code in (400, 404)
 
 
+def test_news_and_subs_api():
+    good = make_init_data(os.environ["BOT_TOKEN"])
+    with client() as c:
+        r = c.get("/api/news")
+        assert r.status_code == 200 and "items" in r.json()
+        assert c.get("/news.html").status_code == 200
+        # подписка: авторизация и валидация формы
+        r = c.post("/api/subs", json={"initData": "bad", "form": "ryczalt"})
+        assert r.status_code == 401
+        r = c.post("/api/subs", json={"initData": good, "form": "hacker"})
+        assert r.status_code == 400
+        r = c.post("/api/subs", json={"initData": good, "form": "ryczalt", "vat": False})
+        assert r.status_code == 200
+        r = c.request("DELETE", "/api/subs", json={"initData": good})
+        assert r.status_code == 200
+
+
 def test_verify_init_data_roundtrip():
     token = os.environ["BOT_TOKEN"]
     user = server.verify_init_data(make_init_data(token, 777))

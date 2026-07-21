@@ -122,21 +122,51 @@ def build_bot():
 
 
 # ── приложение ───────────────────────────────────────────────────────────────
+MONITOR_INTERVAL = 6 * 3600
+
+
+async def monitor_loop(app: FastAPI):
+    """Каждые 6 ч: скрейп источников, классификация, пуши подписчикам."""
+    import monitor
+    await asyncio.sleep(90)  # дать боту стартовать
+    while True:
+        try:
+            to_push = await asyncio.to_thread(monitor.run_once)
+            bot = app.state.bot
+            if bot:
+                for item in to_push:
+                    text = (f"🔔 <b>{item['source']}</b>\n{item['title']}\n\n"
+                            f"{item['summary']}\n"
+                            f"<a href=\"{item['url']}\">Читать оригинал</a>")
+                    for uid in monitor.subs_for(item):
+                        try:
+                            await bot.send_message(
+                                uid, text, parse_mode="HTML",
+                                disable_web_page_preview=True)
+                            await asyncio.sleep(0.1)
+                        except Exception:
+                            pass  # юзер заблокировал бота и т.п.
+        except Exception as e:
+            log.warning("monitor loop error: %s", e)
+        await asyncio.sleep(MONITOR_INTERVAL)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = None
+    tasks = []
     if BOT_TOKEN and not DISABLE_BOT:
         bot, dp, on_start = build_bot()
         app.state.bot = bot
         await on_start()
-        task = asyncio.create_task(dp.start_polling(bot))
-        log.info("bot polling started")
+        tasks.append(asyncio.create_task(dp.start_polling(bot)))
+        tasks.append(asyncio.create_task(monitor_loop(app)))
+        log.info("bot polling + monitor started")
     else:
         app.state.bot = None
         log.info("bot disabled")
     yield
-    if task:
-        task.cancel()
+    for t in tasks:
+        t.cancel()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -165,6 +195,37 @@ async def tips(req: Request):
         payload=f"tip-{amount}", currency="XTR",
         prices=[{"label": "Донат", "amount": amount}])
     return {"link": link}
+
+
+@app.get("/api/news")
+async def news_feed():
+    import monitor
+    return {"items": monitor.get_feed()}
+
+
+@app.post("/api/subs")
+async def subscribe(req: Request):
+    import monitor
+    body = await req.json()
+    user = verify_init_data(body.get("initData", ""))
+    if user is None:
+        raise HTTPException(401, "bad initData")
+    form = body.get("form") or "unknown"
+    if form not in ("skala", "liniowy", "ryczalt", "unknown"):
+        raise HTTPException(400, "bad form")
+    monitor.upsert_sub(user["id"], form, bool(body.get("vat")))
+    return {"ok": True}
+
+
+@app.delete("/api/subs")
+async def unsubscribe(req: Request):
+    import monitor
+    body = await req.json()
+    user = verify_init_data(body.get("initData", ""))
+    if user is None:
+        raise HTTPException(401, "bad initData")
+    monitor.delete_sub(user["id"])
+    return {"ok": True}
 
 
 TMP_DIR = ROOT / "tmp_files"
