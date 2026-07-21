@@ -1,17 +1,34 @@
-# JDG Гид — @JGD_PL_bot
+# JDG Гид — [@JGD_PL_bot](https://t.me/JGD_PL_bot)
 
 Telegram Mini App «Путеводитель по JDG (ИП) в Польше»: гайд сообщества
-[JDG PBH](https://t.me/JDG_PBH) + калькуляторы ZUS/налогов + персональный план
-предпринимателя. Контент — [sobolevbel/jdg](https://github.com/sobolevbel/jdg) (CC0).
+[JDG PBH](https://t.me/JDG_PBH), калькуляторы ZUS и налогов, персональный план
+предпринимателя, локальная библиотека шаблонов с PDF-читалкой и свои утилиты.
+
+**Прод:** https://jdg-46-224-220-94.sslip.io · дизайн-система ISSA (Lucide, тема Telegram)
+
+## Возможности
+
+- **Гайд** — 38 статей (CC0, [sobolevbel/jdg](https://github.com/sobolevbel/jdg)):
+  «путь предпринимателя» по шагам + справочное, полнотекстовый поиск, лайтбокс картинок
+- **Расчёты** — ZUS по режимам и годам (2025/2026, экономия ZUS-каникул),
+  сравнение skala / liniowy / ryczałt «на руки», трекер лимита VAT 240 000 zł
+- **Мой план** — профиль → этапы Ulga na Start → Preferencyjne → Duży ZUS с датами,
+  ближайшие дедлайны (DRA, JPK, PIT, переходы льгот), чек-листы с прогрессом
+- **Инструменты** — 15 документов сообщества хранятся локально и открываются
+  во встроенной PDF-читалке с печатью; свои утилиты: склейка PDF (pdf-lib,
+  на клиенте) и подгонка фото для MOS 684×883
+- **Stars-донат** прямо в Mini App (createInvoiceLink + openInvoice)
 
 ## Структура
 
-- `server.py` — FastAPI (Mini App + API) + aiogram-бот одним процессом
-- `calc.py` / `webapp/calc.js` — расчётное ядро (зеркала, ставки в `rates_2026.json`)
-- `tools/build_content.py` — markdown гайда → `webapp/data/` (статьи, поиск, картинки)
-- `webapp/` — vanilla JS Mini App, дизайн-система ISSA (`theme.css` + `jdg.css`)
-- `deploy/` — systemd-юнит и процедура деплоя
-- концепция и роадмап: `docs/CONCEPT.md`
+- `server.py` — FastAPI (Mini App + API + временная выдача файлов) + aiogram-бот одним процессом
+- `calc.py` / `webapp/calc.js` — расчётное ядро (зеркала; ставки в `rates_2026.json`
+  и `rates_years.json`, сверены с zus.pl / таблицей гайда копейка в копейку)
+- `tools/build_content.py` — markdown гайда → `webapp/data/` (статьи, поиск, картинки, иконки секций)
+- `webapp/` — vanilla JS, без сборщика: `theme.css` (ISSA) + `jdg.css`, `icons.js` (Lucide),
+  `reader.html` (pdf.js), `merge.html`, `photo.html`, `lightbox.js`
+- `deploy/` — systemd-юнит и процедура (git archive | ssh, VPS + Caddy)
+- Концепция и роадмап: `docs/CONCEPT.md` (мониторинг госсайтов, AI-ассистент, inFakt API)
 
 ## Локальный запуск
 
@@ -20,11 +37,19 @@ pip install -r requirements.txt
 git clone --depth 1 https://github.com/sobolevbel/jdg sources/guide
 python tools/build_content.py
 DISABLE_BOT=1 uvicorn server:app --port 4400   # без поллинга (иначе 409 с продом)
-pytest -q
+pytest -q                                      # 24 теста
 ```
+
+Секреты — в `.env` (см. `.env.example`), в git не попадают.
 
 ## Данные и актуальность
 
-Все ставки — в `rates_2026.json` (версионируется, поле `updated`).
-При смене года: создать `rates_2027.json`, обновить формулы при изменении правил,
-прогнать `test_calc.py` по опорным числам гайда.
+Ставки версионируются (`rates_years.json`, поле `updated`). При смене года: добавить
+год в файл, проверить изменения правил, прогнать `test_calc.py` по опорным числам.
+Обновление контента гайда: `git pull` в `sources/guide` + `build_content.py`, без рестарта.
+
+## Лицензии
+
+Код — MIT. Контент гайда — CC0 (сообщество JDG PBH). pdf.js (Apache-2.0),
+pdf-lib (MIT), иконки Lucide (ISC) — вендорены локально.
+Информация в приложении справочная и не является налоговой или юридической консультацией.
