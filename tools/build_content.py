@@ -27,10 +27,36 @@ MD_EXTENSIONS = [
     "pymdownx.details", "pymdownx.superfences", "pymdownx.tasklist",
 ]
 
-# у гайда кастомные mkdocs-иконки — заменяем на эмодзи
+# у гайда кастомные mkdocs-иконки — заменяем на эмодзи.
+# ВАЖНО: неизвестные :icon: preprocess вырезает, поэтому все реально
+# встречающиеся в гайде иконки должны быть тут, иначе исчезнут из текста.
 ICON_EMOJI = {
     "youtube": "▶️", "telegram": "✈️", "simple/telegram": "✈️",
     "fontawesome-brands-youtube": "▶️", "material-web": "\U0001f310",
+    "warning": "⚠️", "coffee": "☕",
+}
+
+# Локализация callout-блоков (admonition/details) + Lucide-иконка на тон UI.
+# python-markdown ставит английский заголовок по типу («Note», «Warning») —
+# в русском гайде это чужеродно; переводим и добавляем иконку из icons.js.
+CALLOUT = {
+    "note": ("Заметка", "bookmark"),
+    "abstract": ("Кратко", "file-text"), "summary": ("Кратко", "file-text"),
+    "tldr": ("Кратко", "file-text"),
+    "info": ("К сведению", "info"), "todo": ("К сведению", "info"),
+    "tip": ("Совет", "lightbulb"), "hint": ("Совет", "lightbulb"),
+    "important": ("Важно", "alert-triangle"),
+    "success": ("Готово", "check-circle"), "check": ("Готово", "check-circle"),
+    "done": ("Готово", "check-circle"),
+    "question": ("Вопрос", "circle-help"), "faq": ("Вопрос", "circle-help"),
+    "help": ("Вопрос", "circle-help"),
+    "warning": ("Важно", "alert-triangle"), "caution": ("Внимание", "alert-triangle"),
+    "attention": ("Внимание", "alert-triangle"),
+    "danger": ("Осторожно", "flame"), "error": ("Ошибка", "x-circle"),
+    "failure": ("Ошибка", "x-circle"), "fail": ("Ошибка", "x-circle"),
+    "bug": ("Проблема", "wrench"),
+    "example": ("Пример", "list"),
+    "quote": ("Цитата", "message-circle"), "cite": ("Цитата", "message-circle"),
 }
 
 # Lucide-иконка и тон плашки для каждой секции (дизайн-система ISSA).
@@ -112,6 +138,36 @@ def preprocess(md_text: str) -> str:
     return md_text
 
 
+def _callout_label(type_word: str, current: str) -> str:
+    """Заголовок callout: перевод английского дефолта + Lucide-иконка."""
+    ru, icon = CALLOUT.get(type_word, (current, "info"))
+    is_default = current.strip().lower() == type_word or current.strip() == type_word.capitalize()
+    label = ru if is_default else current  # кастомный заголовок сохраняем
+    return f'<span class="cal-ic" data-icon="{icon}"></span>{label}'
+
+
+def localize_callouts(html: str) -> str:
+    """Русские заголовки + иконки для admonition (!!!) и details (???)."""
+    def _adm(m):
+        classes, title = m.group(1).strip(), m.group(2)
+        types = [c for c in classes.split() if c != "admonition"]
+        label = _callout_label(types[0], title) if types else title
+        return (f'<div class="admonition {classes}">'
+                f'<p class="admonition-title">{label}</p>')
+
+    def _det(m):
+        classes, is_open, title = m.group(1).strip(), m.group(2) or "", m.group(3)
+        types = [c for c in classes.split() if c != "admonition"]
+        label = _callout_label(types[0], title) if types else title
+        return f'<details class="{classes}"{is_open}><summary>{label}</summary>'
+
+    html = re.sub(r'<div class="admonition([^"]*)">\s*<p class="admonition-title">([^<]*)</p>',
+                  _adm, html)
+    html = re.sub(r'<details class="([^"]*)"( open="open")?>\s*<summary>([^<]*)</summary>',
+                  _det, html)
+    return html
+
+
 def postprocess(html: str) -> str:
     # ссылки между статьями: foo.md / foo.md#anchor -> article.html?id=foo
     html = re.sub(
@@ -124,6 +180,7 @@ def postprocess(html: str) -> str:
     html = re.sub(r'href="images/', 'href="data/gimg/', html)
     # внешние ссылки — в новой вкладке (в TG WebView откроется браузером)
     html = re.sub(r'(<a href="https?://[^"]*")', r'\1 target="_blank" rel="noopener"', html)
+    html = localize_callouts(html)
     return html
 
 

@@ -81,17 +81,31 @@ body.has-dock{ padding-bottom:84px }
 .article ul,.article ol{ padding-left:22px }
 .article li{ margin:4px 0 }
 
-/* admonitions mkdocs: note/info/tip/warning/success/example/quote/abstract */
-.article .admonition{ margin:var(--sp-3) 0; padding:var(--sp-3) var(--sp-4);
-  background:var(--card); border:1px solid var(--border);
-  border-left:4px solid var(--accent); border-radius:var(--r-sm) }
-.article .admonition-title{ font-weight:700; margin:0 0 var(--sp-1) }
-.article .admonition.warning{ border-left-color:var(--warn) }
-.article .admonition.danger{ border-left-color:var(--bad) }
-.article .admonition.success,.article .admonition.tip{ border-left-color:var(--ok) }
-.article details{ margin:var(--sp-3) 0; padding:var(--sp-2) var(--sp-3);
-  background:var(--card); border:1px solid var(--border); border-radius:var(--r-sm) }
-.article summary{ font-weight:700; cursor:pointer }
+/* callout-блоки mkdocs (admonition !!! и details ???): единый вид на тон UI */
+.article .admonition,.article details{ margin:var(--sp-3) 0;
+  padding:var(--sp-3) var(--sp-4); background:var(--card);
+  border:1px solid var(--border); border-left:4px solid var(--accent);
+  border-radius:var(--r-sm) }
+.article .admonition-title,.article summary{ font-weight:700; margin:0 0 var(--sp-1);
+  cursor:default; display:flex; align-items:center; gap:6px; color:var(--text) }
+.article summary{ cursor:pointer }
+.article details[open] summary{ margin-bottom:var(--sp-2) }
+/* иконка заголовка тонируется под тип блока */
+.article .cal-ic{ display:inline-flex; flex:0 0 auto; width:17px; height:17px; opacity:.85 }
+.article .cal-ic svg{ width:17px; height:17px }
+/* цвет тона по типу — общий для admonition и details */
+.article .warning,.article .caution,.article .attention,.article .important{ border-left-color:var(--warn) }
+.article .danger,.article .error,.article .failure,.article .fail,.article .bug{ border-left-color:var(--bad) }
+.article .success,.article .check,.article .done,.article .tip,.article .hint{ border-left-color:var(--ok) }
+.article .info,.article .todo,.article .question,.article .faq,.article .help{ border-left-color:var(--link) }
+.article .warning>.admonition-title,.article .warning>summary,
+.article .caution>summary,.article .important>.admonition-title{ color:var(--warn) }
+.article .danger>.admonition-title,.article .danger>summary,
+.article .error>.admonition-title,.article .bug>.admonition-title{ color:var(--bad) }
+.article .success>.admonition-title,.article .tip>.admonition-title,
+.article .success>summary,.article .tip>summary{ color:var(--ok) }
+.article .info>.admonition-title,.article .question>.admonition-title,
+.article .info>summary,.article .question>summary{ color:var(--link) }
 .article input[type=checkbox]{ margin-right:6px }
 
 /* ── гайд: списки секций и статей ── */
