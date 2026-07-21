@@ -107,15 +107,23 @@ def test_news_and_subs_api():
         r = c.get("/api/news")
         assert r.status_code == 200 and "items" in r.json()
         assert c.get("/news.html").status_code == 200
-        # подписка: авторизация и валидация формы
-        r = c.post("/api/subs", json={"initData": "bad", "form": "ryczalt"})
+        # профиль: авторизация и валидация
+        r = c.post("/api/profile", json={"initData": "bad", "form": "ryczalt"})
         assert r.status_code == 401
-        r = c.post("/api/subs", json={"initData": good, "form": "hacker"})
+        r = c.post("/api/profile", json={"initData": good, "form": "hacker"})
         assert r.status_code == 400
-        r = c.post("/api/subs", json={"initData": good, "form": "ryczalt", "vat": False})
+        r = c.post("/api/profile", json={"initData": good, "reg": "15-03-2026"})
+        assert r.status_code == 400
+        r = c.post("/api/profile", json={"initData": good, "form": "ryczalt",
+                                         "reg": "2026-03-15", "vat": False,
+                                         "news_sub": True, "dl_sub": True})
         assert r.status_code == 200
-        r = c.request("DELETE", "/api/subs", json={"initData": good})
-        assert r.status_code == 200
+        p = r.json()["profile"]
+        assert p["news_sub"] == 1 and p["dl_sub"] == 1 and p["reg"] == "2026-03-15"
+        # частичное отключение подписки не трёт профиль
+        r = c.post("/api/profile", json={"initData": good, "news_sub": False})
+        p = r.json()["profile"]
+        assert p["news_sub"] == 0 and p["reg"] == "2026-03-15"
 
 
 def test_ask_api_auth_and_pages():

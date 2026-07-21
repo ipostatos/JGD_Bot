@@ -41,15 +41,15 @@ def test_parse_zus_fixture():
     ]
 
 
-def test_db_subs_and_matching(tmp_path, monkeypatch):
-    monkeypatch.setattr(monitor, "DB_PATH", tmp_path / "t.db")
-    monitor.upsert_sub(1, "ryczalt", vat=False)
-    monitor.upsert_sub(2, "skala", vat=True)
+def test_subs_matching_via_profiles(tmp_path, monkeypatch):
+    import profiles
+    monkeypatch.setattr(profiles, "DB_PATH", tmp_path / "t.db")
+    profiles.upsert(1, form="ryczalt", vat=0, news_sub=1)
+    profiles.upsert(2, form="skala", vat=1, news_sub=1)
+    profiles.upsert(3, form="skala", vat=1, news_sub=0)  # не подписан
     assert set(monitor.subs_for({"who_vat": "any"})) == {1, 2}
     assert monitor.subs_for({"who_vat": "vat_only"}) == [2]
     assert monitor.subs_for({"who_vat": "nonvat_only"}) == [1]
-    monitor.delete_sub(2)
-    assert set(monitor.subs_for({"who_vat": "any"})) == {1}
 
 
 def test_feed_empty(tmp_path, monkeypatch):

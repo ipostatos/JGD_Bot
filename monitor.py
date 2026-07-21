@@ -97,20 +97,7 @@ def db() -> sqlite3.Connection:
         url TEXT PRIMARY KEY, source TEXT, title TEXT, found_at INTEGER,
         relevant INTEGER, importance INTEGER, topics TEXT, summary TEXT,
         who_vat TEXT, pushed INTEGER DEFAULT 0)""")
-    conn.execute("""CREATE TABLE IF NOT EXISTS subs(
-        user_id INTEGER PRIMARY KEY, form TEXT, vat INTEGER, created INTEGER)""")
     return conn
-
-
-def upsert_sub(user_id: int, form: str, vat: bool):
-    with db() as c:
-        c.execute("INSERT OR REPLACE INTO subs VALUES(?,?,?,?)",
-                  (user_id, form, int(vat), int(time.time())))
-
-
-def delete_sub(user_id: int):
-    with db() as c:
-        c.execute("DELETE FROM subs WHERE user_id=?", (user_id,))
 
 
 def get_feed(limit: int = 30):
@@ -198,15 +185,14 @@ def run_once():
 
 
 def subs_for(item):
-    """Подписчики, которых касается новость (фильтр по VAT-статусу)."""
-    with db() as c:
-        rows = c.execute("SELECT user_id, form, vat FROM subs").fetchall()
+    """Подписчики на новости (profiles.news_sub), фильтр по VAT-статусу."""
+    import profiles
     who = item.get("who_vat", "any")
     out = []
-    for user_id, _form, vat in rows:
-        if who == "vat_only" and not vat:
+    for p in profiles.with_flag("news_sub"):
+        if who == "vat_only" and not p.get("vat"):
             continue
-        if who == "nonvat_only" and vat:
+        if who == "nonvat_only" and p.get("vat"):
             continue
-        out.append(user_id)
+        out.append(p["user_id"])
     return out

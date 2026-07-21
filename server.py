@@ -151,6 +151,54 @@ async def monitor_loop(app: FastAPI):
         await asyncio.sleep(MONITOR_INTERVAL)
 
 
+async def deadline_loop(app: FastAPI):
+    """Раз в час; шлёт напоминания в 9 утра по Варшаве (за 5 дней и за 1)."""
+    import profiles
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    warsaw = ZoneInfo("Europe/Warsaw")
+    await asyncio.sleep(120)
+    while True:
+        try:
+            now = datetime.now(warsaw)
+            if now.hour == 9:
+                due = await asyncio.to_thread(profiles.due_pushes, now.date())
+                bot = app.state.bot
+                for d in due:
+                    e, days = d["event"], d["days"]
+                    when = "завтра" if days == 1 else f"через {days} дн."
+                    text = (f"📅 <b>{when.capitalize()}, "
+                            f"{e['d'].strftime('%d.%m')}: {e['title']}</b>\n{e['desc']}")
+                    if e["key"].startswith("dra"):
+                        text += await _dra_sum_line(d["profile"]["user_id"])
+                    text += "\n\nДетали — в «Моём плане»."
+                    try:
+                        await bot.send_message(d["user_id"], text, parse_mode="HTML")
+                        profiles.mark_sent(d["user_id"], d["key"])
+                        await asyncio.sleep(0.1)
+                    except Exception:
+                        profiles.mark_sent(d["user_id"], d["key"])  # blocked и т.п.
+                if due:
+                    log.info("deadline pushes sent: %d", len(due))
+        except Exception as e:
+            log.warning("deadline loop error: %s", e)
+        await asyncio.sleep(3600)
+
+
+async def _dra_sum_line(user_id: int) -> str:
+    """Если подключён inFakt — реальная сумма ZUS в напоминание."""
+    try:
+        import infakt
+        if infakt.load_key(user_id):
+            s = await infakt.summary(user_id)
+            zus = s.get("zus") or {}
+            if zus.get("total") is not None and not zus.get("paid"):
+                return f"\n💰 По данным inFakt к оплате: <b>{zus['total']:.2f} zł</b>"
+    except Exception:
+        pass
+    return ""
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     tasks = []
@@ -160,6 +208,7 @@ async def lifespan(app: FastAPI):
         await on_start()
         tasks.append(asyncio.create_task(dp.start_polling(bot)))
         tasks.append(asyncio.create_task(monitor_loop(app)))
+        tasks.append(asyncio.create_task(deadline_loop(app)))
         log.info("bot polling + monitor started")
     else:
         app.state.bot = None
@@ -203,29 +252,31 @@ async def news_feed():
     return {"items": monitor.get_feed()}
 
 
-@app.post("/api/subs")
-async def subscribe(req: Request):
-    import monitor
+@app.post("/api/profile")
+async def api_profile(req: Request):
+    """Частичное обновление серверного профиля (только присланные поля)."""
+    import profiles
     body = await req.json()
     user = verify_init_data(body.get("initData", ""))
     if user is None:
         raise HTTPException(401, "bad initData")
-    form = body.get("form") or "unknown"
-    if form not in ("skala", "liniowy", "ryczalt", "unknown"):
-        raise HTTPException(400, "bad form")
-    monitor.upsert_sub(user["id"], form, bool(body.get("vat")))
-    return {"ok": True}
-
-
-@app.delete("/api/subs")
-async def unsubscribe(req: Request):
-    import monitor
-    body = await req.json()
-    user = verify_init_data(body.get("initData", ""))
-    if user is None:
-        raise HTTPException(401, "bad initData")
-    monitor.delete_sub(user["id"])
-    return {"ok": True}
+    fields = {}
+    if "form" in body:
+        if body["form"] not in profiles.FORMS:
+            raise HTTPException(400, "bad form")
+        fields["form"] = body["form"]
+    if "reg" in body:
+        reg = body["reg"]
+        if reg is not None:
+            import re as _re
+            if not (isinstance(reg, str) and _re.fullmatch(r"\d{4}-\d{2}-\d{2}", reg)):
+                raise HTTPException(400, "bad reg date")
+        fields["reg"] = reg
+    for flag in ("vat", "ulga", "news_sub", "dl_sub"):
+        if flag in body:
+            fields[flag] = int(bool(body[flag]))
+    profiles.upsert(user["id"], **fields)
+    return {"ok": True, "profile": profiles.get(user["id"])}
 
 
 @app.post("/api/ask")

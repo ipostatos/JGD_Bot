@@ -82,10 +82,11 @@ btn.onclick = async () => {
   const on = localStorage.getItem(SKEY) === '1';
   const p = getProfile();
   try {
-    const r = await fetch('/api/subs', {
-      method: on ? 'DELETE' : 'POST',
+    const r = await fetch('/api/profile', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initData: tg.initData, form: p.form || 'unknown', vat: !!p.vat }),
+      body: JSON.stringify({ initData: tg.initData, news_sub: !on,
+        form: p.form || 'unknown', vat: !!p.vat }),
     });
     if (!r.ok) throw 0;
     localStorage.setItem(SKEY, on ? '0' : '1');

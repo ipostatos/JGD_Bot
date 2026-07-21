@@ -29,6 +29,15 @@
     <span class="tt">Использую Ulga na Start</span></label>
 </div>
 
+<div class="card" style="margin-bottom:12px">
+  <div class="h2"><span class="emi" style="color:var(--warn)" data-icon="bell"></span>Напоминания о дедлайнах</div>
+  <p class="muted" style="font-size:13px;margin:0 0 10px">
+    Пуш от бота за 5 дней и за 1 день: ZUS DRA до 20-го, JPK до 25-го, годовой PIT
+    и 🔥 переходы между режимами ZUS. С суммой из inFakt, если подключён.</p>
+  <button id="dlbtn" class="btn sm">🔔 Включить напоминания</button>
+  <div id="dlmsg" class="muted" style="font-size:12px;margin-top:6px"></div>
+</div>
+
 <div class="card" style="margin-bottom:12px" id="infakt-card">
   <div class="h2"><span class="emi" style="color:var(--accent)" data-icon="file-text"></span>inFakt <span class="beta-badge">beta</span></div>
   <div id="if-off">
@@ -178,6 +187,17 @@ if (p.ulga === false) document.getElementById('pulga').checked = false;
 document.querySelectorAll('#pform button').forEach(b =>
   b.classList.toggle('on', b.dataset.v === (p.form || 'ryczalt')));
 
+function syncProfile(extra) {
+  // серверная копия профиля — для персональных пушей; молча, без блокировки UI
+  if (!(tg && tg.initData)) return Promise.reject();
+  const pr = getProfile();
+  return fetch('/api/profile', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ initData: tg.initData, reg: pr.reg,
+      form: pr.form, vat: !!pr.vat, ulga: pr.ulga !== false }, extra || {})),
+  }).then(r => { if (!r.ok) throw 0; return r.json(); });
+}
+
 function saveProfile() {
   setProfile({
     reg: preg.value || null,
@@ -186,7 +206,33 @@ function saveProfile() {
     ulga: document.getElementById('pulga').checked,
   });
   renderStages(); renderDeadlines();
+  syncProfile().catch(() => {});
 }
+
+// ── напоминания о дедлайнах ──
+const DLKEY = 'jdg_dlsub';
+const dlbtn = document.getElementById('dlbtn');
+function dlSync() {
+  const on = localStorage.getItem(DLKEY) === '1';
+  dlbtn.textContent = on ? '🔕 Отключить напоминания' : '🔔 Включить напоминания';
+  dlbtn.classList.toggle('ghost', on);
+}
+dlbtn.onclick = () => {
+  if (!(tg && tg.initData)) {
+    document.getElementById('dlmsg').textContent = 'Открой через Telegram, чтобы включить.';
+    return;
+  }
+  haptic('medium');
+  const on = localStorage.getItem(DLKEY) === '1';
+  syncProfile({ dl_sub: !on }).then(() => {
+    localStorage.setItem(DLKEY, on ? '0' : '1');
+    document.getElementById('dlmsg').textContent = on ? '' : 'Готово! Первый пуш придёт утром в день напоминания.';
+    dlSync();
+  }).catch(() => {
+    document.getElementById('dlmsg').textContent = 'Не получилось, попробуй позже.';
+  });
+};
+dlSync();
 preg.addEventListener('change', saveProfile);
 document.getElementById('pvat').addEventListener('change', saveProfile);
 document.getElementById('pulga').addEventListener('change', saveProfile);
