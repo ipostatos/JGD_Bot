@@ -167,6 +167,61 @@ async def tips(req: Request):
     return {"link": link}
 
 
+TMP_DIR = ROOT / "tmp_files"
+TMP_TTL = 3600  # секунда жизни временного файла
+TMP_MAX = 25 * 1024 * 1024
+
+
+def _tmp_cleanup():
+    import time
+    if not TMP_DIR.is_dir():
+        return
+    now = time.time()
+    for f in TMP_DIR.iterdir():
+        if now - f.stat().st_mtime > TMP_TTL:
+            f.unlink(missing_ok=True)
+
+
+@app.post("/api/tmpfile")
+async def tmpfile(req: Request):
+    """Принимает собранный утилитой файл, отдаёт временную ссылку (TTL 1 ч).
+
+    Нужен мобильному Telegram WebView: скачивание blob там не работает,
+    а openLink на свой URL открывает системный просмотрщик с печатью/шерингом.
+    """
+    import secrets
+    user = verify_init_data(req.headers.get("x-init-data", ""))
+    if user is None:
+        raise HTTPException(401, "bad initData")
+    ext = req.query_params.get("ext", "pdf")
+    if ext not in ("pdf", "jpg"):
+        raise HTTPException(400, "bad ext")
+    body = await req.body()
+    if not body or len(body) > TMP_MAX:
+        raise HTTPException(413, "file too large")
+    magic_ok = (ext == "pdf" and body[:4] == b"%PDF") or \
+               (ext == "jpg" and body[:2] == b"\xff\xd8")
+    if not magic_ok:
+        raise HTTPException(400, "bad file")
+    TMP_DIR.mkdir(exist_ok=True)
+    _tmp_cleanup()
+    token = secrets.token_urlsafe(16)
+    (TMP_DIR / f"{token}.{ext}").write_bytes(body)
+    return {"url": f"/tmpf/{token}.{ext}"}
+
+
+@app.get("/tmpf/{name}")
+async def tmpf(name: str):
+    import re as _re
+    if not _re.fullmatch(r"[A-Za-z0-9_-]+\.(pdf|jpg)", name):
+        raise HTTPException(404)
+    path = TMP_DIR / name
+    if not path.is_file():
+        raise HTTPException(404, "expired")
+    media = "application/pdf" if name.endswith(".pdf") else "image/jpeg"
+    return FileResponse(path, media_type=media)
+
+
 @app.get("/")
 async def index():
     return FileResponse(WEBAPP / "index.html")

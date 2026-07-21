@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>JDG Гид — инструменты</title>
 <link rel="icon" href="icon.svg">
 <link rel="stylesheet" href="theme.css">
@@ -11,50 +11,55 @@
 </head>
 <body>
 <div class="hero"><span class="logo emi" data-icon="wrench"></span><h1>Инструменты и шаблоны</h1></div>
-<p class="sub">Тулбокс сообщества: ВНЖ, документы, утилиты — <a href="https://justandrei.github.io/jdg-tools/" target="_blank" rel="noopener">jdg-tools</a></p>
+<p class="sub">Документы хранятся в приложении и открываются во встроенной читалке — с печатью и офлайн</p>
 
 <div id="cats"></div>
 
-<p class="foot">Инструменты и шаблоны — проект <a href="https://github.com/justandrei/jdg-tools" target="_blank" rel="noopener">justandrei/jdg-tools</a> (GPL-3.0) и документы сообщества JDG PBH.<br>Открываются во внешнем браузере.</p>
+<p class="foot">Шаблоны и инструкции — сообщество JDG PBH; актуальные оригиналы и генератор ВНЖ — проект <a href="https://github.com/justandrei/jdg-tools" target="_blank" rel="noopener">jdg-tools</a>.<br>Пункты со стрелкой ↗ открываются во внешнем браузере.</p>
 
 <script src="icons.js"></script>
 <script src="app.js"></script>
 <script>
 renderDock('about');
 const T = 'https://justandrei.github.io/jdg-tools/';
+const doc = (slug, t, d) => ({ t, d, u: `reader.html?file=docs/${slug}.pdf&title=${encodeURIComponent(t)}` });
 const CATS = [
   { t: 'ВНЖ по ИП (karta pobytu)', ic: 'id-card', items: [
     { t: 'Генератор заявки на ВНЖ', d: 'заполняет официальный PDF по шагам', u: T + 'wniosek', hot: true },
     { t: 'ВНЖ чек-лист А4', d: 'какие документы собрать', u: T + 'checklist', hot: true },
-    { t: 'Особенности подачи по воеводствам', d: 'таблица: сроки, нюансы, контакты', u: 'https://docs.google.com/spreadsheets/d/1lkwXxQ5XXMzJWHYZWHEekATBrO2soxKcIvy6TyHkWl4/edit' },
-    { t: 'Шаблон анкеты предпринимателя', d: 'для пакета документов', u: 'https://docs.google.com/document/d/1NBTNAKqmfw0J01wNdR54oR8-6k-9-_NxMXOmb6bVBE4/edit' },
-    { t: 'Шаблон бизнес-плана', d: 'просят некоторые воеводства', u: 'https://docs.google.com/document/d/1jGvMM-CwCIf6-rxhytQdgIlzXHuGoNRpNd9AvtWzbQI/edit' },
-    { t: '«Tabelka» — работа и налоги за год', d: 'заявление о расчётах за прошлый год', u: 'https://docs.google.com/document/d/1eWo2fFlX1CpbEND5j7m3t3jBY7iGV87d5UJwLwr-GAQ/edit' },
-    { t: 'Oświadczenie cudzoziemca', d: 'шаблон декларации иностранца', u: 'https://docs.google.com/document/d/1gr0w9wyzOE6c52si58hrxmdlt3tG8M5aZ1P1dHLxASk/edit' },
-    { t: 'Заявление о людях на содержании', d: '+ таблица, кто его пишет', u: 'https://docs.google.com/document/d/1C9quNvXmyQBwDHE55Qouc9J0_84f5eOkmc3W83A02_8/edit' },
-    { t: 'Карта побыта без адреса', d: 'шаблон заявления', u: 'https://docs.google.com/document/d/1S-eukPswXjPQ8TdhH5GXAaOY2yX_hLhFOMuHlQ7JRdk/edit' },
+    doc('wojewodztwa', 'Подача по воеводствам', 'таблица: сроки, нюансы, контакты'),
+    { t: 'Шаблон заявки на ВНЖ (Word)', d: 'заполняемый DOCX — скачать', u: 'docs/zayavka-vnzh-shablon.docx' },
+    doc('anketa-przedsiebiorcy', 'Анкета предпринимателя', 'шаблон для пакета документов'),
+    doc('biznes-plan', 'Бизнес-план', 'шаблон — просят некоторые воеводства'),
+    doc('tabelka', '«Tabelka» — работа и налоги за год', 'заявление о расчётах за прошлый год'),
+    doc('oswiadczenie-cudzoziemca', 'Oświadczenie cudzoziemca', 'шаблон декларации иностранца'),
+    doc('osoby-na-utrzymaniu', 'Заявление о людях на содержании', 'шаблон заявления'),
+    doc('osoby-na-utrzymaniu-kto', 'Кто пишет заявление о содержании', 'справочная таблица'),
+    doc('karta-pobytu-bez-adresu', 'Карта побыта без адреса', 'шаблон заявления'),
+    doc('zalacznik-1', 'Załącznik nr 1', 'приложение к заявке'),
   ]},
   { t: 'Справки и госуслуги', ic: 'file-text', items: [
-    { t: 'Справка о страховке в ZUS', d: 'инструкция, как создать в eZUS', u: 'https://docs.google.com/document/d/1aAIAQ3Vu-5SzS3fGV7HrX6TzN-xys0_7IRowv5zhSIk/edit' },
-    { t: 'Справка об отсутствии долгов по налогам', d: 'пример + как получить', u: 'https://docs.google.com/document/d/1CoS2Y_p5WEX7qiiNCbMoayQ5hziLRxsNPXs4OBT21bs/edit' },
-    { t: 'Заявка на 800+ через zus.pl', d: 'пошаговая инструкция', u: 'https://docs.google.com/document/d/1BsbH9TmLpLLTV_bZ-mldqy1-opCfuSx8SERnumM5PTg/edit' },
-    { t: 'CEIDG viewer', d: 'проверить свой статус в реестре', u: T + 'ceidg/viewer.html' },
+    doc('spravka-zus', 'Справка о страховке в ZUS', 'инструкция, как создать в eZUS'),
+    doc('spravka-nalogi', 'Справка об отсутствии долгов по налогам', 'пример + как получить'),
+    doc('800plus', 'Заявка на 800+ через zus.pl', 'пошаговая инструкция'),
+    doc('zamena-inspektora-gdansk', 'Замена инспектора (Гданьск)', 'шаблон просьбы'),
+    { t: 'CEIDG viewer', d: 'полная актуальная запись в реестре', u: T + 'ceidg/viewer.html' },
   ]},
   { t: 'Утилиты', ic: 'settings', items: [
-    { t: 'PDF merger', d: 'объединить PDF/JPG в один файл (локально, без загрузки на сервер)', u: T + 'pdf/merger.html' },
-    { t: 'Фото для MOS 2', d: 'обрезка фото под требования', u: T + 'mos2/photo.html' },
+    { t: 'Склейка PDF', d: 'PDF и фото в один файл — наша утилита, всё локально', u: 'merge.html', hot: true },
+    { t: 'Фото для MOS', d: 'подгонка под рамку 684×883 — наша утилита', u: 'photo.html', hot: true },
   ]},
   { t: 'Данные', ic: 'bar-chart', items: [
     { t: 'Składki ZUS по годам', d: 'наш калькулятор: 2025 · 2026, все режимы и формы', u: 'calc.html' },
-    { t: 'Важные даты предпринимателя', d: 'сводная таблица сроков', u: 'https://docs.google.com/spreadsheets/d/1UGRsxqBA7DoO3wNmzuvD8TxAsqiIv_jhyw38wQfaH10/edit' },
-    { t: 'Калькулятор Ryczałt (таблица)', d: 'вкл. версию с разными ставками', u: 'https://docs.google.com/spreadsheets/d/14Y0ReOUMWA17pt931vgY2R0pSFYzqYOQ-XBzmkhllOw/edit' },
+    doc('vazhnye-daty', 'Важные даты предпринимателя', 'сводная таблица сроков'),
+    { t: 'Калькулятор Ryczałt (таблица)', d: 'интерактивная Google-таблица', u: 'https://docs.google.com/spreadsheets/d/14Y0ReOUMWA17pt931vgY2R0pSFYzqYOQ-XBzmkhllOw/edit' },
   ]},
 ];
 document.getElementById('cats').innerHTML = CATS.map(c => `
   <div class="card" style="margin-bottom:10px;padding:var(--sp-3) var(--sp-4)">
     <div class="h2"><span class="emi" style="color:var(--accent)">${Icons.svg(c.ic)}</span>${c.t}</div>
     ${c.items.map(i => {
-      const ext = i.u.startsWith('http');
+      const ext = i.u.startsWith('http') || i.u.endsWith('.docx');
       return `
       <a class="row-card" style="margin:6px 0 0;background:var(--bg);border:none"
          href="${i.u}"${ext ? ' target="_blank" rel="noopener"' : ''}>

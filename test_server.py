@@ -70,6 +70,37 @@ def test_tips_validates_amount_and_bot_offline():
         assert r.status_code == 503
 
 
+def test_utility_pages_and_docs():
+    with client() as c:
+        for page in ("/reader.html", "/merge.html", "/photo.html"):
+            assert c.get(page).status_code == 200, page
+        assert c.get("/vendor/pdfjs/pdf.min.js").status_code == 200
+        assert c.get("/vendor/pdf-lib.min.js").status_code == 200
+        r = c.get("/docs/anketa-przedsiebiorcy.pdf")
+        assert r.status_code == 200 and r.content[:4] == b"%PDF"
+
+
+def test_tmpfile_flow():
+    good = make_init_data(os.environ["BOT_TOKEN"])
+    with client() as c:
+        # без авторизации
+        r = c.post("/api/tmpfile?ext=pdf", content=b"%PDF-1.4 x")
+        assert r.status_code == 401
+        # не PDF под видом PDF
+        r = c.post("/api/tmpfile?ext=pdf", content=b"MZ garbage",
+                   headers={"x-init-data": good})
+        assert r.status_code == 400
+        # валидный цикл: залил -> скачал
+        r = c.post("/api/tmpfile?ext=pdf", content=b"%PDF-1.4 test",
+                   headers={"x-init-data": good})
+        assert r.status_code == 200
+        url = r.json()["url"]
+        got = c.get(url)
+        assert got.status_code == 200 and got.content == b"%PDF-1.4 test"
+        # мусорное имя не проходит
+        assert c.get("/tmpf/../server.py").status_code in (400, 404)
+
+
 def test_verify_init_data_roundtrip():
     token = os.environ["BOT_TOKEN"]
     user = server.verify_init_data(make_init_data(token, 777))

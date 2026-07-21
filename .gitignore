@@ -5,3 +5,4 @@ __pycache__/
 sources/
 webapp/data/
 *.db
+tmp_files/

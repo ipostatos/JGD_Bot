@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Склейка PDF</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="jdg.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+<div class="hero"><span class="logo emi" data-icon="layers"></span><h1>Склейка PDF</h1></div>
+<p class="sub">Собери сканы и фото в один PDF — всё считается на телефоне, файлы никуда не отправляются</p>
+
+<div class="card" style="margin-bottom:10px">
+  <label class="btn" style="cursor:pointer">
+    <span class="emi" data-icon="download" style="transform:rotate(180deg)"></span>
+    Добавить PDF или фото
+    <input id="pick" type="file" accept="application/pdf,image/jpeg,image/png" multiple class="hidden">
+  </label>
+  <div id="flist" style="margin-top:8px"></div>
+  <div style="display:flex;gap:8px;margin-top:8px">
+    <button id="undo" class="btn ghost sm" disabled>↩ Убрать последний</button>
+    <button id="clear" class="btn ghost sm" disabled>Начать заново</button>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:10px">
+  <label class="chk" style="border:none"><input id="autorot" type="checkbox" checked>
+    <span class="tt">Фото: лист по ориентации снимка (иначе всегда портрет)</span></label>
+  <label class="chk" style="border:none"><input id="oddstart" type="checkbox">
+    <span class="tt">Каждый файл с нечётной страницы (для двусторонней печати)</span></label>
+</div>
+
+<button id="make" class="btn" disabled><span class="emi" data-icon="file-check"></span> Собрать PDF</button>
+<div id="msg" class="state" style="padding:12px"></div>
+
+<p class="foot">Утилита работает целиком в приложении (pdf-lib, MIT). Ничего не загружается на сервер, кроме готового файла — и только чтобы открыть его для печати.</p>
+
+<script src="icons.js"></script>
+<script src="app.js"></script>
+<script src="vendor/pdf-lib.min.js"></script>
+<script>
+renderDock('about');
+const { PDFDocument } = PDFLib;
+const A4 = [595.28, 841.89];
+const files = [];
+const $ = id => document.getElementById(id);
+
+function refresh() {
+  $('flist').innerHTML = files.map((f, i) =>
+    `<div class="res-row"><span>${i + 1}. ${f.name}</span>
+     <span class="v muted">${(f.data.byteLength / 1024).toFixed(0)} КБ</span></div>`).join('')
+    || '<div class="muted" style="font-size:13px">Пока ничего не добавлено</div>';
+  const has = files.length > 0;
+  $('undo').disabled = $('clear').disabled = $('make').disabled = !has;
+}
+
+$('pick').addEventListener('change', async (e) => {
+  for (const f of e.target.files) {
+    files.push({ name: f.name, type: f.type, data: await f.arrayBuffer() });
+  }
+  e.target.value = '';
+  haptic(); refresh();
+});
+$('undo').onclick = () => { files.pop(); refresh(); };
+$('clear').onclick = () => { files.length = 0; refresh(); };
+
+async function build() {
+  const out = await PDFDocument.create();
+  const autorot = $('autorot').checked, odd = $('oddstart').checked;
+  for (const f of files) {
+    if (odd && out.getPageCount() % 2 === 1) out.addPage(A4); // добить до нечётного старта
+    if (f.type === 'application/pdf') {
+      const src = await PDFDocument.load(f.data, { ignoreEncryption: true });
+      (await out.copyPages(src, src.getPageIndices())).forEach(p => out.addPage(p));
+    } else {
+      const img = f.type === 'image/png'
+        ? await out.embedPng(f.data) : await out.embedJpg(f.data);
+      const landscape = autorot && img.width > img.height;
+      const [pw, ph] = landscape ? [A4[1], A4[0]] : A4;
+      const page = out.addPage([pw, ph]);
+      const m = 18; // поля ~6 мм
+      const k = Math.min((pw - 2 * m) / img.width, (ph - 2 * m) / img.height);
+      const w = img.width * k, h = img.height * k;
+      page.drawImage(img, { x: (pw - w) / 2, y: (ph - h) / 2, width: w, height: h });
+    }
+  }
+  return out.save();
+}
+
+$('make').onclick = async () => {
+  $('msg').textContent = 'Собираю…'; haptic('medium');
+  try {
+    const bytes = await build();
+    const mobile = tg && (tg.platform === 'ios' || tg.platform === 'android');
+    if (mobile && tg.initData) {
+      // мобильный Telegram: blob не скачивается — публикуем на час и открываем системно
+      const r = await fetch('/api/tmpfile?ext=pdf', { method: 'POST',
+        headers: { 'x-init-data': tg.initData }, body: bytes });
+      if (!r.ok) throw 0;
+      const { url } = await r.json();
+      tg.openLink(new URL(url, location.href).href);
+      $('msg').textContent = 'Готово! PDF открыт — оттуда можно сохранить или напечатать.';
+    } else {
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = 'sklejka.pdf'; a.click();
+      $('msg').textContent = 'Готово! Файл скачан.';
+    }
+  } catch { $('msg').textContent = 'Не получилось собрать — проверь файлы и попробуй снова.'; }
+};
+
+refresh();
+</script>
+</body>
+</html>

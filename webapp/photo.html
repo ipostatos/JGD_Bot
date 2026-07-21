@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Фото для MOS</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="jdg.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  #stage{ position:relative; width:100%; max-width:342px; margin:0 auto;
+    aspect-ratio:684/883; background:#111; border-radius:12px; overflow:hidden;
+    border:1px solid var(--border); touch-action:none }
+  #stage canvas{ position:absolute; inset:0; width:100%; height:100% }
+  /* рамка-подсказка: овал лица и линия глаз, как на образце MOS */
+  #frame{ position:absolute; inset:0; pointer-events:none }
+  #frame .oval{ position:absolute; left:18%; right:18%; top:12%; bottom:24%;
+    border:2px dashed rgba(80,168,235,.85); border-radius:50% }
+  #frame .eyes{ position:absolute; left:10%; right:10%; top:42%;
+    border-top:2px dashed rgba(80,168,235,.6) }
+  .padbtns{ display:grid; grid-template-columns:repeat(6,1fr); gap:6px; margin-top:10px }
+  .padbtns button{ padding:10px 0; font-size:16px; border-radius:10px;
+    border:1px solid var(--border); background:var(--card); color:var(--text); cursor:pointer }
+</style>
+</head>
+<body>
+<div class="hero"><span class="logo emi" data-icon="camera"></span><h1>Фото для MOS</h1></div>
+<p class="sub">Подгони фото под рамку 684×883 (формат подачи MOS 2) — всё локально, без загрузки на сервер</p>
+
+<div class="card" style="margin-bottom:10px">
+  <label class="btn" style="cursor:pointer">Выбрать фото
+    <input id="pick" type="file" accept="image/*" class="hidden"></label>
+
+  <div id="editor" class="hidden">
+    <div id="stage" style="margin-top:10px">
+      <canvas id="cv" width="684" height="883"></canvas>
+      <div id="frame"><div class="oval"></div><div class="eyes"></div></div>
+    </div>
+    <p class="muted" style="font-size:13px;margin:8px 0 0;text-align:center">
+      Тяни пальцем · овал — лицо, пунктир — уровень глаз</p>
+    <div class="padbtns">
+      <button data-a="zin">＋</button>
+      <button data-a="zout">−</button>
+      <button data-a="rotl">⟲</button>
+      <button data-a="rotr">⟳</button>
+      <button data-a="up">↑</button>
+      <button data-a="down">↓</button>
+    </div>
+    <button id="save" class="btn" style="margin-top:10px">
+      <span class="emi" data-icon="check"></span> Сохранить JPEG</button>
+    <div id="msg" class="muted" style="font-size:13px;margin-top:8px;text-align:center"></div>
+  </div>
+</div>
+
+<p class="foot">Результат: JPEG 684×883. На телефоне файл откроется системно — сохрани или отправь; на компьютере скачается сразу.</p>
+
+<script src="icons.js"></script>
+<script src="app.js"></script>
+<script>
+renderDock('about');
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+let img = null, scale = 1, rot = 0, ox = 0, oy = 0; // трансформация фото
+
+function draw() {
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+  if (!img) return;
+  ctx.save();
+  ctx.translate(cv.width / 2 + ox, cv.height / 2 + oy);
+  ctx.rotate(rot * Math.PI / 180);
+  ctx.scale(scale, scale);
+  ctx.drawImage(img, -img.width / 2, -img.height / 2);
+  ctx.restore();
+}
+
+$('pick').addEventListener('change', (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const url = URL.createObjectURL(f);
+  const im = new Image();
+  im.onload = () => {
+    img = im; rot = 0; ox = 0; oy = 0;
+    scale = Math.max(cv.width / im.width, cv.height / im.height); // заполнить кадр
+    $('editor').classList.remove('hidden');
+    draw(); URL.revokeObjectURL(url);
+  };
+  im.src = url;
+});
+
+// перетаскивание пальцем/мышью (координаты в пикселях canvas)
+let drag = null;
+const px = (e) => {
+  const r = cv.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  return [(t.clientX - r.left) * cv.width / r.width,
+          (t.clientY - r.top) * cv.height / r.height];
+};
+const stage = $('stage');
+stage.addEventListener('pointerdown', (e) => { drag = px(e); stage.setPointerCapture(e.pointerId); });
+stage.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const p = px(e); ox += p[0] - drag[0]; oy += p[1] - drag[1]; drag = p; draw();
+});
+stage.addEventListener('pointerup', () => drag = null);
+
+document.querySelector('.padbtns').addEventListener('click', (e) => {
+  const a = e.target.closest('button')?.dataset.a; if (!a || !img) return;
+  haptic();
+  if (a === 'zin') scale *= 1.06;
+  if (a === 'zout') scale /= 1.06;
+  if (a === 'rotl') rot -= 90;
+  if (a === 'rotr') rot += 90;
+  if (a === 'up') oy -= 12;
+  if (a === 'down') oy += 12;
+  draw();
+});
+
+$('save').onclick = () => {
+  haptic('medium');
+  cv.toBlob(async (blob) => {
+    const mobile = tg && (tg.platform === 'ios' || tg.platform === 'android');
+    try {
+      if (mobile && tg.initData) {
+        const r = await fetch('/api/tmpfile?ext=jpg', { method: 'POST',
+          headers: { 'x-init-data': tg.initData }, body: blob });
+        if (!r.ok) throw 0;
+        const { url } = await r.json();
+        tg.openLink(new URL(url, location.href).href);
+        $('msg').textContent = 'Готово! Фото открыто — сохрани из просмотрщика.';
+      } else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob); a.download = 'mos-photo.jpg'; a.click();
+        $('msg').textContent = 'Готово! Файл скачан.';
+      }
+    } catch { $('msg').textContent = 'Не получилось сохранить, попробуй ещё раз.'; }
+  }, 'image/jpeg', 0.92);
+};
+
+draw();
+</script>
+</body>
+</html>
