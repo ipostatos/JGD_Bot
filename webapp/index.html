@@ -10,36 +10,57 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-<h1>📖 JDG Гид</h1>
-<p class="sub">Путеводитель по ИП в Польше — гайд, расчёты, дедлайны</p>
+<div class="hero"><span class="logo">📖</span><h1>JDG Гид</h1></div>
+<p class="sub">Путеводитель по ИП в Польше</p>
 
-<input id="q" class="search-box" type="search" placeholder="🔍 Поиск по гайду: ZUS, VAT, ryczałt…" autocomplete="off">
-<div id="hits" class="card hidden" style="padding:0;margin-top:8px;max-height:60vh;overflow-y:auto"></div>
+<!-- приоритет: персональный блок «что дальше» -->
+<div class="next">
+  <div class="label" id="nextLabel">Мой план</div>
+  <div class="big" id="nextTitle">Настрой профиль предпринимателя</div>
+  <div class="hintline" id="nextHint">Укажи дату регистрации JDG — покажу этапы ZUS и твои дедлайны</div>
+  <div class="actions">
+    <a class="btn" href="plan.html">📅 Открыть план</a>
+    <a class="btn ghost" href="guide.html?focus=1">🔍 Поиск</a>
+  </div>
+</div>
 
-<div id="quick" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0">
-  <a class="row-card" href="calc.html" style="margin:0">
-    <span class="ic-tile green">🧮</span>
-    <span class="body"><span class="t" style="font-size:15px">Калькуляторы</span>
-    <span class="d">ZUS · налоги · VAT</span></span>
+<div class="section-title">Разделы</div>
+<div class="grid">
+  <a class="cell" href="guide.html">
+    <div class="ic-tile blue">📖</div>
+    <div class="t">Гайд</div>
+    <div class="d">38 статей: от PESEL до деклараций</div>
   </a>
-  <a class="row-card" href="plan.html" style="margin:0">
-    <span class="ic-tile amber">📅</span>
-    <span class="body"><span class="t" style="font-size:15px">Мой план</span>
-    <span class="d">этапы и дедлайны</span></span>
+  <a class="cell" href="calc.html">
+    <div class="ic-tile green">🧮</div>
+    <div class="t">Расчёты</div>
+    <div class="d">ZUS · формы налога · лимит VAT</div>
   </a>
-  <a class="row-card" href="tools.html" style="margin:0">
-    <span class="ic-tile violet">🧰</span>
-    <span class="body"><span class="t" style="font-size:15px">Инструменты</span>
-    <span class="d">ВНЖ · шаблоны · утилиты</span></span>
+  <a class="cell" href="tools.html">
+    <div class="ic-tile violet">🧰</div>
+    <div class="t">Инструменты</div>
+    <div class="d">ВНЖ · шаблоны · утилиты</div>
   </a>
-  <a class="row-card" href="article.html?id=glossary" style="margin:0">
-    <span class="ic-tile cyan">📖</span>
-    <span class="body"><span class="t" style="font-size:15px">Словарь</span>
-    <span class="d">термины PL → RU</span></span>
+  <a class="cell" href="article.html?id=glossary">
+    <div class="ic-tile cyan">📚</div>
+    <div class="t">Словарь</div>
+    <div class="d">термины PL → RU с фильтром</div>
   </a>
 </div>
 
-<div id="sections"></div>
+<div class="section-title">Скоро</div>
+<div class="grid">
+  <span class="cell off">
+    <div class="ic-tile amber">🤖</div>
+    <div class="t">AI-ассистент <span class="beta-badge">скоро</span></div>
+    <div class="d">вопрос — ответ по базе гайда</div>
+  </span>
+  <span class="cell off">
+    <div class="ic-tile red">🔔</div>
+    <div class="t">Что нового <span class="beta-badge">скоро</span></div>
+    <div class="d">мониторинг ZUS, налогов, KSeF</div>
+  </span>
+</div>
 
 <p class="foot">Контент — гайд сообщества <a href="https://sobolevbel.github.io/jdg/" target="_blank" rel="noopener">JDG&nbsp;PBH</a> (CC0) · чат <a href="https://t.me/JDG_PBH" target="_blank" rel="noopener">@JDG_PBH</a><br>
 Справочная информация, не юридическая и не налоговая консультация</p>
@@ -48,55 +69,28 @@
 <script>
 renderDock('home');
 
-loadJSON('data/content.json').then(({sections}) => {
-  const host = document.getElementById('sections');
-  host.innerHTML = sections
-    .filter(s => !['Главная','Поддержать'].includes(s.title))
-    .map(s => {
-      if (s.single) {
-        const a = s.items[0];
-        return `<a class="row-card" href="article.html?id=${a.id}">
-          <span class="ic">${s.icon}</span>
-          <span class="body"><span class="t">${s.title}</span>
-          <span class="d">${a.desc || ''}</span></span><span class="chev">›</span></a>`;
-      }
-      const inner = s.items.map(a =>
-        `<a class="row-card" style="margin:6px 0 0;border:none;background:var(--bg)"
-            href="article.html?id=${a.id}">
-          <span class="body"><span class="t" style="font-size:14px">${a.title}</span></span>
-          <span class="chev">›</span></a>`).join('');
-      return `<details class="card" style="margin-bottom:8px;padding:var(--sp-3) var(--sp-4)">
-        <summary style="cursor:pointer;font-weight:700;font-size:var(--fs-h2)">
-          ${s.icon} ${s.title} <span class="muted" style="font-weight:400;font-size:12px">· ${s.items.length}</span></summary>
-        ${inner}</details>`;
-    }).join('');
-});
-
-// поиск: индекс грузим лениво при первом фокусе
-let IDX = null;
-const q = document.getElementById('q'), hits = document.getElementById('hits');
-q.addEventListener('focus', () => { if (!IDX) loadJSON('data/search.json').then(j => IDX = j); });
-q.addEventListener('input', () => {
-  const s = q.value.trim().toLowerCase();
-  if (!s || !IDX || s.length < 2) { hits.classList.add('hidden'); return; }
-  const found = [];
-  for (const a of IDX) {
-    const inTitle = a.title.toLowerCase().includes(s);
-    const pos = a.text.indexOf(s);
-    if (inTitle || pos >= 0) {
-      const snippet = pos >= 0
-        ? '…' + a.text.slice(Math.max(0, pos - 30), pos + 70) + '…' : '';
-      found.push({ a, snippet, rank: inTitle ? 0 : 1 });
-      if (found.length > 30) break;
-    }
+// если профиль заполнен — блок «что дальше» показывает ближайший дедлайн
+(function () {
+  const p = getProfile();
+  if (!p.reg) return;
+  const now = new Date();
+  const evs = [];
+  for (let k = 0; k < 2; k++) {
+    const y = now.getFullYear(), m = now.getMonth() + k;
+    evs.push({ d: new Date(y, m, 20), t: 'ZUS DRA + składki и аванс налога' });
+    if (p.vat) evs.push({ d: new Date(y, m, 25), t: 'JPK_V7M (VAT)' });
   }
-  found.sort((x, y) => x.rank - y.rank);
-  hits.innerHTML = found.slice(0, 10).map(f =>
-    `<a class="search-hit" href="article.html?id=${f.a.id}&q=${encodeURIComponent(s)}">
-      <b>${f.a.title}</b><span class="sn">${f.snippet}</span></a>`).join('')
-    || '<div class="state">Ничего не нашлось</div>';
-  hits.classList.remove('hidden');
-});
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const next = evs.filter(e => e.d >= today).sort((a, b) => a.d - b.d)[0];
+  if (!next) return;
+  const days = Math.round((next.d - today) / 864e5);
+  document.getElementById('nextLabel').textContent = 'Ближайший дедлайн';
+  document.getElementById('nextTitle').textContent =
+    next.d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) + ' — ' + next.t;
+  document.getElementById('nextHint').textContent = days === 0
+    ? 'Сегодня! Не забудь оплатить и отчитаться'
+    : `Через ${days} дн. · весь календарь и чек-листы — в плане`;
+})();
 </script>
 </body>
 </html>

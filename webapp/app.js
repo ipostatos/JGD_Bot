@@ -12,7 +12,8 @@
   // нижняя навигация; active — ключ текущей страницы
   window.renderDock = function (active) {
     const items = [
-      { k: 'home', href: 'index.html', ic: '📖', t: 'Гайд' },
+      { k: 'home', href: 'index.html', ic: '🏠', t: 'Главная' },
+      { k: 'guide', href: 'guide.html', ic: '📖', t: 'Гайд' },
       { k: 'calc', href: 'calc.html', ic: '🧮', t: 'Расчёты' },
       { k: 'plan', href: 'plan.html', ic: '📅', t: 'План' },
       { k: 'about', href: 'about.html', ic: '⭐', t: 'Ещё' },

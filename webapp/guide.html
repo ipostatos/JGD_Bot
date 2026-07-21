@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>JDG Гид — гайд</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="jdg.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+<h1>📖 Гайд</h1>
+<p class="sub">38 статей сообщества JDG PBH — от PESEL до деклараций</p>
+
+<input id="q" class="search-box" type="search" placeholder="🔍 Поиск: ZUS, VAT, ryczałt…" autocomplete="off">
+<div id="hits" class="card hidden" style="padding:0;margin-top:8px;max-height:60vh;overflow-y:auto"></div>
+
+<div id="sections" style="margin-top:14px"></div>
+
+<p class="foot">Первоисточник: <a href="https://sobolevbel.github.io/jdg/" target="_blank" rel="noopener">sobolevbel.github.io/jdg</a> (CC0) · вопросы — в чат <a href="https://t.me/JDG_PBH" target="_blank" rel="noopener">@JDG_PBH</a></p>
+
+<script src="app.js"></script>
+<script>
+renderDock('guide');
+
+loadJSON('data/content.json').then(({sections}) => {
+  const host = document.getElementById('sections');
+  host.innerHTML = sections
+    .filter(s => !['Главная','Поддержать'].includes(s.title))
+    .map(s => {
+      if (s.single) {
+        const a = s.items[0];
+        return `<a class="row-card" href="article.html?id=${a.id}">
+          <span class="ic">${s.icon}</span>
+          <span class="body"><span class="t">${s.title}</span>
+          <span class="d">${a.desc || ''}</span></span><span class="chev">›</span></a>`;
+      }
+      const inner = s.items.map(a =>
+        `<a class="row-card" style="margin:6px 0 0;border:none;background:var(--bg)"
+            href="article.html?id=${a.id}">
+          <span class="body"><span class="t" style="font-size:14px">${a.title}</span></span>
+          <span class="chev">›</span></a>`).join('');
+      return `<details class="card" style="margin-bottom:8px;padding:var(--sp-3) var(--sp-4)">
+        <summary style="cursor:pointer;font-weight:700;font-size:var(--fs-h2)">
+          ${s.icon} ${s.title} <span class="muted" style="font-weight:400;font-size:12px">· ${s.items.length}</span></summary>
+        ${inner}</details>`;
+    }).join('');
+});
+
+// поиск: индекс грузим лениво при первом фокусе
+let IDX = null;
+const q = document.getElementById('q'), hits = document.getElementById('hits');
+q.addEventListener('focus', () => { if (!IDX) loadJSON('data/search.json').then(j => IDX = j); });
+q.addEventListener('input', () => {
+  const s = q.value.trim().toLowerCase();
+  if (!s || !IDX || s.length < 2) { hits.classList.add('hidden'); return; }
+  const found = [];
+  for (const a of IDX) {
+    const inTitle = a.title.toLowerCase().includes(s);
+    const pos = a.text.indexOf(s);
+    if (inTitle || pos >= 0) {
+      const snippet = pos >= 0
+        ? '…' + a.text.slice(Math.max(0, pos - 30), pos + 70) + '…' : '';
+      found.push({ a, snippet, rank: inTitle ? 0 : 1 });
+      if (found.length > 30) break;
+    }
+  }
+  found.sort((x, y) => x.rank - y.rank);
+  hits.innerHTML = found.slice(0, 10).map(f =>
+    `<a class="search-hit" href="article.html?id=${f.a.id}&q=${encodeURIComponent(s)}">
+      <b>${f.a.title}</b><span class="sn">${f.snippet}</span></a>`).join('')
+    || '<div class="state">Ничего не нашлось</div>';
+  hits.classList.remove('hidden');
+});
+if (qs.get('focus')) setTimeout(() => q.focus(), 100);
+</script>
+</body>
+</html>

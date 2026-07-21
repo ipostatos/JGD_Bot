@@ -12,6 +12,32 @@
 .dock .dt{ font-size:10px; font-weight:600 }
 body.has-dock{ padding-bottom:84px }
 
+/* ── главный экран (паттерн ISSA home) ── */
+.hero{ display:flex; align-items:baseline; gap:var(--sp-2); margin-bottom:var(--sp-1) }
+.hero .logo{ font-size:24px }
+.next{ background:var(--card); border:1px solid var(--border); border-radius:var(--r-lg);
+  padding:var(--sp-4); margin-bottom:var(--sp-4); box-shadow:var(--shadow) }
+.next .label{ font-size:var(--fs-xs); letter-spacing:.04em; text-transform:uppercase;
+  color:var(--hint); margin-bottom:var(--sp-2) }
+.next .big{ font-size:var(--fs-h2); font-weight:700; margin-bottom:var(--sp-1) }
+.next .hintline{ color:var(--hint); font-size:var(--fs-sm); margin-bottom:var(--sp-3) }
+.next .actions{ display:flex; gap:var(--sp-2) }
+.next .actions .btn{ width:auto; flex:1 }
+.grid{ display:grid; grid-template-columns:1fr 1fr; gap:var(--sp-2) }
+.cell{ display:flex; flex-direction:column; gap:var(--sp-1);
+  text-decoration:none; color:var(--text); background:var(--card);
+  border:1px solid var(--border); border-radius:var(--r-md);
+  padding:var(--sp-3) var(--sp-4); min-height:84px; transition:transform .12s }
+.cell:active{ transform:scale(.98) }
+.cell .t{ font-size:var(--fs-body); font-weight:700 }
+.cell .d{ color:var(--hint); font-size:var(--fs-xs); line-height:1.35 }
+.cell.off{ opacity:.55; pointer-events:none }
+.section-title{ font-size:var(--fs-sm); font-weight:700; color:var(--hint);
+  margin:var(--sp-4) 0 var(--sp-2); text-transform:uppercase; letter-spacing:.03em }
+.beta-badge{ font-size:9px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--accent); border:1px solid var(--accent); border-radius:999px;
+  padding:1px 5px; margin-left:4px; vertical-align:1px; opacity:.85 }
+
 /* ── поиск ── */
 .search-box{ width:100%; padding:12px var(--sp-4); font-size:var(--fs-body);
   color:var(--text); background:var(--card); border:1px solid var(--border);
