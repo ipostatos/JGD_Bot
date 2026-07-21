@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>JDG Гид — Кокпит</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="jdg.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  .seg{ display:flex; gap:6px; margin-bottom:12px }
+  .seg button{ flex:1; padding:9px 0; font-size:var(--fs-sm); font-weight:600;
+    color:var(--text); background:var(--card); border:1px solid var(--border);
+    border-radius:var(--r-pill); cursor:pointer }
+  .seg button.on{ background:var(--accent); color:var(--accent-text); border-color:var(--accent) }
+  .monthbar{ display:flex; gap:8px; align-items:center; margin-bottom:12px }
+  .monthbar input{ flex:1; padding:10px 12px; font-size:var(--fs-body); color:var(--text);
+    background:var(--card); border:1px solid var(--border); border-radius:var(--r-md);
+    outline:none; -webkit-appearance:none; min-height:44px }
+  .row{ display:flex; justify-content:space-between; gap:10px; padding:8px 0;
+    border-bottom:1px solid var(--border); font-size:var(--fs-sm); line-height:1.4 }
+  .row:last-child{ border:none }
+  .row .v{ font-weight:700; white-space:nowrap }
+  .verdict{ font-weight:800; font-size:var(--fs-body) }
+  .ok{ color:var(--ok,#2e9e5b) } .bad{ color:var(--bad,#d23) }
+  .acct{ font-family:ui-monospace,monospace; font-size:var(--fs-sm); word-break:break-all;
+    color:var(--hint); margin:4px 0 8px }
+  .copy{ font-size:var(--fs-sm); padding:8px 12px; border:1px solid var(--border);
+    background:var(--card); color:var(--text); border-radius:var(--r-pill); cursor:pointer }
+  body{ padding-bottom:40px }
+</style>
+</head>
+<body>
+<div class="hero"><span class="logo emi" data-icon="clipboard-check"></span><h1>Кокпит</h1></div>
+<p class="sub">Закрытие месяца, независимая сверка ZUS и налога, платежи — на твоих данных inFakt</p>
+
+<div id="gate" class="card hidden">
+  <div class="h2" style="margin-bottom:4px">Нужен ключ inFakt</div>
+  <p class="muted" style="font-size:13px;margin:0 0 10px">
+    Кокпит работает на твоих данных inFakt. Подключи ключ в разделе «Мой план» → inFakt.</p>
+  <a class="btn" href="plan.html"><span class="emi" data-icon="arrow-right"></span> Открыть «Мой план»</a>
+</div>
+
+<div id="panel" class="hidden">
+  <div class="seg">
+    <button id="tab-close" class="on" onclick="setTab('close')">Закрыть месяц</button>
+    <button id="tab-pay" onclick="setTab('pay')">Платежи</button>
+  </div>
+  <div class="monthbar">
+    <input type="month" id="month">
+    <button class="btn" id="run"><span class="emi" data-icon="refresh-cw"></span> Показать</button>
+  </div>
+  <div id="out"></div>
+</div>
+
+<p class="foot" style="margin-top:16px">
+  Hermes считает и сверяет двумя независимыми путями — подпись деклараций и переводы остаются за тобой.<br>
+  Справочная информация, не юридическая и не налоговая консультация.</p>
+
+<script src="icons.js"></script>
+<script src="app.js"></script>
+<script>
+const tg = window.Telegram?.WebApp;
+tg?.ready?.(); tg?.expand?.();
+if (tg?.BackButton) { tg.BackButton.show(); tg.BackButton.onClick(() => location.href = 'index.html'); }
+Icons?.hydrate?.();
+
+let tab = 'close';
+const $ = (id) => document.getElementById(id);
+$('month').value = new Date().toISOString().slice(0, 7);
+
+async function api(path, extra) {
+  const r = await fetch(path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ initData: tg?.initData || '' }, extra || {})),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || 'Ошибка');
+  return data;
+}
+
+function setTab(t) {
+  tab = t;
+  $('tab-close').classList.toggle('on', t === 'close');
+  $('tab-pay').classList.toggle('on', t === 'pay');
+  run();
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+async function run() {
+  const out = $('out');
+  out.innerHTML = '<div class="card muted">Считаю на данных inFakt…</div>';
+  try {
+    const month = $('month').value;
+    const d = await api(tab === 'close' ? '/api/infakt/close' : '/api/infakt/pay', { month });
+    if (d.connected === false) { showGate(); return; }
+    out.innerHTML = tab === 'close' ? renderClose(d) : renderPay(d);
+    Icons?.hydrate?.();
+    out.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', () => {
+      navigator.clipboard?.writeText(b.dataset.copy); b.textContent = 'Скопировано ✓';
+    }));
+  } catch (e) {
+    out.innerHTML = `<div class="card">${esc(String(e.message || e))}</div>`;
+  }
+}
+
+function renderClose(d) {
+  const badge = d.verdict === 'PASS'
+    ? '<span class="verdict ok">PASS</span>'
+    : `<span class="verdict bad">${esc(d.verdict)}</span>`;
+  let h = `<div class="card"><div class="h2" style="margin-bottom:6px">${esc(d.month)} · ${badge}</div>`;
+  h += d.lines.map((l) => `<div class="row"><span>${esc(l)}</span></div>`).join('');
+  h += '</div>';
+  if (d.checks?.length) {
+    h += '<div class="card"><div class="h2" style="margin-bottom:6px">Сверка Hermes ↔ inFakt</div>';
+    h += d.checks.map((c) =>
+      `<div class="row"><span>${c.ok ? '✅' : '🛑'} ${esc(c.name)}</span>
+       <span class="v ${c.ok ? 'ok' : 'bad'}">${esc(c.hermes)}${c.ok ? '' : ' ≠ ' + esc(c.source)}</span></div>`
+    ).join('');
+    h += '</div>';
+  }
+  if (d.problems?.length) {
+    h += '<div class="card"><div class="h2" style="margin-bottom:6px">Требует внимания</div>';
+    h += d.problems.map((p) => `<div class="row"><span>⚠️ ${esc(p)}</span></div>`).join('');
+    h += '</div>';
+  }
+  if (d.profile_notes?.length) {
+    h += '<div class="card"><div class="muted" style="font-size:12px">' +
+      d.profile_notes.map((n) => '· ' + esc(n)).join('<br>') + '</div></div>';
+  }
+  return h;
+}
+
+function renderPay(d) {
+  if (!d.packages?.length) return '<div class="card">Нет обязательств за этот месяц</div>';
+  return d.packages.map((p) => `
+    <div class="card">
+      <div class="h2" style="margin-bottom:4px">${esc(p.recipient)}
+        ${p.status === 'paid' ? '<span class="badge">оплачено</span>' : ''}</div>
+      <div class="row"><span>Сумма</span><span class="v">${esc(p.amount)} zł</span></div>
+      <div class="row"><span>Срок</span><span class="v">${esc(p.deadline)}</span></div>
+      <div class="row"><span>Тытул</span><span class="v">${esc(p.title)}</span></div>
+      <div class="acct">${esc(p.account)}</div>
+      <button class="copy" data-copy="${esc(p.account)}">Скопировать счёт</button>
+    </div>`).join('') +
+    '<p class="foot" style="margin-top:8px">Перевод делаешь сам в своём банке.</p>';
+}
+
+function showGate() { $('gate').classList.remove('hidden'); $('panel').classList.add('hidden'); }
+
+$('run').addEventListener('click', run);
+if (tg && tg.initData) run(); else showGate();
+</script>
+</body>
+</html>

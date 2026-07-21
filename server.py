@@ -330,6 +330,45 @@ async def infakt_summary(req: Request):
     return await infakt.summary(user["id"])
 
 
+def _month_arg(body: dict) -> str:
+    import re
+    from datetime import date
+    month = (body.get("month") or "").strip() or date.today().strftime("%Y-%m")
+    if not re.fullmatch(r"20\d{2}-(0[1-9]|1[0-2])", month):
+        raise HTTPException(400, "month: ожидается YYYY-MM")
+    return month
+
+
+@app.post("/api/infakt/close")
+async def infakt_close(req: Request):
+    """Кокпит: закрытие месяца движком Hermes (чек-лист + сверка)."""
+    import cockpit
+    body = await req.json()
+    user = verify_init_data(body.get("initData", ""))
+    if user is None:
+        raise HTTPException(401, "bad initData")
+    try:
+        return await cockpit.close(user["id"], _month_arg(body))
+    except Exception as e:
+        log.warning("cockpit.close failed for %s: %s", user["id"], e)
+        raise HTTPException(502, "inFakt не ответил — попробуй ещё раз")
+
+
+@app.post("/api/infakt/pay")
+async def infakt_pay(req: Request):
+    """Кокпит: платёжные пакеты ZUS + налог за месяц."""
+    import cockpit
+    body = await req.json()
+    user = verify_init_data(body.get("initData", ""))
+    if user is None:
+        raise HTTPException(401, "bad initData")
+    try:
+        return await cockpit.pay(user["id"], _month_arg(body))
+    except Exception as e:
+        log.warning("cockpit.pay failed for %s: %s", user["id"], e)
+        raise HTTPException(502, "inFakt не ответил — попробуй ещё раз")
+
+
 TMP_DIR = ROOT / "tmp_files"
 TMP_TTL = 3600  # секунда жизни временного файла
 TMP_MAX = 25 * 1024 * 1024

@@ -6,3 +6,8 @@ sources/
 webapp/data/
 *.db
 tmp_files/
+
+# Hermes cockpit: аудит и реальные DRA (персональные данные) — не в публичный репо
+audit/
+zus_dra_*.xml
+assets/*.local.*
