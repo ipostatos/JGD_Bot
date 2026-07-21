@@ -10,7 +10,7 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-<h1>🧮 Калькуляторы</h1>
+<div class="hero"><span class="logo emi" data-icon="calculator"></span><h1>Калькуляторы</h1></div>
 <p class="sub">Ставки 2025–2026 · данные проверены <span id="upd"></span></p>
 
 <div class="seg" id="tabs" style="margin-bottom:14px">
@@ -93,6 +93,7 @@
   <p class="foot" style="margin-top:10px">Лимит zwolnienia podmiotowego z VAT в 2026 — 240 000 zł/год (до 2026 было 200 000). Подробно: <a href="article.html?id=registration_vat">регистрация VAT</a></p>
 </section>
 
+<script src="icons.js"></script>
 <script src="app.js"></script>
 <script src="calc.js"></script>
 <script>
@@ -146,7 +147,7 @@ ratesReady.then(() => {
     rows.push(`<div class="res-row"><span>Zdrowotna (${form})</span><span class="v">${fmtZl(zdr)}</span></div>`);
     rows.push(`<div class="res-row total"><span><b>Итого в месяц</b></span><span class="v">${fmtZl(s.total + zdr)}</span></div>`);
     if (stage !== 'ulga' && s.total > 0)
-      rows.push(`<div class="res-row" style="border:none"><span class="muted">🏖 Месяц <a href="article.html?id=zus_vacation">ZUS-каникул</a> экономит</span><span class="v" style="color:var(--ok)">${fmtZl(s.total)}</span></div>`);
+      rows.push(`<div class="res-row" style="border:none"><span class="muted"><span class="emi" style="color:var(--ok)">${Icons.svg('tree-palm')}</span>Месяц <a href="article.html?id=zus_vacation">ZUS-каникул</a> экономит</span><span class="v" style="color:var(--ok)">${fmtZl(s.total)}</span></div>`);
     zres.innerHTML = rows.join('');
   }
   segInit('zyear', zus); segInit('zstage', zus); segInit('zform', zus);

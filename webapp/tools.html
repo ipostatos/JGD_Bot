@@ -10,19 +10,20 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-<h1>🧰 Инструменты и шаблоны</h1>
+<div class="hero"><span class="logo emi" data-icon="wrench"></span><h1>Инструменты и шаблоны</h1></div>
 <p class="sub">Тулбокс сообщества: ВНЖ, документы, утилиты — <a href="https://justandrei.github.io/jdg-tools/" target="_blank" rel="noopener">jdg-tools</a></p>
 
 <div id="cats"></div>
 
 <p class="foot">Инструменты и шаблоны — проект <a href="https://github.com/justandrei/jdg-tools" target="_blank" rel="noopener">justandrei/jdg-tools</a> (GPL-3.0) и документы сообщества JDG PBH.<br>Открываются во внешнем браузере.</p>
 
+<script src="icons.js"></script>
 <script src="app.js"></script>
 <script>
 renderDock('about');
 const T = 'https://justandrei.github.io/jdg-tools/';
 const CATS = [
-  { t: '🛂 ВНЖ по ИП (karta pobytu)', items: [
+  { t: 'ВНЖ по ИП (karta pobytu)', ic: 'id-card', items: [
     { t: 'Генератор заявки на ВНЖ', d: 'заполняет официальный PDF по шагам', u: T + 'wniosek', hot: true },
     { t: 'ВНЖ чек-лист А4', d: 'какие документы собрать', u: T + 'checklist', hot: true },
     { t: 'Особенности подачи по воеводствам', d: 'таблица: сроки, нюансы, контакты', u: 'https://docs.google.com/spreadsheets/d/1lkwXxQ5XXMzJWHYZWHEekATBrO2soxKcIvy6TyHkWl4/edit' },
@@ -33,17 +34,17 @@ const CATS = [
     { t: 'Заявление о людях на содержании', d: '+ таблица, кто его пишет', u: 'https://docs.google.com/document/d/1C9quNvXmyQBwDHE55Qouc9J0_84f5eOkmc3W83A02_8/edit' },
     { t: 'Карта побыта без адреса', d: 'шаблон заявления', u: 'https://docs.google.com/document/d/1S-eukPswXjPQ8TdhH5GXAaOY2yX_hLhFOMuHlQ7JRdk/edit' },
   ]},
-  { t: '📄 Справки и госуслуги', items: [
+  { t: 'Справки и госуслуги', ic: 'file-text', items: [
     { t: 'Справка о страховке в ZUS', d: 'инструкция, как создать в eZUS', u: 'https://docs.google.com/document/d/1aAIAQ3Vu-5SzS3fGV7HrX6TzN-xys0_7IRowv5zhSIk/edit' },
     { t: 'Справка об отсутствии долгов по налогам', d: 'пример + как получить', u: 'https://docs.google.com/document/d/1CoS2Y_p5WEX7qiiNCbMoayQ5hziLRxsNPXs4OBT21bs/edit' },
     { t: 'Заявка на 800+ через zus.pl', d: 'пошаговая инструкция', u: 'https://docs.google.com/document/d/1BsbH9TmLpLLTV_bZ-mldqy1-opCfuSx8SERnumM5PTg/edit' },
     { t: 'CEIDG viewer', d: 'проверить свой статус в реестре', u: T + 'ceidg/viewer.html' },
   ]},
-  { t: '🔧 Утилиты', items: [
+  { t: 'Утилиты', ic: 'settings', items: [
     { t: 'PDF merger', d: 'объединить PDF/JPG в один файл (локально, без загрузки на сервер)', u: T + 'pdf/merger.html' },
     { t: 'Фото для MOS 2', d: 'обрезка фото под требования', u: T + 'mos2/photo.html' },
   ]},
-  { t: '📊 Данные', items: [
+  { t: 'Данные', ic: 'bar-chart', items: [
     { t: 'Składki ZUS по годам', d: 'наш калькулятор: 2025 · 2026, все режимы и формы', u: 'calc.html' },
     { t: 'Важные даты предпринимателя', d: 'сводная таблица сроков', u: 'https://docs.google.com/spreadsheets/d/1UGRsxqBA7DoO3wNmzuvD8TxAsqiIv_jhyw38wQfaH10/edit' },
     { t: 'Калькулятор Ryczałt (таблица)', d: 'вкл. версию с разными ставками', u: 'https://docs.google.com/spreadsheets/d/14Y0ReOUMWA17pt931vgY2R0pSFYzqYOQ-XBzmkhllOw/edit' },
@@ -51,13 +52,13 @@ const CATS = [
 ];
 document.getElementById('cats').innerHTML = CATS.map(c => `
   <div class="card" style="margin-bottom:10px;padding:var(--sp-3) var(--sp-4)">
-    <div class="h2">${c.t}</div>
+    <div class="h2"><span class="emi" style="color:var(--accent)">${Icons.svg(c.ic)}</span>${c.t}</div>
     ${c.items.map(i => {
       const ext = i.u.startsWith('http');
       return `
       <a class="row-card" style="margin:6px 0 0;background:var(--bg);border:none"
          href="${i.u}"${ext ? ' target="_blank" rel="noopener"' : ''}>
-        <span class="body"><span class="t" style="font-size:14px">${i.hot ? '⭐ ' : ''}${i.t}</span>
+        <span class="body"><span class="t" style="font-size:14px">${i.hot ? `<span class="emi" style="color:var(--warn)">${Icons.svg('star')}</span>` : ''}${i.t}</span>
         <span class="d">${i.d}</span></span><span class="chev">${ext ? '↗' : '›'}</span></a>`;
     }).join('')}
   </div>`).join('');

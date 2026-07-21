@@ -10,7 +10,7 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-<div class="hero"><span class="logo">📖</span><h1>JDG Гид</h1></div>
+<div class="hero"><span class="logo emi" data-icon="book-open"></span><h1>JDG Гид</h1></div>
 <p class="sub">Путеводитель по ИП в Польше</p>
 
 <!-- приоритет: персональный блок «что дальше» -->
@@ -19,29 +19,30 @@
   <div class="big" id="nextTitle">Настрой профиль предпринимателя</div>
   <div class="hintline" id="nextHint">Укажи дату регистрации JDG — покажу этапы ZUS и твои дедлайны</div>
   <div class="actions">
-    <a class="btn" href="plan.html">📅 Открыть план</a>
-    <a class="btn ghost" href="guide.html?focus=1">🔍 Поиск</a>
+    <a class="btn" href="plan.html"><span class="emi" data-icon="calendar"></span> Открыть план</a>
+    <a class="btn ghost" href="guide.html?focus=1"><span class="emi" data-icon="search"></span> Поиск</a>
   </div>
 </div>
 
 <div class="section-title">Разделы</div>
 <div class="grid">
   <a class="cell" href="guide.html">
-    <div class="ic-tile blue">ℹ️</div>
-    <div class="d" style="margin-top:auto">38 статей: от PESEL до деклараций</div>
+    <div class="ic-tile blue" data-icon="book-open"></div>
+    <div class="t">Гайд</div>
+    <div class="d">38 статей: от PESEL до деклараций</div>
   </a>
   <a class="cell" href="calc.html">
-    <div class="ic-tile green">🧮</div>
+    <div class="ic-tile green" data-icon="calculator"></div>
     <div class="t">Расчёты</div>
     <div class="d">ZUS · формы налога · лимит VAT</div>
   </a>
   <a class="cell" href="tools.html">
-    <div class="ic-tile violet">🧰</div>
+    <div class="ic-tile violet" data-icon="wrench"></div>
     <div class="t">Инструменты</div>
     <div class="d">ВНЖ · шаблоны · утилиты</div>
   </a>
   <a class="cell" href="article.html?id=glossary">
-    <div class="ic-tile cyan">📚</div>
+    <div class="ic-tile cyan" data-icon="book-marked"></div>
     <div class="t">Словарь</div>
     <div class="d">термины PL → RU с фильтром</div>
   </a>
@@ -50,12 +51,12 @@
 <div class="section-title">Скоро</div>
 <div class="grid">
   <span class="cell off">
-    <div class="ic-tile amber">🤖</div>
+    <div class="ic-tile amber" data-icon="bot"></div>
     <div class="t">AI-ассистент <span class="beta-badge">скоро</span></div>
     <div class="d">вопрос — ответ по базе гайда</div>
   </span>
   <span class="cell off">
-    <div class="ic-tile red">🔔</div>
+    <div class="ic-tile red" data-icon="bell"></div>
     <div class="t">Что нового <span class="beta-badge">скоро</span></div>
     <div class="d">мониторинг ZUS, налогов, KSeF</div>
   </span>
@@ -64,6 +65,7 @@
 <p class="foot">Контент — гайд сообщества <a href="https://sobolevbel.github.io/jdg/" target="_blank" rel="noopener">JDG&nbsp;PBH</a> (CC0) · чат <a href="https://t.me/JDG_PBH" target="_blank" rel="noopener">@JDG_PBH</a><br>
 Справочная информация, не юридическая и не налоговая консультация</p>
 
+<script src="icons.js"></script>
 <script src="app.js"></script>
 <script>
 renderDock('home');

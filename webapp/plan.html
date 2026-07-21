@@ -10,7 +10,7 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-<h1>📅 Мой план</h1>
+<div class="hero"><span class="logo emi" data-icon="calendar"></span><h1>Мой план</h1></div>
 <p class="sub">Этапы ZUS, дедлайны и чек-листы под твой профиль</p>
 
 <div class="card" style="margin-bottom:12px">
@@ -54,6 +54,7 @@
 
 <p class="foot">Сроки этапов — ориентир по общим правилам; свою дату сверяй в <a href="article.html?id=zus_next_level">гайде о переходах</a> и eZUS</p>
 
+<script src="icons.js"></script>
 <script src="app.js"></script>
 <script>
 renderDock('plan');
@@ -178,7 +179,7 @@ function renderDeadlines() {
     const days = Math.ceil((e.d - now) / 864e5);
     return `<div class="deadline ${days <= 7 || e.hot ? 'soon' : ''}">
       <div class="dd">${e.d.getDate()}.${String(e.d.getMonth() + 1).padStart(2, '0')}<small>${days} дн.</small></div>
-      <div class="body"><div class="t">${e.hot ? '🔥 ' : ''}${e.t}</div><div class="d">${e.s}</div></div>
+      <div class="body"><div class="t">${e.hot ? `<span class="emi" style="color:var(--warn)">${Icons.svg('flame')}</span>` : ''}${e.t}</div><div class="d">${e.s}</div></div>
     </div>`;
   }).join('') || '<div class="state">Заполни профиль — покажу твои сроки</div>';
 }
@@ -190,7 +191,7 @@ function renderChecklist(hostId, meterId, key, items) {
   host.innerHTML = items.map(i => `
     <label class="chk ${done[i.id] ? 'done' : ''}" data-id="${i.id}">
       <input type="checkbox" ${done[i.id] ? 'checked' : ''}>
-      <span class="tt">${i.t}${i.a ? ` <a href="article.html?id=${i.a}" onclick="event.stopPropagation()">гайд ›</a>` : ''}</span>
+      <span class="tt">${i.t}${i.a ? ` <a class="ilink" href="article.html?id=${i.a}" onclick="event.stopPropagation()" title="Подробнее в гайде">${Icons.svg('info')}</a>` : ''}</span>
     </label>`).join('');
   const upd = () => {
     const n = items.filter(i => done[i.id]).length;

@@ -8,10 +8,12 @@
 .dock a{ display:flex; flex-direction:column; align-items:center; gap:2px;
   text-decoration:none; color:var(--hint); min-width:64px; padding:4px 0 }
 .dock a.on{ color:var(--accent) }
-.dock .di{ font-size:20px; line-height:1 }
+.dock .di{ font-size:20px; line-height:1; display:inline-flex }
+.dock .di svg{ width:22px; height:22px }
 .dock .dt{ font-size:10px; font-weight:600 }
-.dock .dt:empty{ display:none }
-.dock a:has(.dt:empty){ justify-content:center }
+/* иконка-ссылка «подробнее в гайде» внутри чек-листов и текстов */
+.ilink{ display:inline-flex; vertical-align:-3px; margin-left:4px; color:var(--link) }
+.ilink svg{ width:15px; height:15px }
 body.has-dock{ padding-bottom:84px }
 
 /* ── главный экран (паттерн ISSA home) ── */

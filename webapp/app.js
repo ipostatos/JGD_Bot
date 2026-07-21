@@ -12,20 +12,23 @@
   // нижняя навигация; active — ключ текущей страницы
   window.renderDock = function (active) {
     const items = [
-      { k: 'home', href: 'index.html', ic: '🏠', t: 'Главная' },
-      { k: 'guide', href: 'guide.html', ic: 'ℹ️', t: '' },
-      { k: 'calc', href: 'calc.html', ic: '🧮', t: 'Расчёты' },
-      { k: 'plan', href: 'plan.html', ic: '📅', t: 'План' },
-      { k: 'about', href: 'about.html', ic: '⭐', t: 'Ещё' },
+      { k: 'home', href: 'index.html', ic: 'house', t: 'Главная' },
+      { k: 'guide', href: 'guide.html', ic: 'book-open', t: 'Гайд' },
+      { k: 'calc', href: 'calc.html', ic: 'calculator', t: 'Расчёты' },
+      { k: 'plan', href: 'plan.html', ic: 'calendar', t: 'План' },
+      { k: 'about', href: 'about.html', ic: 'star', t: 'Ещё' },
     ];
     const dock = document.createElement('nav');
     dock.className = 'dock';
     dock.innerHTML = items.map(i =>
       `<a href="${i.href}" class="${i.k === active ? 'on' : ''}">` +
-      `<span class="di">${i.ic}</span><span class="dt">${i.t}</span></a>`).join('');
+      `<span class="di">${Icons.svg(i.ic)}</span><span class="dt">${i.t}</span></a>`).join('');
     document.body.appendChild(dock);
     document.body.classList.add('has-dock');
   };
+
+  // авто-подстановка SVG по data-icon после загрузки DOM (паттерн ISSA)
+  document.addEventListener('DOMContentLoaded', () => window.Icons && Icons.hydrate());
 
   window.loadJSON = async function (url) {
     const r = await fetch(url);
