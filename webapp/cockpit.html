@@ -14,10 +14,12 @@
     color:var(--text); background:var(--card); border:1px solid var(--border);
     border-radius:var(--r-pill); cursor:pointer }
   .seg button.on{ background:var(--accent); color:var(--accent-text); border-color:var(--accent) }
-  .monthbar{ display:flex; gap:8px; align-items:center; margin-bottom:12px }
-  .monthbar input{ flex:1; padding:10px 12px; font-size:var(--fs-body); color:var(--text);
+  .monthbar{ display:flex; flex-direction:column; gap:8px; margin-bottom:12px }
+  .monthbar input{ width:100%; padding:12px 14px; font-size:var(--fs-body); color:var(--text);
     background:var(--card); border:1px solid var(--border); border-radius:var(--r-md);
-    outline:none; -webkit-appearance:none; min-height:44px }
+    outline:none; -webkit-appearance:none; appearance:none; min-height:48px; text-align:left }
+  .monthbar input::-webkit-date-and-time-value{ text-align:left }
+  .monthbar .btn{ width:100%; justify-content:center }
   .row{ display:flex; justify-content:space-between; gap:10px; padding:8px 0;
     border-bottom:1px solid var(--border); font-size:var(--fs-sm); line-height:1.4 }
   .row:last-child{ border:none }
