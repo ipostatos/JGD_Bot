@@ -37,7 +37,7 @@ def test_health():
 def test_webapp_pages_served():
     with client() as c:
         for page in ("/", "/index.html", "/calc.html", "/plan.html",
-                     "/article.html", "/about.html"):
+                     "/article.html", "/about.html", "/tools.html"):
             r = c.get(page)
             assert r.status_code == 200, page
             assert "JDG" in r.text
