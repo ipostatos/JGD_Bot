@@ -5,7 +5,13 @@
 """
 from datetime import date
 
+import calc
 import dashboard
+
+
+def test_vat_limit_has_single_source():
+    """Лимит zwolnienia берётся из файла ставок, а не из второй константы."""
+    assert dashboard.VAT_LIMIT == calc.RATES["vat_exemption_limit"]
 
 
 def gr(zl_value: float) -> int:

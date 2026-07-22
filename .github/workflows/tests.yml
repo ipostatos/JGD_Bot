@@ -1,0 +1,35 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    env:
+      # NO_NET отключает live-тесты против MF/VIES/GUS/CEIDG: в CI нет ключей,
+      # да и падать из-за чужого таймаута сборка не должна.
+      NO_NET: "1"
+      DISABLE_BOT: "1"
+      BOT_TOKEN: "12345:TESTTOKEN"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # Контент гайда в репозиторий не входит — собираем из upstream, как в проде.
+      # Заодно это сторожит нас от смены структуры гайда: поломается nav или
+      # формат статей — CI покраснеет раньше, чем это доедет до пользователей.
+      - name: Сборка контента гайда
+        run: |
+          git clone --depth 1 https://github.com/sobolevbel/jdg sources/guide
+          python tools/build_content.py
+
+      - run: pytest -q

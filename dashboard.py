@@ -12,12 +12,15 @@ from __future__ import annotations
 import logging
 from datetime import date
 
+from calc import RATES
 from hermes.infakt import Infakt, invoice_paid
 
 log = logging.getLogger("jdg.dashboard")
 
 MONTHS = 12
-VAT_LIMIT = 240_000.0  # лимит zwolnienia podmiotowego, zł
+# Лимит zwolnienia podmiotowego берём из общего файла ставок, а не константой:
+# он уже менялся (200 000 → 240 000), и второе место всегда забывают обновить.
+VAT_LIMIT = float(RATES["vat_exemption_limit"])
 
 
 def _zl(grosze) -> float:

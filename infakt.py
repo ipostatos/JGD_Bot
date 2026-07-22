@@ -136,10 +136,12 @@ async def summary(user_id: int) -> dict:
                 e = ents[0]
                 out["zus"] = {
                     "period": e.get("period") or e.get("month") or "",
+                    # sum_amount_price — реальное имя поля (сверено живым ключом),
+                    # остальные оставлены как запасные на случай смены формы ответа
                     "total": _pick_amount(
-                        e, "total_amount", "total", "amount", "gross_amount"),
+                        e, "sum_amount_price", "total_amount", "total", "amount",
+                        "gross_amount"),
                     "paid": bool(e.get("paid_date") or e.get("status") == "paid"),
-                    "raw_keys": sorted(e.keys())[:20],
                 }
         except Exception as e:
             log.warning("insurance_fees failed: %s", e)
@@ -153,9 +155,9 @@ async def summary(user_id: int) -> dict:
                 out["tax"] = {
                     "period": e.get("period") or e.get("month") or "",
                     "total": _pick_amount(
-                        e, "tax_amount", "total_amount", "amount", "total"),
+                        e, "to_pay_price", "tax_amount", "total_amount", "amount",
+                        "total"),
                     "paid": bool(e.get("paid_date") or e.get("status") == "paid"),
-                    "raw_keys": sorted(e.keys())[:20],
                 }
         except Exception as e:
             log.warning("income_taxes failed: %s", e)

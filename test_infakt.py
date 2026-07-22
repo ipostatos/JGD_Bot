@@ -39,6 +39,24 @@ def test_amount_normalization():
     assert infakt._amount("abc") is None
 
 
+def test_summary_amount_fields_are_real_api_names():
+    """Имена полей сумм сверены живым ключом — они должны идти первыми.
+
+    `_pick_amount` берёт первое существующее поле, поэтому порядок важен:
+    подставим сразу и настоящее имя, и запасное с другим числом.
+    """
+    zus = {"sum_amount_price": 274864, "total_amount": 999999}
+    tax = {"to_pay_price": 184000, "tax_amount": 999999}
+    assert infakt._pick_amount(zus, "sum_amount_price", "total_amount") == 2748.64
+    assert infakt._pick_amount(tax, "to_pay_price", "tax_amount") == 1840.0
+
+
+def test_no_debug_dump_of_api_fields():
+    """Отладочный raw_keys наружу больше не отдаём."""
+    src = Path(__file__).with_name("infakt.py").read_text(encoding="utf-8")
+    assert "raw_keys" not in src
+
+
 def test_faq_collect_qa():
     export = {"messages": [
         {"id": 1, "type": "message", "text": "Подскажите, как перейти с ulga na start на preferencyjne? Что подавать?"},
