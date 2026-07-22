@@ -8,10 +8,18 @@
 <link rel="stylesheet" href="theme.css">
 <link rel="stylesheet" href="jdg.css">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  /* подпись «это мы написали сами» + на чём: чтобы было видно, где утилита
+     наша и куда идут данные, а где ссылка на чужой сервис */
+  .mine{ display:flex; align-items:center; gap:5px; margin-top:3px;
+    font-size:11px; line-height:1.35; color:var(--ok) }
+  .mine svg{ width:12px; height:12px; flex:0 0 auto }
+  .mine b{ font-weight:600 }
+</style>
 </head>
 <body>
 <div class="hero"><span class="logo emi" data-icon="wrench"></span><h1>Инструменты и шаблоны</h1></div>
-<p class="sub">Документы хранятся в приложении и открываются во встроенной читалке — с печатью и офлайн</p>
+<p class="sub">Документы хранятся в приложении и открываются во встроенной читалке — она тоже наша, на JavaScript (pdf.js): печать, офлайн, без загрузки на чужие серверы</p>
 
 <div id="cats"></div>
 
@@ -46,16 +54,22 @@ const CATS = [
     { t: 'CEIDG viewer', d: 'полная актуальная запись в реестре', u: T + 'ceidg/viewer.html' },
   ]},
   { t: 'Утилиты', ic: 'settings', items: [
-    { t: 'Склейка PDF', d: 'PDF и фото в один файл — наша утилита, всё локально', u: 'merge.html', hot: true },
-    { t: 'Фото для MOS', d: 'подгонка под рамку 684×883 — наша утилита', u: 'photo.html', hot: true },
+    { t: 'Склейка PDF', d: 'PDF и фото в один файл, автоповорот и чётность страниц',
+      u: 'merge.html', hot: true, mine: 'JavaScript + pdf-lib, прямо в браузере — файлы никуда не отправляются' },
+    { t: 'Фото для MOS', d: 'подгонка под рамку 684×883 с овалом и линией глаз',
+      u: 'photo.html', hot: true, mine: 'JavaScript + Canvas, прямо в браузере — фото никуда не отправляется' },
   ]},
   { t: 'Справочники', ic: 'library', items: [
-    { t: 'KSeF: что уже обязательно', d: 'этапы 2026-2027, порог 10 000 zł, чек-лист подключения', u: 'ksef.html', hot: true },
-    { t: 'Ошибки ZUS по кодам', d: 'что значит код из «uwagi i błędy» и как чинить', u: 'zus_err.html?from=tools.html', hot: true },
-    { t: 'Проверка контрагента по NIP', d: 'статус VAT, данные фирмы, счёт в белом списке', u: 'nip.html' },
+    { t: 'KSeF: что уже обязательно', d: 'этапы 2026-2027, порог 10 000 zł, чек-лист подключения',
+      u: 'ksef.html', hot: true, mine: 'Python на сервере + JavaScript, факты сверены с ksef.podatki.gov.pl' },
+    { t: 'Ошибки ZUS по кодам', d: 'что значит код из «uwagi i błędy» и как чинить',
+      u: 'zus_err.html?from=tools.html', hot: true, mine: 'наша база из 32 кодов, поиск на JavaScript, ответы бота на Python' },
+    { t: 'Проверка контрагента по NIP', d: 'статус VAT, данные фирмы, счёт в белом списке',
+      u: 'nip.html', mine: 'Python + FastAPI: White List, VIES, GUS и CEIDG в одном запросе' },
   ]},
   { t: 'Данные', ic: 'bar-chart', items: [
-    { t: 'Składki ZUS по годам', d: 'наш калькулятор: 2025 · 2026, все режимы и формы', u: 'calc.html' },
+    { t: 'Składki ZUS по годам', d: '2025 · 2026, все режимы и формы налогообложения',
+      u: 'calc.html', mine: 'расчётное ядро на Python (сверено с таблицей гайда), интерфейс на JavaScript' },
     doc('vazhnye-daty', 'Важные даты предпринимателя', 'сводная таблица сроков'),
     { t: 'Калькулятор Ryczałt (таблица)', d: 'интерактивная Google-таблица', u: 'https://docs.google.com/spreadsheets/d/14Y0ReOUMWA17pt931vgY2R0pSFYzqYOQ-XBzmkhllOw/edit' },
   ]},
@@ -69,7 +83,9 @@ document.getElementById('cats').innerHTML = CATS.map(c => `
       <a class="row-card" style="margin:6px 0 0;background:var(--bg);border:none"
          href="${i.u}"${ext ? ' target="_blank" rel="noopener"' : ''}>
         <span class="body"><span class="t" style="font-size:14px">${i.hot ? `<span class="emi" style="color:var(--warn)">${Icons.svg('star')}</span>` : ''}${i.t}</span>
-        <span class="d">${i.d}</span></span><span class="chev">${ext ? '↗' : '›'}</span></a>`;
+        <span class="d">${i.d}</span>
+        ${i.mine ? `<span class="mine">${Icons.svg('wrench')}<span><b>переписано у нас</b> · ${i.mine}</span></span>` : ''}
+        </span><span class="chev">${ext ? '↗' : '›'}</span></a>`;
     }).join('')}
   </div>`).join('');
 </script>
