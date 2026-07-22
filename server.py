@@ -397,6 +397,21 @@ async def news_feed():
     return {"items": monitor.get_feed()}
 
 
+@app.post("/api/profile/get")
+async def api_profile_get(req: Request):
+    """Серверная копия профиля — чтобы он не терялся при смене устройства.
+
+    POST, а не GET: initData слишком длинный для строки запроса и не должен
+    попадать в логи прокси.
+    """
+    import profiles
+    body = await req.json()
+    user = verify_init_data(body.get("initData", ""))
+    if user is None:
+        raise HTTPException(401, "bad initData")
+    return {"profile": profiles.get(user["id"])}
+
+
 @app.post("/api/profile")
 async def api_profile(req: Request):
     """Частичное обновление серверного профиля (только присланные поля)."""

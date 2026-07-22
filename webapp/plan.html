@@ -181,11 +181,36 @@ const p = getProfile();
 
 // ── профиль ──
 const preg = document.getElementById('preg');
-if (p.reg) preg.value = p.reg;
-if (p.vat) document.getElementById('pvat').checked = true;
-if (p.ulga === false) document.getElementById('pulga').checked = false;
-document.querySelectorAll('#pform button').forEach(b =>
-  b.classList.toggle('on', b.dataset.v === (p.form || 'ryczalt')));
+
+function fillForm(pr) {
+  if (pr.reg) preg.value = pr.reg;
+  document.getElementById('pvat').checked = !!pr.vat;
+  document.getElementById('pulga').checked = pr.ulga !== false;
+  document.querySelectorAll('#pform button').forEach(b =>
+    b.classList.toggle('on', b.dataset.v === (pr.form || 'ryczalt')));
+}
+fillForm(p);
+
+// Профиль хранится и на устройстве, и на сервере (второй нужен для пушей).
+// На новом телефоне localStorage пуст — подтягиваем серверную копию, иначе
+// человек видит пустую анкету, хотя напоминания ему уже приходят.
+if (tg && tg.initData && !p.reg) {
+  fetch('/api/profile/get', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initData: tg.initData }),
+  }).then(r => r.ok ? r.json() : null).then(d => {
+    const s = d && d.profile;
+    if (!s || !s.reg) return;
+    const restored = { reg: s.reg, form: s.form || 'ryczalt',
+      vat: !!s.vat, ulga: s.ulga !== 0 };
+    setProfile(restored);
+    fillForm(restored);
+    renderStages(); renderDeadlines();
+    if (s.dl_sub) localStorage.setItem(DLKEY, '1'), dlSync();
+    document.getElementById('dlmsg').textContent =
+      'Профиль восстановлен с сервера — проверь, всё ли верно.';
+  }).catch(() => {});
+}
 
 function syncProfile(extra) {
   // серверная копия профиля — для персональных пушей; молча, без блокировки UI

@@ -146,6 +146,18 @@ def test_news_and_subs_api():
         assert p["news_sub"] == 0 and p["reg"] == "2026-03-15"
 
 
+def test_profile_can_be_read_back():
+    """Профиль переживает смену устройства: клиент забирает серверную копию."""
+    good = make_init_data(os.environ["BOT_TOKEN"], user_id=4242)
+    with client() as c:
+        assert c.post("/api/profile/get", json={"initData": "bad"}).status_code == 401
+        c.post("/api/profile", json={"initData": good, "form": "liniowy",
+                                     "reg": "2025-02-03", "vat": True, "dl_sub": True})
+        p = c.post("/api/profile/get", json={"initData": good}).json()["profile"]
+        assert p["reg"] == "2025-02-03" and p["form"] == "liniowy"
+        assert p["vat"] == 1 and p["dl_sub"] == 1
+
+
 def test_ask_api_auth_and_pages():
     good = make_init_data(os.environ["BOT_TOKEN"])
     with client() as c:

@@ -46,9 +46,6 @@ body.has-dock.kb-open{ padding-bottom:0 }
 .cell.off{ opacity:.55; pointer-events:none }
 .section-title{ font-size:var(--fs-sm); font-weight:700; color:var(--hint);
   margin:var(--sp-4) 0 var(--sp-2); text-transform:uppercase; letter-spacing:.03em }
-.beta-badge{ font-size:9px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
-  color:var(--accent); border:1px solid var(--accent); border-radius:999px;
-  padding:1px 5px; margin-left:4px; vertical-align:1px; opacity:.85 }
 
 /* ── кокпит предпринимателя (главная): фаза ZUS + полоска месяца ── */
 /* display:block обязателен: карточка — <a>, а .card не задаёт display; без
