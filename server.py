@@ -542,13 +542,24 @@ async def infakt_pay(req: Request):
         raise HTTPException(502, "inFakt не ответил — попробуй ещё раз")
 
 
+def _limit_or_429(bucket: str, user_id: int):
+    """Отдаём 429 с внятным текстом — фронт показывает его как есть."""
+    import ratelimit
+    why = ratelimit.check(bucket, user_id)
+    if why:
+        log.info("rate limit %s для %s: %s", bucket, user_id, why)
+        raise HTTPException(429, why)
+
+
 @app.post("/api/nip")
 async def api_nip(req: Request):
     """Проверка контрагента по NIP (White List + VIES + GUS/CEIDG по ключам)."""
     import registries
     body = await req.json()
-    if verify_init_data(body.get("initData", "")) is None:
+    user = verify_init_data(body.get("initData", ""))
+    if user is None:
         raise HTTPException(401, "bad initData")
+    _limit_or_429("nip", user["id"])
     try:
         res = await registries.check_nip(body.get("nip", ""))
     except Exception as e:
@@ -564,8 +575,10 @@ async def api_nip_account(req: Request):
     """Проверка счёта контрагента в белом списке перед оплатой."""
     import registries
     body = await req.json()
-    if verify_init_data(body.get("initData", "")) is None:
+    user = verify_init_data(body.get("initData", ""))
+    if user is None:
         raise HTTPException(401, "bad initData")
+    _limit_or_429("nip", user["id"])
     try:
         res = await registries.check_account(body.get("nip", ""), body.get("account", ""))
     except Exception as e:
