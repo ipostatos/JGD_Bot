@@ -9,17 +9,16 @@
 <link rel="stylesheet" href="jdg.css">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-  /* подпись «это мы написали сами» + на чём: чтобы было видно, где утилита
-     наша и куда идут данные, а где ссылка на чужой сервис */
+  /* на чём сделана утилита и куда идут данные — чтобы было видно, что
+     открывается внутри приложения, а что уходит на чужой сервис */
   .mine{ display:flex; align-items:center; gap:5px; margin-top:3px;
-    font-size:11px; line-height:1.35; color:var(--ok) }
+    font-size:11px; line-height:1.35; color:var(--hint) }
   .mine svg{ width:12px; height:12px; flex:0 0 auto }
-  .mine b{ font-weight:600 }
 </style>
 </head>
 <body>
 <div class="hero"><span class="logo emi" data-icon="wrench"></span><h1>Инструменты и шаблоны</h1></div>
-<p class="sub">Документы хранятся в приложении и открываются во встроенной читалке — она тоже наша, на JavaScript (pdf.js): печать, офлайн, без загрузки на чужие серверы</p>
+<p class="sub">Документы хранятся в приложении и открываются во встроенной читалке на JavaScript (pdf.js): печать, офлайн, без загрузки на чужие серверы</p>
 
 <div id="cats"></div>
 
@@ -63,7 +62,7 @@ const CATS = [
     { t: 'KSeF: что уже обязательно', d: 'этапы 2026-2027, порог 10 000 zł, чек-лист подключения',
       u: 'ksef.html', hot: true, mine: 'Python на сервере + JavaScript, факты сверены с ksef.podatki.gov.pl' },
     { t: 'Ошибки ZUS по кодам', d: 'что значит код из «uwagi i błędy» и как чинить',
-      u: 'zus_err.html?from=tools.html', hot: true, mine: 'наша база из 32 кодов, поиск на JavaScript, ответы бота на Python' },
+      u: 'zus_err.html?from=tools.html', hot: true, mine: 'база из 32 кодов, поиск на JavaScript, ответы бота на Python' },
     { t: 'Проверка контрагента по NIP', d: 'статус VAT, данные фирмы, счёт в белом списке',
       u: 'nip.html', mine: 'Python + FastAPI: White List, VIES, GUS и CEIDG в одном запросе' },
   ]},
@@ -84,7 +83,7 @@ document.getElementById('cats').innerHTML = CATS.map(c => `
          href="${i.u}"${ext ? ' target="_blank" rel="noopener"' : ''}>
         <span class="body"><span class="t" style="font-size:14px">${i.hot ? `<span class="emi" style="color:var(--warn)">${Icons.svg('star')}</span>` : ''}${i.t}</span>
         <span class="d">${i.d}</span>
-        ${i.mine ? `<span class="mine">${Icons.svg('wrench')}<span><b>переписано у нас</b> · ${i.mine}</span></span>` : ''}
+        ${i.mine ? `<span class="mine">${Icons.svg('wrench')}<span>${i.mine}</span></span>` : ''}
         </span><span class="chev">${ext ? '↗' : '›'}</span></a>`;
     }).join('')}
   </div>`).join('');
