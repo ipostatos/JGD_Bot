@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>JDG Гид — проверка контрагента</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="jdg.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  .nip-name{ font-weight:800; font-size:var(--fs-h2); line-height:1.25; margin-bottom:6px }
+  .nip-chips{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px }
+  .sig{ display:flex; gap:8px; align-items:flex-start; padding:7px 0; font-size:var(--fs-sm);
+    line-height:1.4; border-top:1px solid var(--line) }
+  .sig:first-child{ border-top:none }
+  .sig .si{ width:18px; height:18px; flex:0 0 18px; margin-top:1px }
+  .sig.ok .si{ color:var(--ok) } .sig.warn .si{ color:var(--warn) } .sig.bad .si{ color:var(--bad) }
+  .kv{ display:flex; justify-content:space-between; gap:12px; padding:6px 0;
+    font-size:var(--fs-sm); border-top:1px solid var(--line) }
+  .kv b{ font-weight:600; text-align:right; word-break:break-word }
+  .kv span{ color:var(--hint); white-space:nowrap }
+  .acc-list{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px;
+    color:var(--hint); line-height:1.7; word-break:break-all }
+  .src-row{ display:flex; gap:6px; flex-wrap:wrap; margin-top:10px }
+  .src-row .chip.off{ opacity:.5 }
+</style>
+</head>
+<body>
+<div class="hero"><span class="logo emi" data-icon="id-card"></span><h1>Проверка контрагента</h1></div>
+<p class="sub">По NIP — статус VAT, данные фирмы, счета из белого списка и VAT-UE</p>
+
+<div class="card" style="margin-bottom:12px">
+  <div class="field"><label>NIP контрагента</label>
+    <input id="nip" type="text" inputmode="numeric" placeholder="10 цифр, можно с дефисами"
+           autocomplete="off" maxlength="16"></div>
+  <button id="go" class="btn"><span data-icon="search" class="bi"></span> Проверить</button>
+</div>
+
+<div id="out"></div>
+
+<div class="card" id="acccard" style="margin-bottom:12px">
+  <div class="h2" style="margin-bottom:4px">Проверить счёт перед оплатой</div>
+  <p class="muted" style="font-size:13px;margin:0 0 10px">
+    Если счёта нет в белом списке, оплату свыше 15 000 zł нельзя списать в расходы,
+    плюс солидарная ответственность за VAT контрагента.</p>
+  <div class="field"><label>Номер счёта (26 цифр)</label>
+    <input id="acc" type="text" inputmode="numeric" placeholder="PL00 0000 0000 …"
+           autocomplete="off" maxlength="34"></div>
+  <button id="accgo" class="btn ghost">Проверить счёт</button>
+  <div id="accout" style="margin-top:10px"></div>
+</div>
+
+<p class="foot">Данные из открытых реестров: Белый список плательщиков VAT (Минфин),
+VIES (Еврокомиссия), GUS BIR и CEIDG. Реестры обновляются раз в сутки —
+результат кэшируется на день. Справочно, не заменяет проверку договором.</p>
+
+<script src="icons.js"></script>
+<script src="app.js"></script>
+<script>
+renderDock('home');
+setupBack('index.html');
+
+const out = document.getElementById('out');
+const SIG_ICON = { ok: 'check-circle', warn: 'alert-triangle', bad: 'x-circle' };
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function vatChip(status) {
+  const map = { 'Czynny': ['ok', 'VAT czynny'], 'Zwolniony': ['warn', 'VAT zwolniony'] };
+  const [tone, text] = map[status] || ['bad', 'нет в реестре VAT'];
+  return `<span class="chip" style="color:var(--${tone})">${text}</span>`;
+}
+
+function render(d) {
+  const lvl = { ok: 'var(--ok)', warn: 'var(--warn)', bad: 'var(--bad)' }[d.level];
+  const rows = [
+    ['NIP', d.nip], ['REGON', d.regon], ['KRS', d.krs],
+    ['Адрес', d.address], ['В реестре с', d.registered],
+    ['PKD', (d.pkd || []).join(', ')],
+  ].filter(([, v]) => v).map(([k, v]) =>
+    `<div class="kv"><span>${k}</span><b>${esc(v)}</b></div>`).join('');
+
+  const accs = (d.accounts || []).slice(0, 8).map(a =>
+    a.replace(/(.{4})/g, '$1 ').trim()).join('<br>');
+  const more = d.accounts.length > 8 ? `<div class="muted" style="font-size:12px;margin-top:4px">
+    …и ещё ${d.accounts.length - 8}</div>` : '';
+
+  const srcLabel = { whitelist: 'Белый список', vies: 'VIES', gus: 'GUS', ceidg: 'CEIDG' };
+  const srcs = Object.entries(d.sources).map(([k, v]) =>
+    `<span class="chip ${v === 'ok' ? '' : 'off'}">${srcLabel[k]}: ${
+      { ok: 'есть данные', empty: 'нет записи', off: 'не подключён', error: 'ошибка' }[v]}</span>`).join('');
+
+  out.innerHTML = `
+    <div class="card" style="margin-bottom:12px;border-left:3px solid ${lvl}">
+      <div class="nip-name">${esc(d.name || 'Название не найдено')}</div>
+      <div class="nip-chips">${vatChip(d.vat_status)}
+        ${d.activity ? `<span class="chip">${esc(d.activity)}</span>` : ''}
+        <span class="chip" style="color:${lvl}">сигналы: ${d.score}/100</span>
+        ${d.cached ? '<span class="chip">из кэша</span>' : ''}</div>
+      ${d.signals.map(s => `<div class="sig ${s.level}">
+        <span class="si" data-icon="${SIG_ICON[s.level]}"></span>
+        <span>${esc(s.text)}</span></div>`).join('')}
+    </div>
+    ${rows ? `<div class="card" style="margin-bottom:12px">
+      <div class="h2" style="margin-bottom:4px">Данные фирмы</div>${rows}</div>` : ''}
+    ${d.accounts.length ? `<div class="card" style="margin-bottom:12px">
+      <div class="h2" style="margin-bottom:6px">Счета в белом списке</div>
+      <div class="acc-list">${accs}</div>${more}</div>` : ''}
+    <div class="card" style="margin-bottom:12px">
+      <div class="h2" style="margin-bottom:4px">Источники</div>
+      <div class="src-row">${srcs}</div></div>`;
+  Icons.hydrate();
+}
+
+async function post(url, body) {
+  const r = await fetch(url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ initData: tg ? tg.initData : '' }, body)),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || 'Ошибка запроса');
+  return data;
+}
+
+document.getElementById('go').onclick = async () => {
+  const nip = document.getElementById('nip').value.trim();
+  if (!nip) return;
+  haptic('medium');
+  out.innerHTML = '<div class="state">Спрашиваем реестры…</div>';
+  try { render(await post('/api/nip', { nip })); }
+  catch (e) { out.innerHTML = `<div class="state">${esc(e.message)}</div>`; }
+};
+
+document.getElementById('accgo').onclick = async () => {
+  const nip = document.getElementById('nip').value.trim();
+  const account = document.getElementById('acc').value.trim();
+  const box = document.getElementById('accout');
+  if (!nip) { box.innerHTML = '<div class="muted">Сначала укажи NIP выше.</div>'; return; }
+  if (!account) return;
+  haptic('medium');
+  box.innerHTML = '<div class="muted">Проверяем…</div>';
+  try {
+    const d = await post('/api/nip/account', { nip, account });
+    const tone = d.assigned ? 'ok' : 'bad';
+    box.innerHTML = `<div class="sig ${tone}">
+      <span class="si" data-icon="${SIG_ICON[tone]}"></span><span>${esc(d.note)}</span></div>`;
+    Icons.hydrate();
+  } catch (e) { box.innerHTML = `<div class="muted">${esc(e.message)}</div>`; }
+};
+
+document.getElementById('nip').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('go').click();
+});
+</script>
+</body>
+</html>

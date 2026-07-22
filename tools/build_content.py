@@ -168,6 +168,19 @@ def localize_callouts(html: str) -> str:
     return html
 
 
+# Врезки в начало отдельных статей: сам контент тянется из upstream и правки в
+# .md затрутся при git pull, поэтому связь со своими экранами живёт здесь.
+ARTICLE_BANNERS = {
+    "zus_errors": (
+        '<div class="admonition tip"><p class="admonition-title">'
+        '<span data-icon="wrench"></span>Справочник кодов в приложении</p>'
+        '<p>Коды ошибок ZUS с поиском, фильтрами и пошаговыми решениями — '
+        '<a href="zus_err.html?from=article.html%3Fid%3Dzus_errors">открыть справочник</a>. '
+        'В боте можно просто прислать код из восьми цифр.</p></div>'
+    ),
+}
+
+
 def postprocess(html: str) -> str:
     # ссылки между статьями: foo.md / foo.md#anchor -> article.html?id=foo
     html = re.sub(
@@ -234,6 +247,8 @@ def main():
         meta, body = split_frontmatter(src.read_text(encoding="utf-8"))
         md.reset()
         html = postprocess(md.convert(preprocess(body)))
+        if aid in ARTICLE_BANNERS:
+            html = ARTICLE_BANNERS[aid] + html
         (articles_dir / f"{aid}.html").write_text(html, encoding="utf-8")
         search.append({"id": aid, "title": entry["title"],
                        "text": html_to_text(html).lower()})

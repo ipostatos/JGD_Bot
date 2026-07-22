@@ -29,15 +29,28 @@ CONTEXT_ARTICLES = 3
 CONTEXT_CHARS = 5000
 
 FAQ_JSON = ROOT / "webapp" / "data" / "faq_data.json"
+ZUS_ERRORS_JSON = ROOT / "webapp" / "zus_errors.json"
 
 _index = None
 
 
 def _load_index():
-    """Статьи гайда + (если собран faq_miner-ом) FAQ чата как псевдостатьи."""
+    """Статьи гайда + база ошибок ZUS + (если собран faq_miner-ом) FAQ чата."""
     global _index
     if _index is None:
         _index = json.loads(SEARCH_JSON.read_text(encoding="utf-8"))
+        if ZUS_ERRORS_JSON.is_file():
+            try:
+                errs = json.loads(ZUS_ERRORS_JSON.read_text(encoding="utf-8"))["errors"]
+                _index = _index + [
+                    {"id": f"zuserr-{e.get('code') or i}",
+                     "title": f"Ошибка ZUS {e.get('code') or ''}: {e['title_ru']}",
+                     "text": " ".join([e.get("code") or "", e["title_ru"], e["msg_pl"],
+                                       e["why_ru"], *e["fix_ru"], *e.get("tags", [])]).lower()}
+                    for i, e in enumerate(errs)]
+                log.info("zus_errors: +%d записей в индекс", len(errs))
+            except Exception as e:
+                log.warning("zus_errors не прочитан: %s", e)
         if FAQ_JSON.is_file():
             try:
                 faq = json.loads(FAQ_JSON.read_text(encoding="utf-8"))

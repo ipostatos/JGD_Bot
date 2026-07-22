@@ -100,6 +100,37 @@ def build_bot():
             prices=[LabeledPrice(label="Донат", amount=amount)])
         await q.answer()
 
+    @dp.message(Command("nip"))
+    async def nip_cmd(m: Message):
+        arg = (m.text or "").partition(" ")[2].strip()
+        if not arg:
+            await m.answer("Пришли NIP контрагента — 10 цифр, можно с дефисами. "
+                           "Проверю статус VAT, данные фирмы и счета в белом списке.")
+            return
+        await m.answer(await _nip_reply(arg), parse_mode="HTML",
+                       disable_web_page_preview=True)
+
+    @dp.message(Command("blad"))
+    async def blad_cmd(m: Message):
+        arg = (m.text or "").partition(" ")[2].strip()
+        if not arg:
+            await m.answer("Пришли код ошибки ZUS (8 цифр, например 69004101) — "
+                           "объясню, что он значит и как чинить.")
+            return
+        await m.answer(_zus_error_reply(arg), parse_mode="HTML",
+                       disable_web_page_preview=True)
+
+    # Голые цифры в личке: 10 — это NIP контрагента, 8 — код ошибки ZUS
+    @dp.message(F.chat.type == "private", F.text.regexp(r"^[\d\s\-]{8,16}$"))
+    async def digits_plain(m: Message):
+        digits = "".join(ch for ch in m.text if ch.isdigit())
+        if len(digits) == 10:
+            await m.answer(await _nip_reply(digits), parse_mode="HTML",
+                           disable_web_page_preview=True)
+        elif len(digits) == 8:
+            await m.answer(_zus_error_reply(digits), parse_mode="HTML",
+                           disable_web_page_preview=True)
+
     @dp.pre_checkout_query()
     async def pre_checkout(q: PreCheckoutQuery):
         await q.answer(ok=True)
@@ -115,6 +146,8 @@ def build_bot():
         from aiogram.types import BotCommand
         await bot.set_my_commands([
             BotCommand(command="app", description="Открыть JDG Гид"),
+            BotCommand(command="nip", description="Проверить контрагента по NIP"),
+            BotCommand(command="blad", description="Код ошибки ZUS — что делать"),
             BotCommand(command="donate", description="Поддержать проект ⭐"),
         ])
 
@@ -183,6 +216,76 @@ async def deadline_loop(app: FastAPI):
         except Exception as e:
             log.warning("deadline loop error: %s", e)
         await asyncio.sleep(3600)
+
+
+SIG_EMOJI = {"ok": "✅", "warn": "⚠️", "bad": "❌"}
+SEV_LABEL = {"K": "❌ критическая — блокирует отправку",
+             "Z": "⚠️ обычная — отправить можно",
+             "I": "ℹ️ информация — исправлять нечего"}
+_zus_errors: list | None = None
+
+
+def zus_errors() -> list:
+    """База кодов ошибок ZUS (webapp/zus_errors.json), читается один раз."""
+    global _zus_errors
+    if _zus_errors is None:
+        try:
+            _zus_errors = json.loads(
+                (WEBAPP / "zus_errors.json").read_text(encoding="utf-8"))["errors"]
+        except Exception as e:
+            log.warning("zus_errors.json не прочитан: %s", e)
+            _zus_errors = []
+    return _zus_errors
+
+
+def find_zus_error(query: str) -> dict | None:
+    q = query.strip().lower()
+    for e in zus_errors():
+        if (e.get("code") or "").lower() == q:
+            return e
+    if not q:
+        return None
+    return next((e for e in zus_errors()
+                 if q in " ".join([e["title_ru"], e["msg_pl"], e["why_ru"],
+                                   *e.get("tags", [])]).lower()), None)
+
+
+def _zus_error_reply(query: str) -> str:
+    e = find_zus_error(query)
+    if not e:
+        return ("Такого кода в базе пока нет. Посмотри полный польский текст на вкладке "
+                "«uwagi i błędy» и спроси AI-ассистента в приложении — он ищет и по тексту. "
+                "Если ошибка новая, скинь её в чат @JDG_PBH, добавим в базу.")
+    steps = "\n".join(f"{i}. {s}" for i, s in enumerate(e["fix_ru"], 1))
+    return (f"<b>{e.get('code', '')} — {e['title_ru']}</b>\n"
+            f"{SEV_LABEL.get(e['severity'], '')}\n"
+            f"Документ: {', '.join(e.get('doc') or ['—'])}\n\n"
+            f"<i>{e['msg_pl']}</i>\n\n"
+            f"{e['why_ru']}\n\n<b>Что делать:</b>\n{steps}")
+
+
+async def _nip_reply(raw_nip: str) -> str:
+    """Ответ бота на NIP: карточка контрагента в HTML (тот же движок, что API)."""
+    import registries
+    try:
+        d = await registries.check_nip(raw_nip)
+    except Exception as e:
+        log.warning("bot nip check failed: %s", e)
+        return "Реестры сейчас не отвечают — попробуй чуть позже."
+    if not d.get("valid"):
+        return d.get("error", "Не похоже на NIP.")
+    head = f"<b>{d['name'] or 'Название не найдено'}</b>\nNIP {d['nip']}"
+    facts = [f"{k}: {v}" for k, v in (
+        ("REGON", d.get("regon")), ("KRS", d.get("krs")),
+        ("Адрес", d.get("address")), ("PKD", ", ".join(d.get("pkd") or [])),
+    ) if v]
+    signals = "\n".join(f"{SIG_EMOJI[s['level']]} {s['text']}" for s in d["signals"])
+    accounts = d.get("accounts") or []
+    acc_line = (f"\n\n💳 Счетов в белом списке: {len(accounts)}"
+                if accounts else "\n\n💳 Счетов в белом списке нет")
+    return (f"{head}\n" + ("\n".join(facts) + "\n" if facts else "")
+            + f"\n{signals}{acc_line}\n\n"
+            f"Полная карточка и проверка конкретного счёта — в приложении.")
 
 
 async def _dra_sum_line(user_id: int) -> str:
@@ -367,6 +470,40 @@ async def infakt_pay(req: Request):
     except Exception as e:
         log.warning("cockpit.pay failed for %s: %s", user["id"], e)
         raise HTTPException(502, "inFakt не ответил — попробуй ещё раз")
+
+
+@app.post("/api/nip")
+async def api_nip(req: Request):
+    """Проверка контрагента по NIP (White List + VIES + GUS/CEIDG по ключам)."""
+    import registries
+    body = await req.json()
+    if verify_init_data(body.get("initData", "")) is None:
+        raise HTTPException(401, "bad initData")
+    try:
+        res = await registries.check_nip(body.get("nip", ""))
+    except Exception as e:
+        log.warning("nip check failed: %s", e)
+        raise HTTPException(502, "Реестры не ответили — попробуй ещё раз")
+    if not res.get("valid"):
+        raise HTTPException(400, res.get("error", "плохой NIP"))
+    return res
+
+
+@app.post("/api/nip/account")
+async def api_nip_account(req: Request):
+    """Проверка счёта контрагента в белом списке перед оплатой."""
+    import registries
+    body = await req.json()
+    if verify_init_data(body.get("initData", "")) is None:
+        raise HTTPException(401, "bad initData")
+    try:
+        res = await registries.check_account(body.get("nip", ""), body.get("account", ""))
+    except Exception as e:
+        log.warning("account check failed: %s", e)
+        raise HTTPException(502, "Белый список не ответил — попробуй ещё раз")
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error", "плохие данные"))
+    return res
 
 
 TMP_DIR = ROOT / "tmp_files"
