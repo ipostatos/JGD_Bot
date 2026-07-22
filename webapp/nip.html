@@ -80,7 +80,7 @@ function render(d) {
   const rows = [
     ['NIP', d.nip], ['REGON', d.regon], ['KRS', d.krs],
     ['Адрес', d.address], ['В реестре с', d.registered],
-    ['PKD', (d.pkd || []).join(', ')],
+    ['Основной PKD', d.pkd_main], ['PKD', (d.pkd || []).join(', ')],
   ].filter(([, v]) => v).map(([k, v]) =>
     `<div class="kv"><span>${k}</span><b>${esc(v)}</b></div>`).join('');
 

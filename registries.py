@@ -170,14 +170,32 @@ async def gus_lookup(cl: httpx.AsyncClient, nip: str) -> dict | None:
             "closed": _tag(payload, "DataZakonczeniaDzialalnosci") or None}
 
 
+def _ceidg_address(adr: dict | None) -> str:
+    """Адрес из adresDzialalnosci (ключи сверены с живым ответом API v3)."""
+    if not adr:
+        return ""
+    street = " ".join(x for x in (adr.get("ulica"), adr.get("budynek")) if x)
+    if adr.get("lokal"):
+        street += f"/{adr['lokal']}"
+    city = " ".join(x for x in (adr.get("kod"), adr.get("miasto")) if x)
+    return ", ".join(x for x in (street, city) if x)
+
+
 async def ceidg_lookup(cl: httpx.AsyncClient, nip: str) -> dict | None:
-    """CEIDG v3 (Bearer-токен из dane.biznes.gov.pl). Даёт статус JDG и PKD.
-    ⚠️ адаптер не проверен живым токеном — при ошибке молча деградируем."""
+    """CEIDG v3 (Bearer-токен из dane.biznes.gov.pl). Статус JDG, PKD и адрес.
+
+    Проверено живым токеном 2026-07-22: поиск `/firmy?nip=` отдаёт только имя,
+    статус и дату начала — PKD, адрес и dataWznowienia лежат в детальной
+    карточке по ссылке `link`, поэтому ходим вторым запросом. Если деталь не
+    ответила, деградируем до краткой записи, а не теряем ответ целиком.
+    """
     token = os.environ.get("CEIDG_TOKEN")
     if not token:
         return None
-    r = await cl.get(f"{CEIDG_BASE}/firmy", params={"nip": nip},
-                     headers={"Authorization": f"Bearer {token}"})
+    headers = {"Authorization": f"Bearer {token}"}
+    r = await cl.get(f"{CEIDG_BASE}/firmy", params={"nip": nip}, headers=headers)
+    if r.status_code == 204:
+        return None            # 204 = записи нет (юрлицо, а не JDG) — это не ошибка
     if r.status_code != 200:
         log.warning("CEIDG: HTTP %s", r.status_code)
         return None
@@ -185,13 +203,33 @@ async def ceidg_lookup(cl: httpx.AsyncClient, nip: str) -> dict | None:
     if not firms:
         return None
     f = firms[0]
-    pkd = f.get("pkd") or []
-    return {"status": f.get("status"), "name": f.get("nazwa"),
-            "started": f.get("dataRozpoczecia"), "suspended": f.get("dataZawieszenia"),
-            "ended": f.get("dataZakonczenia"),
-            "pkd": [p if isinstance(p, str) else p.get("kod") for p in pkd][:10],
-            "owner": (f.get("wlasciciel") or {}).get("imie", "") + " "
-                     + (f.get("wlasciciel") or {}).get("nazwisko", "")}
+
+    detail: dict = {}
+    if f.get("link"):
+        try:
+            d = await cl.get(f["link"], headers=headers)
+            if d.status_code == 200:
+                body = d.json()
+                inner = body.get("firma")
+                detail = (inner[0] if isinstance(inner, list) and inner else body) or {}
+        except Exception as e:                       # noqa: BLE001 — деградация
+            log.warning("CEIDG detail: %s", e)
+    src = {**f, **detail}
+
+    pkd = [p.get("kod") if isinstance(p, dict) else p for p in (src.get("pkd") or [])]
+    main = src.get("pkdGlowny") or {}
+    main_code = main.get("kod") if isinstance(main, dict) else main
+    if main_code:                                    # основной PKD — первым
+        pkd = [main_code] + [p for p in pkd if p != main_code]
+    return {"status": src.get("status"), "name": src.get("nazwa"),
+            "started": src.get("dataRozpoczecia"), "resumed": src.get("dataWznowienia"),
+            "suspended": src.get("dataZawieszenia"), "ended": src.get("dataZakonczenia"),
+            "pkd": [p for p in pkd if p][:10],
+            "pkd_main": f"{main_code} · {main.get('nazwa')}" if main_code and main.get("nazwa")
+                        else (main_code or ""),
+            "address": _ceidg_address(src.get("adresDzialalnosci")),
+            "owner": (src.get("wlasciciel") or {}).get("imie", "") + " "
+                     + (src.get("wlasciciel") or {}).get("nazwisko", "")}
 
 
 # ── агрегация ────────────────────────────────────────────────────────────────
@@ -295,8 +333,10 @@ async def check_nip(raw_nip: str) -> dict:
         "regon": (wl or {}).get("regon") or (gus or {}).get("regon"),
         "krs": (wl or {}).get("krs"),
         "pkd": (ceidg or {}).get("pkd") or [],
+        "pkd_main": (ceidg or {}).get("pkd_main") or "",
         "address": (wl or {}).get("workingAddress") or (wl or {}).get("residenceAddress")
-                   or (gus or {}).get("address") or (vies or {}).get("address") or "",
+                   or (gus or {}).get("address") or (ceidg or {}).get("address")
+                   or (vies or {}).get("address") or "",
         "registered": (wl or {}).get("registrationLegalDate") or (ceidg or {}).get("started"),
         # у крупных субъектов счетов бывают тысячи (у m.st. Warszawa — 4340):
         # весь список раздувает ответ и суточный кэш, показываем первые ACC_LIMIT

@@ -6,10 +6,16 @@ import asyncio
 import os
 
 import pytest
+from dotenv import load_dotenv
 
 import registries as R
 
+load_dotenv()   # чтобы live-тесты видели CEIDG_TOKEN / GUS_BIR_KEY из .env
+
 LIVE = pytest.mark.skipif(os.environ.get("NO_NET") == "1", reason="сеть отключена")
+CEIDG_LIVE = pytest.mark.skipif(
+    os.environ.get("NO_NET") == "1" or not os.environ.get("CEIDG_TOKEN"),
+    reason="нет CEIDG_TOKEN или сеть отключена")
 
 WARSAW_NIP = "5252248481"          # m.st. Warszawa — VAT czynny, много счетов
 WARSAW_ACC = "04103015080000000551183000"
@@ -106,6 +112,39 @@ def test_live_account_check_both_ways():
     bad = asyncio.run(R.check_account(WARSAW_NIP, "61109010140000071219812874"))
     assert bad["ok"] and bad["assigned"] is False
     assert "15 000" in bad["note"]
+
+
+def test_ceidg_address_built_from_live_shape():
+    """Ключи взяты из живого ответа API v3 (Kraków, 2026-07-22)."""
+    adr = {"ulica": "ul. Andrzeja Stopki", "budynek": "18c", "miasto": "Kraków",
+           "kod": "31-999", "wojewodztwo": "MAŁOPOLSKIE", "kraj": "PL"}
+    assert R._ceidg_address(adr) == "ul. Andrzeja Stopki 18c, 31-999 Kraków"
+    assert R._ceidg_address({"ulica": "ul. Kwiatowa", "budynek": "1",
+                             "lokal": "5", "miasto": "Gdańsk"}) == "ul. Kwiatowa 1/5, Gdańsk"
+    assert R._ceidg_address(None) == ""
+    assert R._ceidg_address({}) == ""
+
+
+@CEIDG_LIVE
+def test_live_ceidg_gives_data_for_zwolniony():
+    """Живой токен: у zwolnionego в White List пусто, а CEIDG отдаёт фирму и PKD.
+
+    Идём мимо check_nip, чтобы не попасть в суточный кэш.
+    """
+    import httpx
+
+    async def run():
+        async with httpx.AsyncClient(timeout=30) as cl:
+            return await R.ceidg_lookup(cl, ZWOLNIONY_NIP)
+
+    data = asyncio.run(run())
+    assert data, "CEIDG не ответил по реальному JDG"
+    assert data["status"] == "AKTYWNY"
+    assert data["name"] and data["owner"].strip()
+    assert data["started"] == "2023-11-21"
+    # PKD и pkd_main приходят только из детальной карточки — проверяем, что дошли
+    assert data["pkd"], "PKD пустой: не подтянулась детальная карточка"
+    assert data["pkd"][0] == data["pkd_main"].split(" · ")[0]
 
 
 @LIVE
