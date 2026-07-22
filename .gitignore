@@ -1,4 +1,5 @@
 .env
+.env.bak
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -6,6 +7,14 @@ sources/
 webapp/data/
 *.db
 tmp_files/
+
+# Telethon: сессия = доступ к аккаунту, экспорт чата = персональные данные
+*.session
+*.session-journal
+tools/.tg_login.json
+chat_export*.json
+ChatExport_*/
+chat_analysis/
 
 # Hermes cockpit: аудит и реальные DRA (персональные данные) — не в публичный репо
 audit/
