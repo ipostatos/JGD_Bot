@@ -100,7 +100,7 @@ body.has-dock.kb-open{ padding-bottom:0 }
 /* ── поиск ── */
 .search-box{ width:100%; padding:12px var(--sp-4); font-size:var(--fs-body);
   color:var(--text); background:var(--card); border:1px solid var(--border);
-  border-radius:var(--r-md); outline:none }
+  border-radius:var(--r-md); outline:none; margin:var(--sp-6) 0 var(--sp-5) }
 .search-box:focus{ border-color:var(--accent) }
 .search-hit{ display:block; text-decoration:none; color:var(--text);
   padding:10px var(--sp-3); border-bottom:1px solid var(--border) }
