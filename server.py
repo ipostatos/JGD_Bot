@@ -442,6 +442,21 @@ def _month_arg(body: dict) -> str:
     return month
 
 
+@app.post("/api/infakt/overview")
+async def infakt_overview(req: Request):
+    """Кокпит: финансовый обзор (доход/расходы/налоги, VAT-прогноз, здоровье)."""
+    import cockpit
+    body = await req.json()
+    user = verify_init_data(body.get("initData", ""))
+    if user is None:
+        raise HTTPException(401, "bad initData")
+    try:
+        return await cockpit.overview(user["id"])
+    except Exception as e:
+        log.warning("cockpit.overview failed for %s: %s", user["id"], e)
+        raise HTTPException(502, "inFakt не ответил — попробуй ещё раз")
+
+
 @app.post("/api/infakt/close")
 async def infakt_close(req: Request):
     """Кокпит: закрытие месяца движком Hermes (чек-лист + сверка)."""

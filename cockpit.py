@@ -104,6 +104,15 @@ def _pay_sync(api_key: str, month: str) -> dict:
          "status": p.status} for p in packages]}
 
 
+async def overview(user_id: int) -> dict:
+    """Финансовый обзор: месяц, год, 12-месячная серия, VAT-прогноз, здоровье."""
+    import dashboard
+    key = keystore.load_key(user_id)
+    if not key:
+        return {"connected": False}
+    return {"connected": True} | await asyncio.to_thread(dashboard.build, key)
+
+
 async def close(user_id: int, month: str) -> dict:
     key = keystore.load_key(user_id)
     if not key:

@@ -140,15 +140,21 @@ class Infakt:
             cc = [c for c in cc if (c.get("issue_date") or "").startswith(month)]
         return cc
 
+    def insurance_fees(self) -> list[dict]:
+        return self._list_all("/insurance_fees.json")
+
+    def income_taxes(self) -> list[dict]:
+        return self._list_all("/income_taxes.json")
+
     def insurance_fee(self, month: str) -> dict | None:
         """Składki ZUS за период month='2026-07' (period в API = 'YYYY-MM-01')."""
-        for f in self._list_all("/insurance_fees.json"):
+        for f in self.insurance_fees():
             if f.get("period") == f"{month}-01":
                 return f
         return None
 
     def income_tax(self, month: str) -> dict | None:
-        for t in self._list_all("/income_taxes.json"):
+        for t in self.income_taxes():
             if t.get("period") == f"{month}-01":
                 return t
         return None
