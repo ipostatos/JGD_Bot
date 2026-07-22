@@ -47,6 +47,43 @@ body.has-dock{ padding-bottom:84px }
   color:var(--accent); border:1px solid var(--accent); border-radius:999px;
   padding:1px 5px; margin-left:4px; vertical-align:1px; opacity:.85 }
 
+/* ── кокпит предпринимателя (главная): фаза ZUS + полоска месяца ── */
+.cockpit{ margin-bottom:var(--sp-4) }
+.cp-phase{ display:flex; align-items:center; gap:var(--sp-4) }
+.cp-phase .ring .ring-num{ font-size:20px }
+.cp-phase-body{ flex:1; min-width:0 }
+.cp-phase-name{ font-size:var(--fs-h2); font-weight:800; line-height:1.15 }
+.cp-amount{ font-size:22px; font-weight:800; font-variant-numeric:tabular-nums;
+  line-height:1.1; margin-top:2px }
+.cp-sub{ color:var(--hint); font-size:var(--fs-xs); margin-top:2px }
+.cp-next{ margin-top:9px; font-size:var(--fs-sm); font-weight:600;
+  display:flex; align-items:flex-start; gap:6px }
+.cp-next .emi{ width:15px; height:15px; flex:0 0 auto; margin-top:1px }
+.cp-next.hot{ color:var(--warn) }
+.cp-next.calm{ color:var(--hint); font-weight:500 }
+.cp-next b{ font-variant-numeric:tabular-nums }
+
+.cp-month{ margin-top:var(--sp-4); padding-top:var(--sp-3);
+  border-top:1px solid var(--border) }
+.cp-track{ position:relative; height:6px; border-radius:var(--r-pill);
+  background:var(--border); margin:20px 0 12px }
+.cp-fill{ position:absolute; left:0; top:0; height:100%; border-radius:var(--r-pill);
+  background:color-mix(in srgb, var(--accent) 45%, transparent) }
+.cp-today{ position:absolute; top:50%; width:2px; height:16px;
+  transform:translate(-50%,-50%); background:var(--text); border-radius:1px }
+.cp-pin{ position:absolute; top:50%; width:11px; height:11px; border-radius:50%;
+  transform:translate(-50%,-50%); border:2px solid var(--bg); box-sizing:content-box }
+.cp-pin.zus{ background:var(--warn) } .cp-pin.vat{ background:var(--link) }
+.cp-pin.past{ opacity:.4 }
+.cp-pin .lbl{ position:absolute; top:-19px; left:50%; transform:translateX(-50%);
+  font-size:10px; font-weight:800; color:var(--hint) }
+.cp-legend{ display:flex; flex-wrap:wrap; gap:4px 12px; font-size:var(--fs-xs) }
+.cp-legend span{ display:inline-flex; align-items:center; gap:5px; color:var(--hint) }
+.cp-legend i{ width:8px; height:8px; border-radius:50%; flex:0 0 auto }
+.cp-legend .now{ background:var(--text) }
+.cp-legend .zus{ background:var(--warn) } .cp-legend .vat{ background:var(--link) }
+.cp-legend b{ color:var(--text); font-variant-numeric:tabular-nums }
+
 /* ── поиск ── */
 .search-box{ width:100%; padding:12px var(--sp-4); font-size:var(--fs-body);
   color:var(--text); background:var(--card); border:1px solid var(--border);

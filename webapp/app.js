@@ -71,4 +71,34 @@
   window.haptic = (type) => {
     try { tg && tg.HapticFeedback.impactOccurred(type || 'light'); } catch (e) { }
   };
+
+  // ── жизненный цикл ZUS: даты границ фаз ──
+  // Зеркалит локальную stageDates в plan.html (та оставлена как есть, чтобы не
+  // трогать прод-страницу). При правке правил менять ОБА места.
+  window.stageDates = function (reg, useUlga) {
+    const lastDay = (y, m) => new Date(y, m + 1, 0); // m: 0-based
+    let ulgaEnd = null, base = reg;
+    if (useUlga) {
+      const extra = reg.getDate() === 1 ? 5 : 6; // ulga: 6 полных месяцев
+      ulgaEnd = lastDay(reg.getFullYear(), reg.getMonth() + extra);
+      base = new Date(ulgaEnd.getFullYear(), ulgaEnd.getMonth() + 1, 1);
+    }
+    // preferencyjne: 24 полных месяца
+    const prefEnd = lastDay(base.getFullYear(), base.getMonth() + (base.getDate() === 1 ? 23 : 24));
+    return { ulgaEnd, prefEnd };
+  };
+
+  // Фазы ZUS как список {key, name, stage, start, end} — для кокпита главной.
+  // stage совпадает с ключом ставок в calc.js (ulga/pref/duzy).
+  window.zusPhases = function (regISO, useUlga) {
+    const reg = new Date(regISO + 'T00:00:00');
+    const { ulgaEnd, prefEnd } = window.stageDates(reg, useUlga);
+    const ph = [];
+    if (useUlga) ph.push({ key: 'ulga', name: 'Ulga na start', stage: 'ulga', start: reg, end: ulgaEnd });
+    const prefStart = useUlga ? new Date(ulgaEnd.getFullYear(), ulgaEnd.getMonth() + 1, 1) : reg;
+    ph.push({ key: 'pref', name: 'Preferencyjne ZUS', stage: 'pref', start: prefStart, end: prefEnd });
+    ph.push({ key: 'duzy', name: 'Duży ZUS', stage: 'duzy',
+      start: new Date(prefEnd.getFullYear(), prefEnd.getMonth() + 1, 1), end: null });
+    return ph;
+  };
 })();

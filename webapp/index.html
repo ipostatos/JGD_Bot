@@ -13,16 +13,35 @@
 <div class="hero"><span class="logo emi" data-icon="book-open"></span><h1>JDG Гид</h1></div>
 <p class="sub">Путеводитель по ИП в Польше</p>
 
-<!-- приоритет: персональный блок «что дальше» -->
-<div class="next">
-  <div class="label" id="nextLabel">Мой план</div>
-  <div class="big" id="nextTitle">Настрой профиль предпринимателя</div>
-  <div class="hintline" id="nextHint">Укажи дату регистрации JDG — покажу этапы ZUS и твои дедлайны</div>
+<!-- ОНБОРДИНГ: показывается, пока профиль не заполнен -->
+<div class="next" id="onboard">
+  <div class="label">Мой план</div>
+  <div class="big">Настрой профиль предпринимателя</div>
+  <div class="hintline">Укажи дату регистрации JDG — покажу фазу ZUS, суммы и твои дедлайны</div>
   <div class="actions">
     <a class="btn" href="plan.html"><span class="emi" data-icon="calendar"></span> Открыть план</a>
     <a class="btn ghost" href="guide.html?focus=1"><span class="emi" data-icon="search"></span> Поиск</a>
   </div>
 </div>
+
+<!-- КОКПИТ: фаза ZUS + полоска месяца (когда профиль заполнен) -->
+<a class="card cockpit hidden" id="cockpit" href="plan.html" style="text-decoration:none; color:var(--text)">
+  <div class="cp-phase">
+    <div class="ring" id="cpRing">
+      <div class="ring-val"><span class="ring-num" id="cpPct">0%</span><span class="ring-cap">фаза ZUS</span></div>
+    </div>
+    <div class="cp-phase-body">
+      <div class="cp-phase-name" id="cpPhase">—</div>
+      <div class="cp-amount" id="cpAmount">—</div>
+      <div class="cp-sub" id="cpSub"></div>
+      <div class="cp-next" id="cpNext"></div>
+    </div>
+  </div>
+  <div class="cp-month">
+    <div class="cp-track" id="cpTrack"></div>
+    <div class="cp-legend" id="cpLegend"></div>
+  </div>
+</a>
 
 <div class="section-title">Разделы</div>
 <div class="grid">
@@ -68,31 +87,103 @@
 
 <script src="icons.js"></script>
 <script src="app.js"></script>
+<script src="calc.js"></script>
 <script>
 renderDock('home');
 
-// если профиль заполнен — блок «что дальше» показывает ближайший дедлайн
+// Профиль заполнен → онбординг прячем, показываем «кокпит»: фаза ZUS с суммой
+// и переходом + полоска месяца с дедлайнами. Всё считается на устройстве из
+// профиля и таблицы ставок (calc.js). Пустой профиль → остаётся онбординг.
 (function () {
   const p = getProfile();
   if (!p.reg) return;
-  const now = new Date();
-  const evs = [];
-  for (let k = 0; k < 2; k++) {
-    const y = now.getFullYear(), m = now.getMonth() + k;
-    evs.push({ d: new Date(y, m, 20), t: 'ZUS DRA + składki и аванс налога' });
-    if (p.vat) evs.push({ d: new Date(y, m, 25), t: 'JPK_V7M (VAT)' });
-  }
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const next = evs.filter(e => e.d >= today).sort((a, b) => a.d - b.d)[0];
-  if (!next) return;
-  const days = Math.round((next.d - today) / 864e5);
-  document.getElementById('nextLabel').textContent = 'Ближайший дедлайн';
-  document.getElementById('nextTitle').textContent =
-    next.d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) + ' — ' + next.t;
-  document.getElementById('nextHint').textContent = days === 0
-    ? 'Сегодня! Не забудь оплатить и отчитаться'
-    : `Через ${days} дн. · весь календарь и чек-листы — в плане`;
+  document.getElementById('onboard').classList.add('hidden');
+  ratesReady.then(() => buildCockpit(p)).catch(() => {});
 })();
+
+function buildCockpit(p) {
+  const now = new Date();
+  const useUlga = p.ulga !== false;
+  const phases = zusPhases(p.reg, useUlga);
+  let i = phases.findIndex(ph => ph.end === null || now <= ph.end);
+  if (i < 0) i = phases.length - 1;
+  const cur = phases[i], nxt = phases[i + 1] || null;
+
+  // кольцо — доля пройденного текущей фазы; цвет теплеет ближе к переходу
+  const daysToEnd = cur.end ? Math.ceil((cur.end - now) / 864e5) : null;
+  let pct = 100;
+  if (cur.end) {
+    const span = cur.end - cur.start;
+    pct = span > 0 ? Math.min(Math.max((now - cur.start) / span * 100, 0), 100) : 100;
+  }
+  const ringColor = cur.stage === 'duzy' ? 'var(--accent)'
+    : (daysToEnd != null && daysToEnd <= 60) ? 'var(--warn)' : 'var(--ok)';
+  const ring = document.getElementById('cpRing');
+  ring.style.setProperty('--p', Math.round(pct));
+  ring.style.setProperty('--ring-color', ringColor);
+  document.getElementById('cpPct').textContent = Math.round(pct) + '%';
+  document.getElementById('cpPhase').textContent = cur.name;
+
+  // сумма — składki społeczne текущей фазы (с добровольной chorobową); в ulga = 0
+  const socCur = spoleczneMonthly(cur.stage, true).total;
+  const amt = document.getElementById('cpAmount');
+  const sub = document.getElementById('cpSub');
+  if (cur.stage === 'ulga') {
+    amt.textContent = '0 zł';
+    sub.textContent = 'Соцвзносы не платишь — только składka zdrowotna';
+  } else {
+    amt.textContent = fmtZl(socCur);
+    sub.textContent = 'składki społeczne / мес · + zdrowotna по доходу';
+  }
+
+  // строка перехода — деньги и дата следующей ступени ZUS
+  const nx = document.getElementById('cpNext');
+  if (nxt) {
+    const delta = spoleczneMonthly(nxt.stage, true).total - socCur;
+    const MON = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+    const mon = MON[cur.end.getMonth()] + " '" + String(cur.end.getFullYear()).slice(2);
+    const dTxt = daysToEnd > 45 ? '~' + Math.round(daysToEnd / 30) + ' мес' : daysToEnd + ' дн.';
+    const hot = daysToEnd <= 60;
+    nx.className = 'cp-next' + (hot ? ' hot' : '');
+    nx.innerHTML = '<span class="emi">' + Icons.svg(hot ? 'flame' : 'trending-up') + '</span>' +
+      '<span>' + nxt.name + ' через <b>' + dTxt + '</b> (' + mon + ')' +
+      (delta > 0 ? ' · <b>+' + fmtZl(delta) + '</b>/мес' : '') + '</span>';
+  } else {
+    nx.className = 'cp-next calm';
+    nx.innerHTML = '<span class="emi">' + Icons.svg('check') + '</span>' +
+      '<span>Постоянный режим — ставка ZUS дальше не растёт</span>';
+  }
+
+  buildMonthStrip(p, now);
+  document.getElementById('cockpit').classList.remove('hidden');
+  if (window.Icons) Icons.hydrate();
+}
+
+// Полоска текущего месяца: заливка до «сегодня» + пины дедлайнов (20 ZUS, 25 VAT).
+function buildMonthStrip(p, now) {
+  const y = now.getFullYear(), m = now.getMonth(), today = now.getDate();
+  const last = new Date(y, m + 1, 0).getDate();
+  const pos = d => (last > 1 ? (d - 1) / (last - 1) * 100 : 0);
+  const marks = [{ d: 20, cls: 'zus', t: 'ZUS DRA' }];
+  if (p.vat) marks.push({ d: 25, cls: 'vat', t: 'JPK VAT' });
+
+  let track = '<div class="cp-fill" style="width:' + pos(today) + '%"></div>' +
+    '<i class="cp-today" style="left:' + pos(today) + '%"></i>';
+  marks.forEach(mk => {
+    track += '<i class="cp-pin ' + mk.cls + (mk.d < today ? ' past' : '') +
+      '" style="left:' + pos(mk.d) + '%"><span class="lbl">' + mk.d + '</span></i>';
+  });
+  document.getElementById('cpTrack').innerHTML = track;
+
+  const seg = ['<span><i class="now"></i>сегодня <b>' + today + '.' +
+    String(m + 1).padStart(2, '0') + '</b></span>'];
+  marks.forEach(mk => {
+    const c = mk.d - today;
+    const txt = c > 0 ? 'через <b>' + c + '</b> дн.' : c === 0 ? '<b>сегодня</b>' : 'прошёл';
+    seg.push('<span><i class="' + mk.cls + '"></i>' + mk.d + ' ' + mk.t + ' — ' + txt + '</span>');
+  });
+  document.getElementById('cpLegend').innerHTML = seg.join('');
+}
 </script>
 </body>
 </html>
