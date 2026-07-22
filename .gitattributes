@@ -1,3 +1,6 @@
 # Шелл-скрипты едут на Linux-VPS: CRLF там ломает shebang («bad interpreter»).
 *.sh text eol=lf
 deploy/*.service text eol=lf
+
+# Вендоренные библиотеки не трогаем конвертацией переводов строк
+webapp/vendor/** -text

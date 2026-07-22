@@ -94,7 +94,12 @@ def test_utility_pages_and_docs():
     with client() as c:
         for page in ("/reader.html", "/merge.html", "/photo.html"):
             assert c.get(page).status_code == 200, page
-        assert c.get("/vendor/pdfjs/pdf.min.js").status_code == 200
+        # pdf.js 6 — только ESM-сборка; отдаётся как модуль, иначе браузер
+        # откажется его импортировать
+        r = c.get("/vendor/pdfjs/pdf.mjs")
+        assert r.status_code == 200
+        assert "javascript" in r.headers["content-type"], r.headers["content-type"]
+        assert c.get("/vendor/pdfjs/pdf.worker.mjs").status_code == 200
         assert c.get("/vendor/pdf-lib.min.js").status_code == 200
         r = c.get("/docs/anketa-przedsiebiorcy.pdf")
         assert r.status_code == 200 and r.content[:4] == b"%PDF"
