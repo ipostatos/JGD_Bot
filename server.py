@@ -1,4 +1,4 @@
-"""JDG Гид — FastAPI (Mini App + API) и aiogram-бот в одном процессе.
+"""JDG HUB — FastAPI (Mini App + API) и aiogram-бот в одном процессе.
 
 Запуск: uvicorn server:app --host 127.0.0.1 --port $PORT
 Локально без бота (иначе 409 с продом): DISABLE_BOT=1
@@ -58,16 +58,17 @@ def build_bot():
 
     def app_kb():
         return InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="📖 Открыть JDG Гид",
+            InlineKeyboardButton(text="📖 Открыть JDG HUB",
                                  web_app=WebAppInfo(url=WEBAPP_URL))
         ]])
 
     @dp.message(CommandStart())
     async def start(m: Message):
         await m.answer(
-            "👋 Привет! Это <b>JDG Гид</b> — путеводитель по ИП в Польше.\n\n"
+            "👋 Привет! Это <b>JDG HUB</b> — путеводитель по ИП в Польше.\n\n"
             "Внутри: весь гайд сообщества, калькуляторы ZUS и налогов, "
-            "чек-листы, календарь предпринимателя и словарь терминов.\n\n"
+            "личный план с дедлайнами, раздел KSeF, проверка контрагента по NIP, "
+            "коды ошибок ZUS и AI-ассистент по базе гайда.\n\n"
             "Основано на гайде сообщества "
             "<a href=\"https://sobolevbel.github.io/jdg/\">sobolevbel.github.io/jdg</a> "
             "и чате @JDG_PBH.\n\n"
@@ -133,11 +134,11 @@ def build_bot():
 
     async def on_start():
         await bot.set_chat_menu_button(
-            menu_button=MenuButtonWebApp(text="JDG Гид",
+            menu_button=MenuButtonWebApp(text="JDG HUB",
                                          web_app=WebAppInfo(url=WEBAPP_URL)))
         from aiogram.types import BotCommand
         await bot.set_my_commands([
-            BotCommand(command="app", description="Открыть JDG Гид"),
+            BotCommand(command="app", description="Открыть JDG HUB"),
             BotCommand(command="nip", description="Проверить контрагента по NIP"),
             BotCommand(command="ksef", description="KSeF — меня это уже касается?"),
             BotCommand(command="blad", description="Код ошибки ZUS — что делать"),

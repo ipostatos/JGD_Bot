@@ -1,4 +1,4 @@
-# Деплой JDG Гид
+# Деплой JDG HUB
 
 VPS: root@46.224.220.94, каталог `/opt/jdg`, systemd `jdg`, порт 4400,
 Caddy-сайт `jdg-46-224-220-94.sslip.io` (авто-TLS).

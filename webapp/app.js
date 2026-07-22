@@ -1,4 +1,4 @@
-/* JDG Гид — общий каркас Mini App: Telegram init, нижний dock, утилиты. */
+/* JDG HUB — общий каркас Mini App: Telegram init, нижний dock, утилиты. */
 (function () {
   const tg = window.Telegram && window.Telegram.WebApp;
   if (tg) { tg.ready(); tg.expand(); }

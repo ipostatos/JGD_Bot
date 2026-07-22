@@ -1,4 +1,4 @@
-# JDG Гид — [@JGD_PL_bot](https://t.me/JGD_PL_bot)
+# JDG HUB — [@JGD_PL_bot](https://t.me/JGD_PL_bot)
 
 Telegram Mini App «Путеводитель по JDG (ИП) в Польше»: гайд сообщества
 [JDG PBH](https://t.me/JDG_PBH), калькуляторы ZUS и налогов, персональный план
