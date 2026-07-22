@@ -52,6 +52,15 @@ def test_signals_removal_is_red_flag():
     assert score < 40
 
 
+def test_unavailable_vies_is_not_reported_as_invalid():
+    """Таймаут VIES (None) не должен выглядеть как «VAT-UE не подтверждён»."""
+    wl = {"statusVat": "Czynny", "accountNumbers": ["x"]}
+    sig_down, _ = R._signals(wl, None, None, None)
+    assert not any("VIES" in s["text"] for s in sig_down)
+    sig_invalid, _ = R._signals(wl, {"valid": False}, None, None)
+    assert any("VIES" in s["text"] and s["level"] == "warn" for s in sig_invalid)
+
+
 def test_signals_ceidg_suspended_warns():
     sig, _ = R._signals(None, None, None, {"status": "ZAWIESZONY"})
     assert any("приостановлена" in s["text"] for s in sig)

@@ -246,10 +246,12 @@ def _signals(wl: dict | None, vies: dict | None, gus: dict | None,
     if gus and gus.get("closed"):
         sig.append({"level": "bad", "text": f"GUS: деятельность прекращена {gus['closed']}"})
         score -= 40
+    # ⚠️ vies=None означает «сервис не ответил», а не «VAT-UE недействителен»:
+    # VIES регулярно флапает, и выдавать его таймаут за отрицательный ответ нельзя
     if vies and vies["valid"]:
         sig.append({"level": "ok", "text": "VAT-UE действителен (VIES) — можно WDT/reverse charge"})
         score += 5
-    elif wl and wl.get("statusVat") == "Czynny":
+    elif vies and not vies["valid"] and wl and wl.get("statusVat") == "Czynny":
         sig.append({"level": "warn", "text": "В VIES не подтверждён — сделки внутри ЕС проверь отдельно"})
 
     return sig, max(0, min(100, score))
@@ -304,7 +306,9 @@ async def check_nip(raw_nip: str) -> dict:
         "level": "ok" if score >= 70 else ("warn" if score >= 40 else "bad"),
         "sources": sources,
     }
-    if any(v == "ok" for v in sources.values()):
+    # кэшируем на сутки только полный результат: иначе разовый таймаут источника
+    # застрянет в кэше на день и будет выглядеть как факт о контрагенте
+    if any(v == "ok" for v in sources.values()) and "error" not in sources.values():
         _cache_put(nip, out)
     return out
 
