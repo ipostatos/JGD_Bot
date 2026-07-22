@@ -54,20 +54,19 @@ def test_content_data_built():
         assert rates["year"] == 2026
 
 
-def test_tips_rejects_bad_initdata():
-    with client() as c:
-        r = c.post("/api/tips", json={"amount": 50, "initData": "hash=deadbeef"})
-        assert r.status_code == 401
-
-
-def test_tips_validates_amount_and_bot_offline():
+def test_stars_donation_is_gone():
+    """Свой Stars-донат убран: денег приложение не собирает."""
     good = make_init_data(os.environ["BOT_TOKEN"])
     with client() as c:
-        r = c.post("/api/tips", json={"amount": 7, "initData": good})
-        assert r.status_code == 400
-        # валидная сумма, но бот в тестах выключен -> 503
         r = c.post("/api/tips", json={"amount": 50, "initData": good})
-        assert r.status_code == 503
+        # роут удалён; POST добирается до StaticFiles и получает 405
+        assert r.status_code in (404, 405)
+        about = c.get("/about.html").text
+        assert "openInvoice" not in about and "/api/tips" not in about
+        # вместо звёзд — поддержка авторов гайда и ссылки на проекты автора
+        assert "t.me/JDG_PBH/234948" in about
+        assert "github.com/justandrei/jdg-tools" in about
+        assert "github.com/sobolevbel/jdg" in about
 
 
 def test_utility_pages_and_docs():

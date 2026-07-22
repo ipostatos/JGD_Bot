@@ -161,6 +161,9 @@ body.has-dock.kb-open{ padding-bottom:0 }
 /* ── гайд: списки секций и статей ── */
 .clamp2{ display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
   overflow:hidden }
+/* В about/tools строки собраны из span-ов: без этого заголовок и описание
+   текут одной строкой («GitHub · sobolevbel/jdg гайд, на котором…»). */
+.row-card .body .t, .row-card .body .d{ display:block }
 .row-card .num{ flex:0 0 auto; width:26px; height:26px; display:inline-flex;
   align-items:center; justify-content:center; font-size:13px; font-weight:800;
   color:var(--accent); background:color-mix(in srgb, var(--accent) 14%, transparent);

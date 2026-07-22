@@ -28,8 +28,6 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 WEBAPP_URL = os.environ.get("WEBAPP_URL", "http://127.0.0.1:4400")
 DISABLE_BOT = os.environ.get("DISABLE_BOT") == "1"
 
-TIP_AMOUNTS = (25, 50, 100, 250)
-
 
 def verify_init_data(init_data: str) -> dict | None:
     """HMAC-проверка Telegram WebApp initData. Возвращает user или None."""
@@ -51,8 +49,8 @@ def build_bot():
     from aiogram import Bot, Dispatcher, F
     from aiogram.filters import CommandStart, Command
     from aiogram.types import (
-        InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice,
-        MenuButtonWebApp, Message, PreCheckoutQuery, WebAppInfo,
+        InlineKeyboardButton, InlineKeyboardMarkup,
+        MenuButtonWebApp, Message, WebAppInfo,
     )
 
     bot = Bot(BOT_TOKEN)
@@ -82,23 +80,18 @@ def build_bot():
     async def app_cmd(m: Message):
         await m.answer("Открывай 👇", reply_markup=app_kb())
 
-    @dp.message(Command("donate"))
-    async def donate(m: Message):
-        kb = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text=f"⭐ {a}", callback_data=f"tip:{a}")
-            for a in TIP_AMOUNTS
-        ]])
-        await m.answer("Поддержать проект звёздами Telegram:", reply_markup=kb)
-
-    @dp.callback_query(F.data.startswith("tip:"))
-    async def tip_cb(q):
-        amount = int(q.data.split(":")[1])
-        await bot.send_invoice(
-            chat_id=q.from_user.id, title="Поддержка JDG Гид",
-            description="Спасибо, что поддерживаешь развитие проекта!",
-            payload=f"tip-{amount}", currency="XTR",
-            prices=[LabeledPrice(label="Донат", amount=amount)])
-        await q.answer()
+    @dp.message(Command("podderzhat"))
+    async def support(m: Message):
+        await m.answer(
+            "Приложение денег не собирает. Гайд и инструменты пишут другие люди — "
+            "поддержи их напрямую:\n\n"
+            "❤️ <a href=\"https://t.me/JDG_PBH/234948\">Как поддержать авторов гайда</a>\n"
+            "💻 <a href=\"https://github.com/sobolevbel/jdg\">github.com/sobolevbel/jdg</a> — сам гайд\n"
+            "🔧 <a href=\"https://github.com/justandrei/jdg-tools\">github.com/justandrei/jdg-tools</a> — "
+            "инструменты Андрея\n\n"
+            "А меня лучше всего поддержать, попробовав другие мои проекты — "
+            "они собраны в разделе «Ещё».",
+            parse_mode="HTML", disable_web_page_preview=True)
 
     @dp.message(Command("nip"))
     async def nip_cmd(m: Message):
@@ -131,14 +124,6 @@ def build_bot():
             await m.answer(_zus_error_reply(digits), parse_mode="HTML",
                            disable_web_page_preview=True)
 
-    @dp.pre_checkout_query()
-    async def pre_checkout(q: PreCheckoutQuery):
-        await q.answer(ok=True)
-
-    @dp.message(F.successful_payment)
-    async def paid(m: Message):
-        await m.answer("❤️ Спасибо за поддержку! Это мотивирует развивать гайд.")
-
     async def on_start():
         await bot.set_chat_menu_button(
             menu_button=MenuButtonWebApp(text="JDG Гид",
@@ -148,7 +133,7 @@ def build_bot():
             BotCommand(command="app", description="Открыть JDG Гид"),
             BotCommand(command="nip", description="Проверить контрагента по NIP"),
             BotCommand(command="blad", description="Код ошибки ZUS — что делать"),
-            BotCommand(command="donate", description="Поддержать проект ⭐"),
+            BotCommand(command="podderzhat", description="Как поддержать авторов гайда"),
         ])
 
     return bot, dp, on_start
@@ -333,26 +318,6 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/api/health")
 async def health():
     return {"ok": True, "bot": app.state.bot is not None}
-
-
-@app.post("/api/tips")
-async def tips(req: Request):
-    """Stars-инвойс для оплаты прямо в Mini App (openInvoice)."""
-    body = await req.json()
-    user = verify_init_data(body.get("initData", ""))
-    if user is None:
-        raise HTTPException(401, "bad initData")
-    amount = body.get("amount")
-    if amount not in TIP_AMOUNTS:
-        raise HTTPException(400, "bad amount")
-    if app.state.bot is None:
-        raise HTTPException(503, "bot offline")
-    link = await app.state.bot.create_invoice_link(
-        title="Поддержка JDG Гид",
-        description="Спасибо, что поддерживаешь развитие проекта!",
-        payload=f"tip-{amount}", currency="XTR",
-        prices=[{"label": "Донат", "amount": amount}])
-    return {"link": link}
 
 
 @app.get("/api/news")
