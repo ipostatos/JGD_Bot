@@ -73,6 +73,9 @@ def test_live_whitelist_and_vies():
     assert res["valid"] and res["vat_status"] == "Czynny"
     assert res["regon"] == "015259640"
     assert res["accounts"], "у Варшавы должны быть счета в белом списке"
+    # у крупных субъектов счетов тысячи — наружу отдаём не больше ACC_LIMIT
+    assert len(res["accounts"]) <= R.ACC_LIMIT
+    assert res["accounts_total"] >= len(res["accounts"])
     assert res["sources"]["whitelist"] == "ok"
     assert res["level"] == "ok"
 

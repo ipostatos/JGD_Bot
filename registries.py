@@ -36,6 +36,7 @@ VIES_BASE = "https://ec.europa.eu/taxation_customs/vies/rest-api"
 GUS_BASE = os.environ.get(
     "GUS_BIR_URL", "https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc")
 CEIDG_BASE = "https://dane.biznes.gov.pl/api/ceidg/v3"
+ACC_LIMIT = 50  # сколько счетов из белого списка отдаём наружу
 
 CEIDG_STATUS_RU = {
     "AKTYWNY": ("ok", "деятельность активна"),
@@ -295,7 +296,10 @@ async def check_nip(raw_nip: str) -> dict:
         "address": (wl or {}).get("workingAddress") or (wl or {}).get("residenceAddress")
                    or (gus or {}).get("address") or (vies or {}).get("address") or "",
         "registered": (wl or {}).get("registrationLegalDate") or (ceidg or {}).get("started"),
-        "accounts": (wl or {}).get("accountNumbers") or [],
+        # у крупных субъектов счетов бывают тысячи (у m.st. Warszawa — 4340):
+        # весь список раздувает ответ и суточный кэш, показываем первые ACC_LIMIT
+        "accounts": ((wl or {}).get("accountNumbers") or [])[:ACC_LIMIT],
+        "accounts_total": len((wl or {}).get("accountNumbers") or []),
         "vies": vies, "signals": signals, "score": score,
         "level": "ok" if score >= 70 else ("warn" if score >= 40 else "bad"),
         "sources": sources,

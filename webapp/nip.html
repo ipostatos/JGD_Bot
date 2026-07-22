@@ -86,8 +86,9 @@ function render(d) {
 
   const accs = (d.accounts || []).slice(0, 8).map(a =>
     a.replace(/(.{4})/g, '$1 ').trim()).join('<br>');
-  const more = d.accounts.length > 8 ? `<div class="muted" style="font-size:12px;margin-top:4px">
-    …и ещё ${d.accounts.length - 8}</div>` : '';
+  const total = d.accounts_total || d.accounts.length;
+  const more = total > 8 ? `<div class="muted" style="font-size:12px;margin-top:4px">
+    …и ещё ${total - 8}</div>` : '';
 
   const srcLabel = { whitelist: 'Белый список', vies: 'VIES', gus: 'GUS', ceidg: 'CEIDG' };
   const srcs = Object.entries(d.sources).map(([k, v]) =>
