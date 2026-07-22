@@ -317,8 +317,14 @@ async def lifespan(app: FastAPI):
         app.state.bot = None
         log.info("bot disabled")
     yield
+    # Отмены мало: monitor/deadline-циклы уходят в asyncio.to_thread (скрейпинг,
+    # запросы к inFakt), а поток отменить нельзя — интерпретатор ждёт его на
+    # выходе. Из-за этого рестарт при деплое висел ~90 с и Caddy отдавал 502.
+    # Ждём завершения ограниченно; добить процесс — дело systemd (TimeoutStopSec).
     for t in tasks:
         t.cancel()
+    if tasks:
+        await asyncio.wait(tasks, timeout=5)
 
 
 app = FastAPI(lifespan=lifespan)

@@ -13,6 +13,15 @@ ssh root@46.224.220.94 "cd /opt/jdg && venv/bin/pip install -q -r requirements.t
 ⚠️ Всегда `git -C <корень>` — из подкаталога archive упакует только его.
 `.env` в архив не входит (не в git) — лежит на VPS отдельно, не затирается.
 
+⚠️ Если правился `deploy/jdg.service`, его надо доставить в systemd отдельно:
+
+```bash
+ssh root@46.224.220.94 "cp /opt/jdg/deploy/jdg.service /etc/systemd/system/ && systemctl daemon-reload && systemctl restart jdg"
+```
+
+Остановка ограничена `TimeoutStopSec=15`: фоновые циклы уходят в потоки и не
+отменяются, без лимита рестарт висел ~90 с и Caddy всё это время отдавал 502.
+
 ## Обновление контента гайда (первоисточник обновился)
 
 ```bash

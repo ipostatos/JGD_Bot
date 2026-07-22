@@ -8,6 +8,10 @@ ExecStart=/opt/jdg/venv/bin/uvicorn server:app --host 127.0.0.1 --port 4400
 Restart=always
 RestartSec=3
 EnvironmentFile=/opt/jdg/.env
+# Фоновые циклы уходят в потоки (скрейпинг, inFakt) — их не отменить, и без
+# лимита остановка ждала полные 90 с, всё это время прод отдавал 502.
+TimeoutStopSec=15
+KillMode=mixed
 
 [Install]
 WantedBy=multi-user.target
