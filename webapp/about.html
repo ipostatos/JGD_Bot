@@ -8,6 +8,24 @@
 <link rel="stylesheet" href="theme.css">
 <link rel="stylesheet" href="jdg.css">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  .support{ margin-top:10px; background:var(--bg); border-radius:var(--r-md);
+    padding:10px var(--sp-3) }
+  .support summary{ cursor:pointer; font-weight:700; font-size:var(--fs-sm);
+    display:flex; align-items:center; gap:8px; list-style:none }
+  .support summary::-webkit-details-marker{ display:none }
+  .support summary::after{ content:'▾'; margin-left:auto; color:var(--hint);
+    transition:transform .15s }
+  .support[open] summary::after{ transform:rotate(180deg) }
+  .support summary .emi{ color:var(--bad) }
+  .support .cnt{ font-weight:400; font-size:12px; color:var(--hint) }
+  .sup-row{ display:flex; flex-direction:column; gap:2px; padding:9px 0;
+    font-size:13px; line-height:1.45; border-top:1px solid var(--border);
+    word-break:break-word }
+  .sup-row .who{ font-weight:600 }
+  .sup-row a{ color:var(--link); text-decoration:none }
+  .sup-row .muted{ font-size:12px }
+</style>
 </head>
 <body>
 <div class="hero"><span class="logo emi" data-icon="star"></span><h1>О проекте</h1></div>
@@ -29,9 +47,34 @@
   <p class="muted" style="font-size:14px;line-height:1.6;margin:0 0 10px">
     Гайд и инструменты сообщества пишут другие люди — и делают это бесплатно.
     Приложение денег не собирает: если хочешь отблагодарить, поддержи их напрямую.</p>
-  <a class="row-card" style="margin:8px 0 0;background:var(--bg);border:none" href="https://t.me/JDG_PBH/234948" target="_blank" rel="noopener">
-    <span class="ic-tile red" data-icon="heart"></span><span class="body"><span class="t" style="font-size:15px">Как поддержать авторов</span>
-    <span class="d">сообщение в чате сообщества с реквизитами</span></span><span class="chev">›</span></a>
+  <!-- Дубль закрепа чата (t.me/JDG_PBH/234948) на случай, если ссылка не
+       откроется. Под катом, чтобы не растягивать экран. Имена — как в
+       оригинале, без транслитерации. Сверено 2026-07-22. -->
+  <details class="support">
+    <summary><span class="emi" data-icon="heart"></span>Кому сказать спасибо
+      <span class="cnt">6 ссылок</span></summary>
+    <p class="muted" style="font-size:13px;line-height:1.55;margin:8px 0 10px">
+      Администрация и активисты чата помогают бесплатно. Ниже — их ссылки «на кофе»
+      из закрепа сообщества.</p>
+    <div class="sup-row"><span><span class="who">Оленька Корнева</span> <a href="https://t.me/KorneVa_OK" target="_blank" rel="noopener">@KorneVa_OK</a></span>
+      <span class="muted">ссылки нет — поддержи остальных</span></div>
+    <div class="sup-row"><span><span class="who">Veronika</span> <a href="https://t.me/verunko" target="_blank" rel="noopener">@verunko</a></span>
+      <a href="https://buymeacoffee.com/verunko" target="_blank" rel="noopener">buymeacoffee.com/verunko ↗</a></div>
+    <div class="sup-row"><span><span class="who">Olga Winnik</span> (Alena Prianichnikova) <a href="https://t.me/Pani_Prawnik" target="_blank" rel="noopener">@Pani_Prawnik</a></span>
+      <a href="https://buycoffee.to/olga.winnik" target="_blank" rel="noopener">buycoffee.to/olga.winnik ↗</a></div>
+    <div class="sup-row"><span><span class="who">Jaŭhien S.</span> <a href="https://t.me/VseBudzeDobra" target="_blank" rel="noopener">@VseBudzeDobra</a></span>
+      <a href="https://buymeacoffee.com/devsobolev" target="_blank" rel="noopener">buymeacoffee.com/devsobolev ↗</a></div>
+    <div class="sup-row"><span><span class="who">An.</span> <a href="https://t.me/vasareli" target="_blank" rel="noopener">@vasareli</a></span>
+      <a href="https://buymeacoffee.com/welcome2pl" target="_blank" rel="noopener">buymeacoffee.com/welcome2pl ↗</a></div>
+    <div class="sup-row"><span><span class="who">Андрей</span> <a href="https://t.me/justandrei79" target="_blank" rel="noopener">@justandrei79</a></span>
+      <a href="https://justandrei.github.io/coffee" target="_blank" rel="noopener">justandrei.github.io/coffee ↗</a></div>
+    <div class="sup-row"><span><span class="who">Henry Pointless</span> <a href="https://t.me/pointless_henry" target="_blank" rel="noopener">@pointless_henry</a></span>
+      <a href="https://revolut.me/pointlesshenry" target="_blank" rel="noopener">revolut.me/pointlesshenry ↗</a>
+      <span class="muted">только карты Польши и ЕС</span></div>
+    <p class="muted" style="font-size:12px;line-height:1.5;margin:10px 0 0">
+      Список скопирован из закрепа чата 22.07.2026 — актуальная версия всегда
+      <a href="https://t.me/JDG_PBH/234948" target="_blank" rel="noopener">в самом закрепе</a>.</p>
+  </details>
   <a class="row-card" style="margin:6px 0 0;background:var(--bg);border:none" href="https://github.com/sobolevbel/jdg" target="_blank" rel="noopener">
     <span class="ic-tile" data-icon="github"></span><span class="body"><span class="t" style="font-size:15px">GitHub · sobolevbel/jdg</span>
     <span class="d">гайд, на котором построено приложение</span></span><span class="chev">›</span></a>

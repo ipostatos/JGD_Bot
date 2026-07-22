@@ -69,6 +69,21 @@ def test_stars_donation_is_gone():
         assert "github.com/sobolevbel/jdg" in about
 
 
+def test_support_links_mirrored_under_cut():
+    """Закреп чата продублирован в приложении и спрятан под <details>."""
+    with client() as c:
+        about = c.get("/about.html").text
+        assert "<details class=\"support\">" in about
+        for link in ("buymeacoffee.com/verunko", "buycoffee.to/olga.winnik",
+                     "buymeacoffee.com/devsobolev", "buymeacoffee.com/welcome2pl",
+                     "justandrei.github.io/coffee", "revolut.me/pointlesshenry"):
+            assert link in about, link
+        # имена — как в оригинале, без транслитерации
+        assert "Jaŭhien S." in about and "Olga Winnik" in about
+        # у одного из активистов ссылки нет — это должно быть видно
+        assert "ссылки нет" in about
+
+
 def test_utility_pages_and_docs():
     with client() as c:
         for page in ("/reader.html", "/merge.html", "/photo.html"):
