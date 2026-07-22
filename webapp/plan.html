@@ -243,22 +243,11 @@ document.getElementById('pform').addEventListener('click', (e) => {
 });
 
 // ── этапы ZUS ──
-const lastDay = (y, m) => new Date(y, m + 1, 0); // m: 0-based
-function addMonths(d, n) { return new Date(d.getFullYear(), d.getMonth() + n, d.getDate()); }
+// Правила дат живут в app.js (window.stageDates) — здесь была вторая копия,
+// и она умела расходиться: профиль без поля ulga эта копия считала «без ulgi»,
+// а главная — «с ulgą». Единый источник + единая трактовка пустого поля.
 const fmtD = (d) => d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
-
-function stageDates(reg, useUlga) {
-  // ulga: 6 полных месяцев; месяц старта считается, только если старт 1-го числа
-  let ulgaEnd = null, base = reg;
-  if (useUlga) {
-    const extra = reg.getDate() === 1 ? 5 : 6;
-    ulgaEnd = lastDay(reg.getFullYear(), reg.getMonth() + extra);
-    base = new Date(ulgaEnd.getFullYear(), ulgaEnd.getMonth() + 1, 1);
-  }
-  // preferencyjne: 24 полных месяца
-  const prefEnd = lastDay(base.getFullYear(), base.getMonth() + (base.getDate() === 1 ? 23 : 24));
-  return { ulgaEnd, prefEnd };
-}
+const useUlga = (prof) => prof.ulga !== false;
 
 function renderStages() {
   const prof = getProfile();
@@ -266,10 +255,10 @@ function renderStages() {
   if (!prof.reg) { card.classList.add('hidden'); return; }
   card.classList.remove('hidden');
   const reg = new Date(prof.reg + 'T00:00:00');
-  const { ulgaEnd, prefEnd } = stageDates(reg, prof.ulga);
+  const { ulgaEnd, prefEnd } = stageDates(reg, useUlga(prof));
   const now = new Date();
   const st = [];
-  if (prof.ulga) st.push({ t: 'Ulga na start', d: 'до ' + fmtD(ulgaEnd), end: ulgaEnd });
+  if (useUlga(prof)) st.push({ t: 'Ulga na start', d: 'до ' + fmtD(ulgaEnd), end: ulgaEnd });
   st.push({ t: 'Preferencyjne', d: 'до ' + fmtD(prefEnd), end: prefEnd });
   st.push({ t: 'Duży ZUS', d: 'далее', end: null });
   let cur = st.findIndex(s => s.end === null || now <= s.end);
@@ -303,8 +292,8 @@ function renderDeadlines() {
     t: 'Годовая декларация PIT', s: prof.form === 'ryczalt' ? 'PIT-28' : prof.form === 'liniowy' ? 'PIT-36L' : 'PIT-36' });
   const prof2 = getProfile();
   if (prof2.reg) {
-    const { ulgaEnd, prefEnd } = stageDates(new Date(prof2.reg + 'T00:00:00'), prof2.ulga);
-    if (prof2.ulga && ulgaEnd >= now) evs.push({ d: ulgaEnd, t: 'Конец Ulga na Start', s: 'подать ZUS ZUA (переход на preferencyjne)', hot: true });
+    const { ulgaEnd, prefEnd } = stageDates(new Date(prof2.reg + 'T00:00:00'), useUlga(prof2));
+    if (useUlga(prof2) && ulgaEnd >= now) evs.push({ d: ulgaEnd, t: 'Конец Ulga na Start', s: 'подать ZUS ZUA (переход на preferencyjne)', hot: true });
     if (prefEnd >= now) evs.push({ d: prefEnd, t: 'Конец Preferencyjnych', s: 'переход на Duży ZUS', hot: true });
   }
   const up = evs.filter(e => e.d >= new Date(now.getFullYear(), now.getMonth(), now.getDate()))

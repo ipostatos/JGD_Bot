@@ -59,7 +59,10 @@ def with_flag(flag: str) -> list[dict]:
     return [dict(zip(("user_id", "reg", "form", "vat", "ulga"), r)) for r in rows]
 
 
-# ── этапы ZUS (зеркало stageDates из plan.html) ──────────────────────────────
+# ── этапы ZUS (зеркало window.stageDates из webapp/app.js) ───────────────────
+# Совпадение зеркал на опорных датах проверяет
+# test_webapp_browser.test_zus_stages_match_python_mirror — правишь здесь,
+# правь и app.js, иначе приложение и пуши назовут разные сроки перехода.
 def _last_day(y: int, m: int) -> date:
     if m > 12:
         y, m = y + (m - 1) // 12, (m - 1) % 12 + 1

@@ -32,4 +32,31 @@ jobs:
           git clone --depth 1 https://github.com/sobolevbel/jdg sources/guide
           python tools/build_content.py
 
-      - run: pytest -q
+      - run: pytest -q --ignore=test_webapp_browser.py
+
+  # Браузерный смоук вынесен в отдельную работу: он ставит Chromium (~120 МБ) и
+  # идёт дольше, а падать должен отдельно от логики — по красному заданию сразу
+  # видно, вёрстка сломалась или расчёты.
+  browser:
+    runs-on: ubuntu-latest
+    env:
+      NO_NET: "1"
+      DISABLE_BOT: "1"
+      BOT_TOKEN: "12345:TESTTOKEN"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt playwright
+      - run: python -m playwright install --with-deps chromium
+
+      - name: Сборка контента гайда
+        run: |
+          git clone --depth 1 https://github.com/sobolevbel/jdg sources/guide
+          python tools/build_content.py
+
+      - run: pytest -q test_webapp_browser.py

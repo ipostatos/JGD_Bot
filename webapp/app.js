@@ -93,8 +93,9 @@
   };
 
   // ── жизненный цикл ZUS: даты границ фаз ──
-  // Зеркалит локальную stageDates в plan.html (та оставлена как есть, чтобы не
-  // трогать прод-страницу). При правке правил менять ОБА места.
+  // ЕДИНСТВЕННЫЙ источник правил в вебапе (plan.html и index.html зовут отсюда).
+  // Python-зеркало — profiles.stage_dates, для пушей; их совпадение на опорных
+  // датах проверяет test_webapp_browser.test_zus_stages_match_python_mirror.
   window.stageDates = function (reg, useUlga) {
     const lastDay = (y, m) => new Date(y, m + 1, 0); // m: 0-based
     let ulgaEnd = null, base = reg;
