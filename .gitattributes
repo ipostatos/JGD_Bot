@@ -1,0 +1,3 @@
+# Шелл-скрипты едут на Linux-VPS: CRLF там ломает shebang («bad interpreter»).
+*.sh text eol=lf
+deploy/*.service text eol=lf

@@ -45,6 +45,30 @@ ssh root@46.224.220.94 "cd /opt/jdg && python3 -m venv venv && venv/bin/pip inst
 # затем: systemctl reload caddy
 ```
 
+## Бэкап базы
+
+`news.db` — профили, подписки и зашифрованные ключи inFakt пользователей.
+Ставится один раз:
+
+```bash
+ssh root@46.224.220.94 "chmod +x /opt/jdg/deploy/backup.sh && \
+  (crontab -l 2>/dev/null | grep -v backup.sh; \
+   echo '17 3 * * * /opt/jdg/deploy/backup.sh >> /var/log/jdg-backup.log 2>&1') | crontab -"
+```
+
+Снимки и копии `.env` — в `/opt/backups/jdg`, хранятся 14 дней, права 600.
+⚠️ **Без `FERNET_KEY` из `.env` ключи inFakt в бэкапе расшифровать нельзя** —
+восстанавливать только пару «база + .env того же дня». Копию `FERNET_KEY`
+держать вне VPS (менеджер паролей).
+
+Восстановление:
+
+```bash
+systemctl stop jdg
+gunzip -c /opt/backups/jdg/news-YYYYMMDD-HHMM.db.gz > /opt/jdg/news.db
+systemctl start jdg
+```
+
 ## Проверка
 
 ```bash
