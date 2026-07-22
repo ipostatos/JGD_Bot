@@ -35,10 +35,17 @@ _index = None
 
 
 def _load_index():
-    """Статьи гайда + база ошибок ZUS + (если собран faq_miner-ом) FAQ чата."""
+    """Статьи гайда + KSeF + база ошибок ZUS + (если собран faq_miner-ом) FAQ чата."""
     global _index
     if _index is None:
         _index = json.loads(SEARCH_JSON.read_text(encoding="utf-8"))
+        try:
+            import ksef
+            entries = ksef.index_entries()
+            _index = _index + entries
+            log.info("ksef: +%d записей в индекс", len(entries))
+        except Exception as e:
+            log.warning("ksef не прочитан: %s", e)
         if ZUS_ERRORS_JSON.is_file():
             try:
                 errs = json.loads(ZUS_ERRORS_JSON.read_text(encoding="utf-8"))["errors"]

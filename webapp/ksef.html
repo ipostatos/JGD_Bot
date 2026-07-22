@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>JDG Гид — KSeF</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="jdg.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  .kf-head{ font-size:var(--fs-h2); font-weight:800; line-height:1.25; margin-bottom:8px }
+  .kf-chips{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px }
+  .sig{ display:flex; gap:8px; align-items:flex-start; padding:7px 0;
+    font-size:var(--fs-sm); line-height:1.45; border-top:1px solid var(--border) }
+  .sig:first-child{ border-top:none }
+  .sig .si{ width:18px; height:18px; flex:0 0 18px; margin-top:1px; color:var(--hint) }
+  .sig.ok .si{ color:var(--ok) } .sig.warn .si{ color:var(--warn) } .sig.bad .si{ color:var(--bad) }
+  /* таймлайн этапов: линия слева, точка на каждом этапе, прошедшие гаснут */
+  .tl{ position:relative; padding-left:22px }
+  .tl::before{ content:''; position:absolute; left:5px; top:6px; bottom:6px;
+    width:2px; background:var(--border) }
+  .tl-row{ position:relative; padding:9px 0 }
+  .tl-row + .tl-row{ border-top:1px solid var(--border) }
+  .tl-row::before{ content:''; position:absolute; left:-21px; top:15px; width:12px; height:12px;
+    border-radius:50%; background:var(--card); border:2px solid var(--border) }
+  .tl-row.done::before{ background:var(--ok); border-color:var(--ok) }
+  .tl-row.now::before{ background:var(--warn); border-color:var(--warn) }
+  .tl-date{ font-size:var(--fs-xs); font-weight:700; letter-spacing:.03em;
+    text-transform:uppercase; color:var(--hint) }
+  .tl-title{ font-weight:700; font-size:var(--fs-body); margin:1px 0 2px }
+  .tl-who{ font-size:12px; color:var(--hint); margin-bottom:4px }
+  .tl-what{ font-size:13px; line-height:1.5 }
+  .lst{ margin:0; padding-left:18px; font-size:13px; line-height:1.55 }
+  .lst li{ margin:5px 0 }
+  .step{ display:flex; gap:10px; align-items:flex-start; padding:9px 0;
+    border-top:1px solid var(--border) }
+  .step:first-child{ border-top:none }
+  .step .num{ flex:0 0 auto; width:24px; height:24px; border-radius:50%;
+    display:inline-flex; align-items:center; justify-content:center;
+    background:var(--bg); font-size:12px; font-weight:700; color:var(--hint) }
+  .step .t{ font-weight:600; font-size:var(--fs-sm) }
+  .step .d{ color:var(--hint); font-size:12px; line-height:1.5; margin-top:2px }
+  .faq-item{ border-top:1px solid var(--border); padding:2px 0 }
+  .faq-item:first-child{ border-top:none }
+  .faq-item summary{ cursor:pointer; list-style:none; font-weight:600;
+    font-size:var(--fs-sm); line-height:1.45; padding:9px 0; display:flex; gap:8px }
+  .faq-item summary::-webkit-details-marker{ display:none }
+  .faq-item summary::after{ content:'▾'; margin-left:auto; color:var(--hint);
+    flex:0 0 auto; transition:transform .15s }
+  .faq-item[open] summary::after{ transform:rotate(180deg) }
+  .faq-item p{ margin:0 0 10px; font-size:13px; line-height:1.55; color:var(--hint) }
+  .src a{ display:block; font-size:12px; line-height:1.5; padding:5px 0;
+    color:var(--link); text-decoration:none; word-break:break-word }
+</style>
+</head>
+<body>
+<div class="hero"><span class="logo emi" data-icon="file-check"></span><h1>KSeF</h1></div>
+<p class="sub">Электронные фактуры: касается ли это тебя уже сейчас и что делать</p>
+
+<div id="status"><div class="state">Считаем твой статус…</div></div>
+
+<div class="card" style="margin-bottom:12px">
+  <div class="h2"><span class="emi" data-icon="calendar"></span>Этапы</div>
+  <div class="tl" id="tl"></div>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+  <div class="h2"><span class="emi" style="color:var(--ok)" data-icon="shield-check"></span>Что можно до конца 2026</div>
+  <div id="relief"></div>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+  <div class="h2"><span class="emi" data-icon="circle-help"></span>Что в KSeF не идёт</div>
+  <ul class="lst" id="excluded"></ul>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+  <div class="h2"><span class="emi" data-icon="wrench"></span>Как подключиться</div>
+  <div id="steps"></div>
+  <div class="h2" style="margin:14px 0 4px;font-size:var(--fs-body)">Чем выставлять</div>
+  <div id="access"></div>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+  <div class="h2"><span class="emi" data-icon="message-circle"></span>Частые вопросы</div>
+  <div id="faq"></div>
+  <a class="btn ghost" style="margin-top:10px" href="ai.html?q=KSeF"><span class="bi" data-icon="bot"></span> Спросить ассистента</a>
+</div>
+
+<div class="card" style="margin-bottom:12px">
+  <div class="h2" style="margin-bottom:2px">Источники</div>
+  <p class="muted" style="font-size:12px;margin:0 0 6px">Официальные страницы Минфина. Данные сверены <b id="upd">—</b>.</p>
+  <div class="src" id="src"></div>
+</div>
+
+<p class="foot">Справочная информация, не юридическая и не налоговая консультация.
+Спорные случаи — в чат <a href="https://t.me/JDG_PBH" target="_blank" rel="noopener">@JDG_PBH</a> или к бухгалтеру.</p>
+
+<script src="icons.js"></script>
+<script src="app.js"></script>
+<script>
+renderDock('home');
+setupBack('index.html');
+
+const SIG_ICON = { ok: 'check-circle', warn: 'alert-triangle', bad: 'x-circle' };
+const MON = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function ruDate(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return d.getDate() + ' ' + MON[d.getMonth()] + ' ' + d.getFullYear();
+}
+
+function renderFacts(f) {
+  const today = new Date();
+  document.getElementById('tl').innerHTML = f.stages.map(s => {
+    const d = new Date(s.date + 'T00:00:00');
+    const cls = d <= today ? 'done' : (d - today < 92 * 864e5 ? 'now' : '');
+    return `<div class="tl-row ${cls}">
+      <div class="tl-date">${ruDate(s.date)}${d <= today ? ' · уже действует' : ''}</div>
+      <div class="tl-title">${esc(s.title)}</div>
+      <div class="tl-who">${esc(s.who)}</div>
+      <div class="tl-what">${esc(s.what)}</div></div>`;
+  }).join('');
+
+  document.getElementById('relief').innerHTML = f.relief.map(r =>
+    `<div class="step"><span class="num">✓</span><span><span class="t">${esc(r.title)}</span>
+      <span class="d">${esc(r.text)}</span></span></div>`).join('');
+
+  document.getElementById('excluded').innerHTML =
+    f.excluded.map(x => `<li>${esc(x)}</li>`).join('');
+
+  document.getElementById('steps').innerHTML = f.steps.map((s, i) =>
+    `<div class="step"><span class="num">${i + 1}</span><span><span class="t">${esc(s.t)}</span>
+      <span class="d">${esc(s.d)}</span></span></div>`).join('');
+
+  document.getElementById('access').innerHTML = f.access.map(a =>
+    `<div class="step"><span class="num"><span class="si" data-icon="circle-dot"></span></span>
+      <span><span class="t">${a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.title)} ↗</a>` : esc(a.title)}</span>
+      <span class="d">${esc(a.text)}</span></span></div>`).join('');
+
+  document.getElementById('faq').innerHTML = f.faq.map(q =>
+    `<details class="faq-item"><summary>${esc(q.q)}</summary><p>${esc(q.a)}</p></details>`).join('');
+
+  document.getElementById('upd').textContent = ruDate(f.updated);
+  document.getElementById('src').innerHTML = f.sources.map(s =>
+    `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)} ↗</a>`).join('');
+  Icons.hydrate();
+}
+
+function renderStatus(st, infakt, hasProfile) {
+  const lvl = { ok: 'var(--ok)', warn: 'var(--warn)', bad: 'var(--bad)' }[st.level] || 'var(--border)';
+  const months = Math.round(st.days_to_full / 30.4);
+  const left = st.days_to_full > 60 ? `~${months} мес.` : `${st.days_to_full} дн.`;
+  document.getElementById('status').innerHTML = `
+    <div class="card" style="margin-bottom:12px;border-left:3px solid ${lvl}">
+      <div class="kf-head">${esc(st.headline)}</div>
+      <div class="kf-chips">
+        <span class="chip">до полного KSeF: ${left}</span>
+        ${infakt ? '<span class="chip">данные из inFakt</span>'
+          : hasProfile ? '<span class="chip">по профилю из «Плана»</span>'
+            : '<span class="chip">общие правила · <a href="plan.html">заполни профиль</a></span>'}
+      </div>
+      ${st.lines.map(l => `<div class="sig ${l.level}">
+        <span class="si" data-icon="${esc(l.icon)}"></span><span>${esc(l.text)}</span></div>`).join('')}
+    </div>`;
+  Icons.hydrate();
+}
+
+loadJSON('ksef.json').then(renderFacts).catch(() => {});
+
+(async function () {
+  const p = getProfile();
+  // Пустой профиль не выдаём за «не плательщик VAT» — поля шлём только те,
+  // что человек реально заполнил, остальное для сервера остаётся неизвестным.
+  const prof = {};
+  if (p.reg) { prof.reg = p.reg; prof.vat = !!p.vat; }
+  try {
+    const r = await fetch('/api/ksef', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: tg ? tg.initData : '', profile: prof }),
+    });
+    if (!r.ok) throw new Error('http ' + r.status);
+    const d = await r.json();
+    renderStatus(d.status, d.infakt, !!prof.reg);
+  } catch (e) {
+    document.getElementById('status').innerHTML =
+      '<div class="state">Не получилось посчитать статус. Этапы и правила ниже — они не зависят от профиля.</div>';
+  }
+})();
+</script>
+</body>
+</html>

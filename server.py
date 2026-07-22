@@ -103,6 +103,13 @@ def build_bot():
         await m.answer(await _nip_reply(arg), parse_mode="HTML",
                        disable_web_page_preview=True)
 
+    @dp.message(Command("ksef"))
+    async def ksef_cmd(m: Message):
+        import profiles
+        prof = await asyncio.to_thread(profiles.get, m.from_user.id)
+        await m.answer(_ksef_reply(prof), parse_mode="HTML",
+                       disable_web_page_preview=True, reply_markup=app_kb())
+
     @dp.message(Command("blad"))
     async def blad_cmd(m: Message):
         arg = (m.text or "").partition(" ")[2].strip()
@@ -132,6 +139,7 @@ def build_bot():
         await bot.set_my_commands([
             BotCommand(command="app", description="Открыть JDG Гид"),
             BotCommand(command="nip", description="Проверить контрагента по NIP"),
+            BotCommand(command="ksef", description="KSeF — меня это уже касается?"),
             BotCommand(command="blad", description="Код ошибки ZUS — что делать"),
             BotCommand(command="podderzhat", description="Как поддержать авторов гайда"),
         ])
@@ -273,6 +281,33 @@ async def _nip_reply(raw_nip: str) -> str:
             f"Полная карточка и проверка конкретного счёта — в приложении.")
 
 
+async def _ksef_sales(user_id: int) -> dict | None:
+    """Свод по фактурам inFakt для порога 10 000 zł (если ключ подключён)."""
+    import ksef
+    try:
+        import infakt
+        key = infakt.load_key(user_id)
+        if not key:
+            return None
+        from hermes.infakt import Infakt
+        invoices = await asyncio.to_thread(lambda: Infakt(key).invoices())
+        return ksef.sales_from_invoices(invoices)
+    except Exception as e:
+        log.warning("ksef sales for %s failed: %s", user_id, e)
+        return None
+
+
+def _ksef_reply(profile: dict | None) -> str:
+    """Короткий статус KSeF для чата (детали — в Mini App)."""
+    import ksef
+    st = ksef.status(profile)
+    lines = "\n".join(f"{SIG_EMOJI[l['level']]} {l['text']}" for l in st["lines"][:4])
+    return (f"<b>KSeF: {st['headline']}</b>\n\n{lines}\n\n"
+            f"До 1 января 2027 (когда обязаны все и включаются штрафы) — "
+            f"{st['days_to_full']} дн.\nЭтапы, чек-лист и FAQ — в приложении, "
+            f"раздел «KSeF».")
+
+
 async def _dra_sum_line(user_id: int) -> str:
     """Если подключён inFakt — реальная сумма ZUS в напоминание."""
     try:
@@ -365,6 +400,19 @@ async def api_ask(req: Request):
     if "error" in res:
         raise HTTPException(429 if "Лимит" in res["error"] else 400, res["error"])
     return res
+
+
+@app.post("/api/ksef")
+async def api_ksef(req: Request):
+    """Персональный статус KSeF. initData необязателен: без него отвечаем по
+    присланному профилю, с ним — добавляем расчёт порога по фактурам inFakt."""
+    import ksef
+    body = await req.json()
+    user = verify_init_data(body.get("initData", ""))
+    profile = body.get("profile") or None
+    sales = await _ksef_sales(user["id"]) if user else None
+    return {"status": ksef.status(profile, sales=sales),
+            "infakt": sales is not None}
 
 
 @app.post("/api/infakt/connect")
