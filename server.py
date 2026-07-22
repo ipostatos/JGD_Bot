@@ -9,6 +9,7 @@ import hmac
 import json
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import parse_qsl
@@ -29,8 +30,21 @@ WEBAPP_URL = os.environ.get("WEBAPP_URL", "http://127.0.0.1:4400")
 DISABLE_BOT = os.environ.get("DISABLE_BOT") == "1"
 
 
+def esc_html(s) -> str:
+    """Экранирование для сообщений бота (parse_mode=HTML)."""
+    import html
+    return html.escape(str(s or ""), quote=True)
+
+
+# initData подписан навсегда: Telegram не кладёт в него срок жизни, поэтому
+# перехваченную строку можно переигрывать месяцами. Ограничиваем возрастом.
+INIT_DATA_TTL = 24 * 3600
+
+
 def verify_init_data(init_data: str) -> dict | None:
     """HMAC-проверка Telegram WebApp initData. Возвращает user или None."""
+    if not BOT_TOKEN:
+        return None          # без токена HMAC считается от пустого секрета
     try:
         pairs = dict(parse_qsl(init_data, keep_blank_values=True))
         their_hash = pairs.pop("hash", "")
@@ -38,6 +52,10 @@ def verify_init_data(init_data: str) -> dict | None:
         secret = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
         good = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(good, their_hash):
+            return None
+        age = time.time() - int(pairs.get("auth_date", 0))
+        if not 0 <= age <= INIT_DATA_TTL:
+            log.info("initData отклонён по возрасту: %.0f с", age)
             return None
         return json.loads(pairs.get("user", "{}"))
     except Exception:
@@ -162,9 +180,15 @@ async def monitor_loop(app: FastAPI):
             bot = app.state.bot
             if bot:
                 for item in to_push:
-                    text = (f"🔔 <b>{item['source']}</b>\n{item['title']}\n\n"
-                            f"{item['summary']}\n"
-                            f"<a href=\"{item['url']}\">Читать оригинал</a>")
+                    # текст чужой (скрейп + пересказ модели): без экранирования
+                    # «<» из заголовка ломает parse_mode=HTML, а <a href> из
+                    # источника подменил бы ссылку в нашем сообщении
+                    src, title, summary = (esc_html(item.get(k, "")) for k in
+                                           ("source", "title", "summary"))
+                    url = item.get("url", "")
+                    text = (f"🔔 <b>{src}</b>\n{title}\n\n{summary}\n"
+                            + (f"<a href=\"{esc_html(url)}\">Читать оригинал</a>"
+                               if url.startswith(("http://", "https://")) else ""))
                     for uid in monitor.subs_for(item):
                         try:
                             await bot.send_message(
@@ -175,6 +199,8 @@ async def monitor_loop(app: FastAPI):
                             pass  # юзер заблокировал бота и т.п.
         except Exception as e:
             log.warning("monitor loop error: %s", e)
+        _tmp_cleanup()   # временные файлы юзеров: чистим по расписанию, а не
+                         # только когда кто-то грузит новый
         await asyncio.sleep(MONITOR_INTERVAL)
 
 
@@ -268,12 +294,16 @@ async def _nip_reply(raw_nip: str) -> str:
         return "Реестры сейчас не отвечают — попробуй чуть позже."
     if not d.get("valid"):
         return d.get("error", "Не похоже на NIP.")
-    head = f"<b>{d['name'] or 'Название не найдено'}</b>\nNIP {d['nip']}"
-    facts = [f"{k}: {v}" for k, v in (
+    # данные из чужих реестров идут в сообщение с parse_mode=HTML —
+    # название фирмы со знаком «<» иначе ломает разметку
+    head = (f"<b>{esc_html(d['name'] or 'Название не найдено')}</b>\n"
+            f"NIP {esc_html(d['nip'])}")
+    facts = [f"{k}: {esc_html(v)}" for k, v in (
         ("REGON", d.get("regon")), ("KRS", d.get("krs")),
         ("Адрес", d.get("address")), ("PKD", ", ".join(d.get("pkd") or [])),
     ) if v]
-    signals = "\n".join(f"{SIG_EMOJI[s['level']]} {s['text']}" for s in d["signals"])
+    signals = "\n".join(f"{SIG_EMOJI[s['level']]} {esc_html(s['text'])}"
+                        for s in d["signals"])
     accounts = d.get("accounts") or []
     acc_line = (f"\n\n💳 Счетов в белом списке: {len(accounts)}"
                 if accounts else "\n\n💳 Счетов в белом списке нет")
@@ -596,6 +626,11 @@ async def tmpf(name: str):
         raise HTTPException(404)
     path = TMP_DIR / name
     if not path.is_file():
+        raise HTTPException(404, "expired")
+    # TTL раньше был на словах: чистка запускалась только при новой загрузке,
+    # и без неё чужой документ лежал на диске и отдавался по ссылке вечно.
+    if time.time() - path.stat().st_mtime > TMP_TTL:
+        path.unlink(missing_ok=True)
         raise HTTPException(404, "expired")
     media = "application/pdf" if name.endswith(".pdf") else "image/jpeg"
     return FileResponse(path, media_type=media)

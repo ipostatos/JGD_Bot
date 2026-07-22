@@ -41,6 +41,17 @@ setupBack('index.html');
 const TOPIC_ICON = { 'ZUS': 'shield-check', 'VAT': 'file-check', 'PIT': 'coins',
   'ryczałt': 'coins', 'KSeF': 'file-text', 'легализация': 'flag' };
 
+// Лента строится из ЧУЖОГО текста: заголовки скрейпятся с gov-сайтов, выжимку
+// пишет модель. Без экранирования разметка оттуда исполнилась бы у всех
+// читателей, а javascript:-ссылка приехала бы в href.
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function safeUrl(u) {
+  return /^https?:\/\//i.test(String(u || '')) ? esc(u) : '#';
+}
+
 loadJSON('/api/news').then(({ items }) => {
   const feed = document.getElementById('feed');
   if (!items.length) {
@@ -53,12 +64,12 @@ loadJSON('/api/news').then(({ items }) => {
     const imp = n.importance >= 3 ? '<span class="imp3">важно · действуй</span>'
       : n.importance === 2 ? '<span class="imp2">стоит прочитать</span>' : '';
     return `<div class="card news-card">
-      <div class="src"><span class="chip">${n.source}</span><span>${d}</span>${imp}</div>
-      <div class="tt">${n.title}</div>
-      <div class="sm">${n.summary || ''}</div>
+      <div class="src"><span class="chip">${esc(n.source)}</span><span>${d}</span>${imp}</div>
+      <div class="tt">${esc(n.title)}</div>
+      <div class="sm">${esc(n.summary || '')}</div>
       <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-        ${n.topics.map(t => `<span class="chip">${t}</span>`).join('')}
-        <a class="chip" style="color:var(--link)" href="${n.url}" target="_blank" rel="noopener">оригинал ↗</a>
+        ${(n.topics || []).map(t => `<span class="chip">${esc(t)}</span>`).join('')}
+        <a class="chip" style="color:var(--link)" href="${safeUrl(n.url)}" target="_blank" rel="noopener">оригинал ↗</a>
       </div></div>`;
   }).join('');
 }).catch(() => {

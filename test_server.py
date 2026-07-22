@@ -13,9 +13,12 @@ from fastapi.testclient import TestClient  # noqa: E402
 import server  # noqa: E402
 
 
-def make_init_data(token: str, user_id: int = 42) -> str:
+def make_init_data(token: str, user_id: int = 42, age: int = 0) -> str:
+    """age — на сколько секунд «состарить» подпись (для проверки TTL)."""
+    import time
+
     pairs = {"user": json.dumps({"id": user_id, "first_name": "Test"}),
-             "auth_date": "1700000000", "query_id": "AAA"}
+             "auth_date": str(int(time.time()) - age), "query_id": "AAA"}
     check = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
     secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
     pairs["hash"] = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
@@ -159,3 +162,27 @@ def test_verify_init_data_roundtrip():
     user = server.verify_init_data(make_init_data(token, 777))
     assert user and user["id"] == 777
     assert server.verify_init_data("garbage") is None
+
+
+def test_init_data_expires():
+    """Подпись Telegram бессрочна — перехваченную строку нельзя переигрывать."""
+    token = os.environ["BOT_TOKEN"]
+    fresh = make_init_data(token, 1, age=60)
+    stale = make_init_data(token, 1, age=server.INIT_DATA_TTL + 60)
+    future = make_init_data(token, 1, age=-3600)      # «подписано в будущем»
+    assert server.verify_init_data(fresh)
+    assert server.verify_init_data(stale) is None
+    assert server.verify_init_data(future) is None
+
+
+def test_no_bot_token_means_no_trust(monkeypatch):
+    """Пустой BOT_TOKEN не должен превращаться в «секрет из пустой строки»."""
+    good = make_init_data(os.environ["BOT_TOKEN"])
+    monkeypatch.setattr(server, "BOT_TOKEN", "")
+    assert server.verify_init_data(good) is None
+
+
+def test_bot_escapes_foreign_text():
+    """Скрейп и ответы реестров идут в parse_mode=HTML — экранируем."""
+    assert server.esc_html('<b>ЗАО "Рога" & Ко</b>') == \
+        "&lt;b&gt;ЗАО &quot;Рога&quot; &amp; Ко&lt;/b&gt;"
