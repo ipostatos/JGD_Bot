@@ -36,7 +36,7 @@ Telegram Mini App «Путеводитель по JDG (ИП) в Польше»: 
   и `rates_years.json`, сверены с zus.pl / таблицей гайда копейка в копейку)
 - `tools/build_content.py` — markdown гайда → `webapp/data/` (статьи, поиск, картинки, иконки секций)
 - `webapp/` — vanilla JS, без сборщика: `theme.css` (ISSA) + `jdg.css`, `icons.js` (Lucide),
-  `reader.html` (pdf.js), `merge.html`, `photo.html`, `lightbox.js`
+  `reader.html` (pdf.js 6, ESM), `merge.html`, `photo.html`, `lightbox.js`
 - `deploy/` — systemd-юнит и процедура (git archive | ssh, VPS + Caddy)
 - Концепция и роадмап: `docs/CONCEPT.md` (мониторинг госсайтов, AI-ассистент, inFakt API)
 

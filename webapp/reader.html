@@ -71,9 +71,12 @@
 </div>
 
 <!-- pdf.js локально (без CDN): офлайн и строгий CSP -->
-<script src="vendor/pdfjs/pdf.min.js"></script>
-<script>
+<script type="module">
 "use strict";
+// pdf.js 6 (legacy-сборка) поставляется только модулем — отсюда type="module"
+// и импорт вместо глобального pdfjsLib. Обновлён с 3.11.174, где была
+// CVE-2024-4367 (её мы и так гасили isEvalSupported:false).
+import * as pdfjsLib from "./vendor/pdfjs/pdf.mjs";
 const tg = window.Telegram?.WebApp;
 if (tg) { tg.ready(); tg.expand(); }
 const $ = id => document.getElementById(id);
@@ -120,9 +123,9 @@ function fail(msg){
 }
 
 if (!file){ fail("Документ не найден"); }
-else if (!window.pdfjsLib){ fail("Просмотрщик не загрузился"); }
+else if (!pdfjsLib || !pdfjsLib.getDocument){ fail("Просмотрщик не загрузился"); }
 else {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdfjs/pdf.worker.min.js";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdfjs/pdf.worker.mjs";
   startReader();
 }
 
