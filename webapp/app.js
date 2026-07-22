@@ -25,7 +25,27 @@
       `<span class="di">${Icons.svg(i.ic)}</span><span class="dt">${i.t}</span></a>`).join('');
     document.body.appendChild(dock);
     document.body.classList.add('has-dock');
+    setupDockKeyboard();
   };
+
+  // Прячем нижний dock при открытой клавиатуре. Иначе фиксированная панель
+  // (position:fixed; bottom:0) всплывает над клавиатурой и налипает на поля/
+  // контент (видно на calc/plan при фокусе инпута). Детект — сжатие
+  // visualViewport относительно максимально виденной высоты.
+  var _kbBound = false;
+  function setupDockKeyboard() {
+    if (_kbBound) return; _kbBound = true;
+    var vv = window.visualViewport;
+    var full = vv ? vv.height : window.innerHeight;
+    function onKb() {
+      var h = vv ? vv.height : window.innerHeight;
+      if (h > full) full = h;                 // рост/поворот — обновляем базу
+      document.body.classList.toggle('kb-open', (full - h) > 120);
+    }
+    if (vv) { vv.addEventListener('resize', onKb); vv.addEventListener('scroll', onKb); }
+    else window.addEventListener('resize', onKb);
+    onKb();
+  }
 
   // авто-подстановка SVG по data-icon после загрузки DOM (паттерн ISSA)
   document.addEventListener('DOMContentLoaded', () => window.Icons && Icons.hydrate());

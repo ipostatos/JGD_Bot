@@ -20,6 +20,9 @@ a{ color:var(--link) }
 .ilink{ display:inline-flex; vertical-align:-3px; margin-left:4px; color:var(--link) }
 .ilink svg{ width:15px; height:15px }
 body.has-dock{ padding-bottom:84px }
+/* клавиатура открыта: прячем dock, чтобы не налипал на поля/контент */
+body.kb-open .dock{ display:none }
+body.has-dock.kb-open{ padding-bottom:0 }
 
 /* ── главный экран (паттерн ISSA home) ── */
 .hero{ display:flex; align-items:baseline; gap:var(--sp-2); margin-bottom:var(--sp-1) }
@@ -48,7 +51,10 @@ body.has-dock{ padding-bottom:84px }
   padding:1px 5px; margin-left:4px; vertical-align:1px; opacity:.85 }
 
 /* ── кокпит предпринимателя (главная): фаза ZUS + полоска месяца ── */
-.cockpit{ margin-bottom:var(--sp-4) }
+/* display:block обязателен: карточка — <a>, а .card не задаёт display; без
+   этого ссылка остаётся inline и padding+фон рисуются рваными фрагментами
+   на переносах строк (артефакты у краёв). */
+.cockpit{ display:block; margin-bottom:var(--sp-4) }
 .cp-phase{ display:flex; align-items:center; gap:var(--sp-4) }
 .cp-phase .ring .ring-num{ font-size:20px }
 .cp-phase-body{ flex:1; min-width:0 }
@@ -83,6 +89,13 @@ body.has-dock{ padding-bottom:84px }
 .cp-legend .now{ background:var(--text) }
 .cp-legend .zus{ background:var(--warn) } .cp-legend .vat{ background:var(--link) }
 .cp-legend b{ color:var(--text); font-variant-numeric:tabular-nums }
+
+.cp-vat{ margin-top:var(--sp-3); padding-top:var(--sp-3); border-top:1px solid var(--border) }
+.cp-vat-head{ display:flex; justify-content:space-between; align-items:baseline; gap:8px;
+  font-size:var(--fs-sm); font-weight:600; margin-bottom:8px }
+.cp-vat-head .emi{ width:15px; height:15px; vertical-align:-2px; margin-right:5px; color:var(--hint) }
+.cp-vat-val{ font-variant-numeric:tabular-nums; font-weight:700; white-space:nowrap }
+.cp-vat-note{ color:var(--hint); font-size:var(--fs-xs); margin-top:6px; line-height:1.4 }
 
 /* ── поиск ── */
 .search-box{ width:100%; padding:12px var(--sp-4); font-size:var(--fs-body);

@@ -41,6 +41,7 @@
     <div class="cp-track" id="cpTrack"></div>
     <div class="cp-legend" id="cpLegend"></div>
   </div>
+  <div class="cp-vat hidden" id="cpVat"></div>
 </a>
 
 <div class="section-title">Разделы</div>
@@ -67,22 +68,22 @@
   </a>
   <a class="cell" href="news.html">
     <div class="ic-tile red" data-icon="bell"></div>
-    <div class="t">Что нового <span class="beta-badge">beta</span></div>
+    <div class="t">Что нового</div>
     <div class="d">мониторинг налогов и KSeF с пушами</div>
   </a>
   <a class="cell" href="ai.html">
     <div class="ic-tile amber" data-icon="bot"></div>
-    <div class="t">AI-ассистент <span class="beta-badge">beta</span></div>
+    <div class="t">AI-ассистент</div>
     <div class="d">вопрос — ответ по базе гайда</div>
   </a>
   <a class="cell" href="cockpit.html">
     <div class="ic-tile green" data-icon="gauge"></div>
-    <div class="t">Кокпит <span class="beta-badge">beta</span></div>
+    <div class="t">Кокпит</div>
     <div class="d">закрыть месяц · сверка ZUS · платежи</div>
   </a>
 </div>
 
-<p class="foot">Контент — гайд сообщества <a href="https://sobolevbel.github.io/jdg/" target="_blank" rel="noopener">JDG&nbsp;PBH</a> (CC0) · чат <a href="https://t.me/JDG_PBH" target="_blank" rel="noopener">@JDG_PBH</a><br>
+<p class="foot">Контент — гайд сообщества <a href="https://sobolevbel.github.io/jdg/" target="_blank" rel="noopener">JDG&nbsp;PBH</a> · чат <a href="https://t.me/JDG_PBH" target="_blank" rel="noopener">@JDG_PBH</a><br>
 Справочная информация, не юридическая и не налоговая консультация</p>
 
 <script src="icons.js"></script>
@@ -155,8 +156,47 @@ function buildCockpit(p) {
   }
 
   buildMonthStrip(p, now);
+  buildVat(p, now);
   document.getElementById('cockpit').classList.remove('hidden');
   if (window.Icons) Icons.hydrate();
+}
+
+// VAT-блок: для зволнения — метр оборота к лимиту 240k (реальный из inFakt,
+// если подключён; иначе приглашение). Для czynny płatnika — короткая строка.
+function buildVat(p, now) {
+  const host = document.getElementById('cpVat');
+  const ic = n => window.Icons ? Icons.svg(n) : '';
+  host.classList.remove('hidden');
+  if (p.vat) {
+    host.innerHTML =
+      '<div class="cp-vat-head"><span><span class="emi">' + ic('file-text') +
+      '</span>VAT</span><span class="cp-vat-val">плательщик</span></div>' +
+      '<div class="cp-vat-note">Декларация JPK_V7M ежемесячно до 25-го · лимит зволнения не применяется</div>';
+    return;
+  }
+  const startedThisYear = new Date(p.reg + 'T00:00:00').getFullYear() === now.getFullYear() ? p.reg : null;
+  const draw = (used, live) => {
+    const v = vatLimit(used || 0, startedThisYear);
+    const pct = Math.min(v.used / v.limit * 100, 100);
+    const cls = v.exceeded ? 'bad' : pct > 80 ? 'warn' : 'ok';
+    host.innerHTML =
+      '<div class="cp-vat-head"><span><span class="emi">' + ic('file-text') +
+      '</span>Лимит VAT (зволнение)</span>' +
+      '<span class="cp-vat-val">' + (live ? fmtZl(v.used) + ' / ' + fmtZl(v.limit) : fmtZl(v.limit) + '/год') + '</span></div>' +
+      '<div class="meter ' + (live ? cls : '') + '"><i style="width:' + (live ? pct : 0) + '%"></i></div>' +
+      '<div class="cp-vat-note">' + (live
+        ? pct.toFixed(0) + '% лимита · при превышении — обязательная регистрация VAT'
+        : 'Подключи inFakt в «Плане» — покажу твой оборот к лимиту') + '</div>';
+    if (window.Icons) Icons.hydrate();
+  };
+  draw(0, false);
+  if (tg && tg.initData && localStorage.getItem('jdg_infakt_on') === '1') {
+    fetch('/api/infakt/summary', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: tg.initData }) })
+      .then(r => r.ok ? r.json() : null)
+      .then(s => { if (s && s.connected && typeof s.net_ytd === 'number') draw(s.net_ytd, true); })
+      .catch(() => {});
+  }
 }
 
 // Полоска текущего месяца: заливка до «сегодня» + пины дедлайнов (20 ZUS, 25 VAT).
