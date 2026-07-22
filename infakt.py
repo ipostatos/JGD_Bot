@@ -41,7 +41,44 @@ def _db():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""CREATE TABLE IF NOT EXISTS infakt_keys(
         user_id INTEGER PRIMARY KEY, enc BLOB, created INTEGER)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS infakt_cache(
+        user_id INTEGER, kind TEXT, payload TEXT, ts INTEGER,
+        PRIMARY KEY(user_id, kind))""")
     return conn
+
+
+# Кэш тяжёлых сводок: и кокпит, и раздел KSeF перебирают все фактуры юзера
+# (до 10 страниц по 100). Данные бухгалтерии за минуты не меняются, а лимит
+# inFakt — 300 запросов в минуту, поэтому держим ответ 15 минут.
+CACHE_TTL = 900
+
+
+def cache_get(user_id: int, kind: str, ttl: int = CACHE_TTL) -> dict | None:
+    with _db() as c:
+        row = c.execute("SELECT payload, ts FROM infakt_cache WHERE user_id=? AND kind=?",
+                        (user_id, kind)).fetchone()
+    if row and time.time() - row[1] < ttl:
+        try:
+            return json.loads(row[0])
+        except ValueError:
+            return None
+    return None
+
+
+def cache_put(user_id: int, kind: str, payload: dict):
+    with _db() as c:
+        c.execute("INSERT OR REPLACE INTO infakt_cache VALUES(?,?,?,?)",
+                  (user_id, kind, json.dumps(payload, ensure_ascii=False),
+                   int(time.time())))
+        c.execute("DELETE FROM infakt_cache WHERE ts < ?",
+                  (int(time.time()) - 7 * 86400,))
+
+
+def cache_clear(user_id: int):
+    """Сбрасываем после действий, меняющих данные (оплата, закрытие месяца),
+    и при отключении ключа — иначе юзер увидит вчерашнюю картину."""
+    with _db() as c:
+        c.execute("DELETE FROM infakt_cache WHERE user_id=?", (user_id,))
 
 
 def save_key(user_id: int, api_key: str):
@@ -60,6 +97,7 @@ def load_key(user_id: int) -> str | None:
 def delete_key(user_id: int):
     with _db() as c:
         c.execute("DELETE FROM infakt_keys WHERE user_id=?", (user_id,))
+        c.execute("DELETE FROM infakt_cache WHERE user_id=?", (user_id,))
 
 
 async def _get(cl: httpx.AsyncClient, key: str, path: str, params: dict):

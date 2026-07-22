@@ -105,12 +105,22 @@ def _pay_sync(api_key: str, month: str) -> dict:
 
 
 async def overview(user_id: int) -> dict:
-    """Финансовый обзор: месяц, год, 12-месячная серия, VAT-прогноз, здоровье."""
+    """Финансовый обзор: месяц, год, 12-месячная серия, VAT-прогноз, здоровье.
+
+    Собирается из четырёх списков inFakt целиком, поэтому держим результат
+    в кэше (см. infakt.CACHE_TTL): открытие вкладки не должно каждый раз
+    выгребать всю бухгалтерию.
+    """
     import dashboard
     key = keystore.load_key(user_id)
     if not key:
         return {"connected": False}
-    return {"connected": True} | await asyncio.to_thread(dashboard.build, key)
+    cached = keystore.cache_get(user_id, "overview")
+    if cached:
+        return {"connected": True, "cached": True} | cached
+    data = await asyncio.to_thread(dashboard.build, key)
+    keystore.cache_put(user_id, "overview", data)
+    return {"connected": True, "cached": False} | data
 
 
 async def close(user_id: int, month: str) -> dict:
@@ -124,4 +134,5 @@ async def pay(user_id: int, month: str) -> dict:
     key = keystore.load_key(user_id)
     if not key:
         return {"connected": False}
+    keystore.cache_clear(user_id)   # платёж меняет картину — сводку пересобрать
     return {"connected": True} | await asyncio.to_thread(_pay_sync, key, month)

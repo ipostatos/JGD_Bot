@@ -19,6 +19,20 @@ import markdown
 
 ROOT = Path(__file__).resolve().parent.parent
 GUIDE = ROOT / "sources" / "guide"
+
+
+def _source_info() -> dict:
+    """Из какого коммита гайда собран контент — видно в приложении и в проде."""
+    import subprocess
+    def git(*args):
+        try:
+            return subprocess.run(("git", "-C", str(GUIDE), *args),
+                                  capture_output=True, text=True, timeout=10
+                                  ).stdout.strip()
+        except Exception:                       # noqa: BLE001 — не блокер сборки
+            return ""
+    return {"commit": git("rev-parse", "--short", "HEAD"),
+            "date": git("log", "-1", "--format=%cs")}
 DOCS = GUIDE / "docs"
 OUT = ROOT / "webapp" / "data"
 
@@ -268,8 +282,18 @@ def main():
             if art:
                 sections.append({**meta, "items": [art], "single": True})
 
+    # Контент тянется из чужого репозитория: если upstream переставит nav или
+    # переименует папку docs, сборка молча выдаст пустой гайд и выложит его в
+    # прод. Поэтому падаем громко, а старые данные на диске остаются целыми.
+    MIN_SECTIONS, MIN_ARTICLES = 10, 30
+    if len(sections) < MIN_SECTIONS or n_articles < MIN_ARTICLES:
+        sys.exit(f"СБОРКА ОТМЕНЕНА: {len(sections)} секций и {n_articles} статей "
+                 f"(ожидалось минимум {MIN_SECTIONS}/{MIN_ARTICLES}). "
+                 "Похоже, изменилась структура гайда — проверь sources/guide.")
+
     (OUT / "content.json").write_text(
-        json.dumps({"sections": sections}, ensure_ascii=False), encoding="utf-8")
+        json.dumps({"sections": sections, "source": _source_info()},
+                   ensure_ascii=False), encoding="utf-8")
     (OUT / "search.json").write_text(
         json.dumps(search, ensure_ascii=False), encoding="utf-8")
 

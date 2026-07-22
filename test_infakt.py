@@ -31,6 +31,29 @@ def test_key_roundtrip(tmp_path, monkeypatch):
     assert infakt.load_key(7) is None
 
 
+def test_cache_ttl_and_clear(tmp_path, monkeypatch):
+    """Кэш сводок: отдаёт свежее, молчит про протухшее, чистится по юзеру."""
+    monkeypatch.setattr(infakt, "DB_PATH", tmp_path / "t.db")
+    infakt.cache_put(1, "overview", {"income": 100})
+    assert infakt.cache_get(1, "overview") == {"income": 100}
+    assert infakt.cache_get(2, "overview") is None          # чужой кэш не отдаём
+    assert infakt.cache_get(1, "ksef_sales") is None        # другой вид — тоже
+    assert infakt.cache_get(1, "overview", ttl=0) is None    # протухший
+    infakt.cache_clear(1)
+    assert infakt.cache_get(1, "overview") is None
+
+
+def test_disconnect_drops_cached_data(tmp_path, monkeypatch):
+    """Отключил ключ — сводки о его деньгах в базе остаться не должны."""
+    _valid_key(monkeypatch)
+    monkeypatch.setattr(infakt, "DB_PATH", tmp_path / "t.db")
+    infakt.save_key(9, "key-abc-123456")
+    infakt.cache_put(9, "overview", {"income": 4200})
+    infakt.delete_key(9)
+    assert infakt.load_key(9) is None
+    assert infakt.cache_get(9, "overview") is None
+
+
 def test_amount_normalization():
     assert infakt._amount(123456) == 1234.56   # int = гроши
     assert infakt._amount("1 234,56") == 1234.56

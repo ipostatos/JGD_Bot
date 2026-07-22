@@ -290,9 +290,14 @@ async def _ksef_sales(user_id: int) -> dict | None:
         key = infakt.load_key(user_id)
         if not key:
             return None
+        cached = infakt.cache_get(user_id, "ksef_sales")
+        if cached:
+            return cached
         from hermes.infakt import Infakt
         invoices = await asyncio.to_thread(lambda: Infakt(key).invoices())
-        return ksef.sales_from_invoices(invoices)
+        sales = ksef.sales_from_invoices(invoices)
+        infakt.cache_put(user_id, "ksef_sales", sales)
+        return sales
     except Exception as e:
         log.warning("ksef sales for %s failed: %s", user_id, e)
         return None

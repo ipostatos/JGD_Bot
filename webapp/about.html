@@ -77,7 +77,7 @@
   </details>
   <a class="row-card" style="margin:6px 0 0;background:var(--bg);border:none" href="https://github.com/sobolevbel/jdg" target="_blank" rel="noopener">
     <span class="ic-tile" data-icon="github"></span><span class="body"><span class="t" style="font-size:15px">GitHub · sobolevbel/jdg</span>
-    <span class="d">гайд, на котором построено приложение</span></span><span class="chev">›</span></a>
+    <span class="d" id="guideSrc">гайд, на котором построено приложение</span></span><span class="chev">›</span></a>
   <a class="row-card" style="margin:6px 0 0;background:var(--bg);border:none" href="https://github.com/justandrei/jdg-tools" target="_blank" rel="noopener">
     <span class="ic-tile" data-icon="github"></span><span class="body"><span class="t" style="font-size:15px">GitHub · justandrei/jdg-tools</span>
     <span class="d">инструменты Андрея: генератор заявки на ВНЖ, чек-листы, шаблоны</span></span><span class="chev">›</span></a>
@@ -116,6 +116,16 @@
 <script src="app.js"></script>
 <script>
 renderDock('about');
+
+// Из какого состояния гайда собран контент: видно, насколько он свежий,
+// и с чем сверяться, если в статье что-то устарело.
+loadJSON('data/content.json').then(d => {
+  const s = d.source || {};
+  if (!s.date) return;
+  const [y, m, day] = s.date.split('-');
+  document.getElementById('guideSrc').textContent =
+    `гайд, на котором построено приложение · версия от ${day}.${m}.${y}`;
+}).catch(() => {});
 </script>
 </body>
 </html>

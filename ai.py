@@ -204,5 +204,10 @@ async def ask(user_id: int, question: str, profile: dict | None = None) -> dict:
         c.execute("INSERT OR REPLACE INTO ai_cache VALUES(?,?,?,?)",
                   (qhash, answer, json.dumps(sources, ensure_ascii=False),
                    int(time.time())))
+        # ответы живут сутки, статистика — месяц: держать их вечно незачем
+        c.execute("DELETE FROM ai_cache WHERE ts < ?", (int(time.time()) - 7 * 86400,))
+        c.execute("DELETE FROM ai_usage WHERE day < ?",
+                  (time.strftime("%Y-%m-%d",
+                                 time.localtime(time.time() - 30 * 86400)),))
     return {"answer": answer, "sources": sources, "cached": False,
             "left": quota_left(user_id)}

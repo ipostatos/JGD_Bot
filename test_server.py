@@ -47,6 +47,9 @@ def test_content_data_built():
     with client() as c:
         data = c.get("/data/content.json").json()
         assert len(data["sections"]) >= 10
+        # происхождение контента: из какого коммита гайда собрано
+        src = data.get("source") or {}
+        assert src.get("commit") and src.get("date"), src
         zus = c.get("/data/articles/zus.html")
         assert zus.status_code == 200
         assert "Zakład" in zus.text
