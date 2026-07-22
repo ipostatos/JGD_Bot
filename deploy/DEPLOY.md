@@ -7,11 +7,16 @@ Caddy-сайт `jdg-46-224-220-94.sslip.io` (авто-TLS).
 
 ```bash
 git -C C:/Users/user/Desktop/JDG archive HEAD | ssh root@46.224.220.94 "tar -x -C /opt/jdg"
-ssh root@46.224.220.94 "cd /opt/jdg && venv/bin/pip install -q -r requirements.txt && systemctl restart jdg"
+ssh root@46.224.220.94 "chown -R jdg:jdg /opt/jdg && cd /opt/jdg && venv/bin/pip install -q -r requirements.txt && systemctl restart jdg"
 ```
 
 ⚠️ Всегда `git -C <корень>` — из подкаталога archive упакует только его.
 `.env` в архив не входит (не в git) — лежит на VPS отдельно, не затирается.
+
+⚠️ **`chown -R jdg:jdg` обязателен**: сервис работает не от root, а `tar -x`
+под root кладёт файлы root'у. Без chown после деплоя сервис не прочитает часть
+файлов (та же грабля, что уронила KwadratPL на 8 часов). Права `.env` и
+`news.db` — 600, каталог — 750.
 
 ⚠️ Если правился `deploy/jdg.service`, его надо доставить в systemd отдельно:
 
