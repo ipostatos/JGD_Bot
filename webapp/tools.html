@@ -26,67 +26,6 @@
 
 <script src="icons.js"></script>
 <script src="app.js"></script>
-<script>
-renderDock('about');
-const T = 'https://justandrei.github.io/jdg-tools/';
-const doc = (slug, t, d) => ({ t, d, u: `reader.html?file=docs/${slug}.pdf&title=${encodeURIComponent(t)}` });
-const CATS = [
-  { t: 'ВНЖ по ИП (karta pobytu)', ic: 'id-card', items: [
-    { t: 'Генератор заявки на ВНЖ', d: 'заполняет официальный PDF по шагам', u: T + 'wniosek', hot: true },
-    { t: 'ВНЖ чек-лист А4', d: 'какие документы собрать', u: T + 'checklist', hot: true },
-    doc('wojewodztwa', 'Подача по воеводствам', 'таблица: сроки, нюансы, контакты'),
-    { t: 'Шаблон заявки на ВНЖ (Word)', d: 'заполняемый DOCX — скачать', u: 'docs/zayavka-vnzh-shablon.docx' },
-    doc('anketa-przedsiebiorcy', 'Анкета предпринимателя', 'шаблон для пакета документов'),
-    doc('biznes-plan', 'Бизнес-план', 'шаблон — просят некоторые воеводства'),
-    doc('tabelka', '«Tabelka» — работа и налоги за год', 'заявление о расчётах за прошлый год'),
-    doc('oswiadczenie-cudzoziemca', 'Oświadczenie cudzoziemca', 'шаблон декларации иностранца'),
-    doc('osoby-na-utrzymaniu', 'Заявление о людях на содержании', 'шаблон заявления'),
-    doc('osoby-na-utrzymaniu-kto', 'Кто пишет заявление о содержании', 'справочная таблица'),
-    doc('karta-pobytu-bez-adresu', 'Карта побыта без адреса', 'шаблон заявления'),
-    doc('zalacznik-1', 'Załącznik nr 1', 'приложение к заявке'),
-  ]},
-  { t: 'Справки и госуслуги', ic: 'file-text', items: [
-    doc('spravka-zus', 'Справка о страховке в ZUS', 'инструкция, как создать в eZUS'),
-    doc('spravka-nalogi', 'Справка об отсутствии долгов по налогам', 'пример + как получить'),
-    doc('800plus', 'Заявка на 800+ через zus.pl', 'пошаговая инструкция'),
-    doc('zamena-inspektora-gdansk', 'Замена инспектора (Гданьск)', 'шаблон просьбы'),
-    { t: 'CEIDG viewer', d: 'полная актуальная запись в реестре', u: T + 'ceidg/viewer.html' },
-  ]},
-  { t: 'Утилиты', ic: 'settings', items: [
-    { t: 'Склейка PDF', d: 'PDF и фото в один файл, автоповорот и чётность страниц',
-      u: 'merge.html', hot: true, mine: 'JavaScript + pdf-lib, прямо в браузере — файлы никуда не отправляются' },
-    { t: 'Фото для MOS', d: 'подгонка под рамку 684×883 с овалом и линией глаз',
-      u: 'photo.html', hot: true, mine: 'JavaScript + Canvas, прямо в браузере — фото никуда не отправляется' },
-  ]},
-  { t: 'Справочники', ic: 'library', items: [
-    { t: 'KSeF: что уже обязательно', d: 'этапы 2026-2027, порог 10 000 zł, чек-лист подключения',
-      u: 'ksef.html', hot: true, mine: 'Python на сервере + JavaScript, факты сверены с ksef.podatki.gov.pl' },
-    { t: 'Ошибки ZUS по кодам', d: 'что значит код из «uwagi i błędy» и как чинить',
-      u: 'zus_err.html?from=tools.html', hot: true, mine: 'база из 32 кодов, поиск на JavaScript, ответы бота на Python' },
-    { t: 'Проверка контрагента по NIP', d: 'статус VAT, данные фирмы, счёт в белом списке',
-      u: 'nip.html', mine: 'Python + FastAPI: White List, VIES, GUS и CEIDG в одном запросе' },
-  ]},
-  { t: 'Данные', ic: 'bar-chart', items: [
-    { t: 'Składki ZUS по годам', d: '2025 · 2026, все режимы и формы налогообложения',
-      u: 'calc.html', mine: 'расчётное ядро на Python (сверено с таблицей гайда), интерфейс на JavaScript' },
-    doc('vazhnye-daty', 'Важные даты предпринимателя', 'сводная таблица сроков'),
-    { t: 'Калькулятор Ryczałt (таблица)', d: 'интерактивная Google-таблица', u: 'https://docs.google.com/spreadsheets/d/14Y0ReOUMWA17pt931vgY2R0pSFYzqYOQ-XBzmkhllOw/edit' },
-  ]},
-];
-document.getElementById('cats').innerHTML = CATS.map(c => `
-  <div class="card" style="margin-bottom:10px;padding:var(--sp-3) var(--sp-4)">
-    <div class="h2"><span class="emi" style="color:var(--accent)">${Icons.svg(c.ic)}</span>${c.t}</div>
-    ${c.items.map(i => {
-      const ext = i.u.startsWith('http') || i.u.endsWith('.docx');
-      return `
-      <a class="row-card" style="margin:6px 0 0;background:var(--bg);border:none"
-         href="${i.u}"${ext ? ' target="_blank" rel="noopener"' : ''}>
-        <span class="body"><span class="t" style="font-size:14px">${i.hot ? `<span class="emi" style="color:var(--warn)">${Icons.svg('star')}</span>` : ''}${i.t}</span>
-        <span class="d">${i.d}</span>
-        ${i.mine ? `<span class="mine">${Icons.svg('wrench')}<span>${i.mine}</span></span>` : ''}
-        </span><span class="chev">${ext ? '↗' : '›'}</span></a>`;
-    }).join('')}
-  </div>`).join('');
-</script>
+<script src="js/tools.js"></script>
 </body>
 </html>

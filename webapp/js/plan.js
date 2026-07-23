@@ -1,0 +1,274 @@
+renderDock('plan');
+
+// ── inFakt: реальные суммы ──
+(function () {
+  const $ = id => document.getElementById(id);
+  const IFKEY = 'jdg_infakt_on';
+  const inTg = tg && tg.initData;
+
+  async function ifApi(path, method, extra) {
+    const r = await fetch(path, {
+      method: method || 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ initData: tg.initData }, extra || {})),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.detail || 'Ошибка');
+    return data;
+  }
+
+  function showSums(s) {
+    $('if-off').classList.add('hidden');
+    $('if-on').classList.remove('hidden');
+    const rows = [];
+    if (typeof s.net_ytd === 'number') {
+      rows.push(`<div class="res-row"><span>Продажи netto с начала года</span><span class="v">${fmtZl(s.net_ytd)}</span></div>`);
+    }
+    if (s.zus && s.zus.total != null) {
+      rows.push(`<div class="res-row"><span>ZUS ${s.zus.period || 'за последний месяц'}</span><span class="v">${fmtZl(s.zus.total)} ${s.zus.paid ? '✅' : '⏳ до 20-го'}</span></div>`);
+    }
+    if (s.tax && s.tax.total != null) {
+      rows.push(`<div class="res-row"><span>Налог ${s.tax.period || 'за последний период'}</span><span class="v">${fmtZl(s.tax.total)} ${s.tax.paid ? '✅' : '⏳'}</span></div>`);
+    }
+    ratesReady.then(() => {
+      if (typeof s.net_ytd === 'number') {
+        const v = vatLimit(s.net_ytd, null);
+        const pct = Math.min(v.used / v.limit * 100, 100);
+        rows.push(`<div class="res-row" style="border:none"><span>Лимит VAT</span><span class="v">${pct.toFixed(0)}% из ${fmtZl(v.limit)}</span></div>
+          <div class="meter ${v.exceeded ? 'bad' : pct > 80 ? 'warn' : 'ok'}"><i style="width:${pct}%"></i></div>`);
+      }
+      $('if-sums').innerHTML = rows.join('') ||
+        '<div class="muted" style="font-size:13px">Подключено, но данных пока не видно — проверь, что в inFakt есть фактуры.</div>';
+    });
+  }
+
+  if (inTg && localStorage.getItem(IFKEY) === '1') {
+    ifApi('/api/infakt/summary').then(s => {
+      if (s.connected) showSums(s); else localStorage.removeItem(IFKEY);
+    }).catch(() => {});
+  }
+
+  $('if-connect').onclick = async () => {
+    if (!inTg) { $('if-msg').textContent = 'Открой через Telegram.'; return; }
+    const key = $('if-key').value.trim();
+    if (!key) return;
+    $('if-msg').textContent = 'Проверяю ключ…'; haptic('medium');
+    try {
+      await ifApi('/api/infakt/connect', 'POST', { api_key: key });
+      localStorage.setItem(IFKEY, '1');
+      $('if-key').value = '';
+      $('if-msg').textContent = '';
+      const s = await ifApi('/api/infakt/summary');
+      showSums(s);
+    } catch (e) { $('if-msg').textContent = e.message; }
+  };
+
+  $('if-disconnect').onclick = async () => {
+    try { await ifApi('/api/infakt', 'DELETE'); } catch (e) {}
+    localStorage.removeItem(IFKEY);
+    $('if-on').classList.add('hidden');
+    $('if-off').classList.remove('hidden');
+  };
+})();
+
+const CHECKLISTS = {
+  open: [
+    { id: 'pesel', t: 'Получить PESEL', a: 'pesel' },
+    { id: 'pz', t: 'Открыть Profil Zaufany', a: 'pz' },
+    { id: 'reg', t: 'Подать заявку на JDG через biznes.gov.pl', a: 'registration_jdg' },
+    { id: 'bank', t: 'Открыть фирменный банковский счёт' },
+    { id: 'zus', t: 'Зарегистрироваться в ZUS (ZUS ZZA / ZUA)', a: 'zus' },
+    { id: 'ezus', t: 'Настроить вход в eZUS', a: 'zus_login' },
+    { id: 'vat', t: 'Если нужно — зарегистрироваться в VAT (VAT-R)', a: 'registration_vat' },
+    { id: 'ksiegowosc', t: 'Выбрать бухгалтерию: inFakt / wFirma / бухгалтер', a: 'infakt_settings' },
+    { id: 'mos', t: 'Легализация: уведомить о смене основания пребывания (если нужно)', a: 'legalization' },
+  ],
+  monthly: [
+    { id: 'invoice', t: 'Выставить фактуры клиентам', a: 'workflow' },
+    { id: 'costs', t: 'Собрать документы расходов (koszty)' },
+    { id: 'dra', t: 'До 20-го: отчёт ZUS DRA + оплатить składki', a: 'declarations_zus' },
+    { id: 'zaliczka', t: 'До 20-го: аванс PIT / ryczałt за прошлый месяц', a: 'declarations_pit' },
+    { id: 'jpk', t: 'До 25-го: JPK_V7M (если VAT)', a: 'declarations_jpk_emikrofirma' },
+  ],
+};
+
+const p = getProfile();
+
+// ── профиль ──
+const preg = document.getElementById('preg');
+
+function fillForm(pr) {
+  if (pr.reg) preg.value = pr.reg;
+  document.getElementById('pvat').checked = !!pr.vat;
+  document.getElementById('pulga').checked = pr.ulga !== false;
+  document.querySelectorAll('#pform button').forEach(b =>
+    b.classList.toggle('on', b.dataset.v === (pr.form || 'ryczalt')));
+}
+fillForm(p);
+
+// Профиль хранится и на устройстве, и на сервере (второй нужен для пушей).
+// На новом телефоне localStorage пуст — подтягиваем серверную копию, иначе
+// человек видит пустую анкету, хотя напоминания ему уже приходят.
+if (tg && tg.initData && !p.reg) {
+  fetch('/api/profile/get', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ initData: tg.initData }),
+  }).then(r => r.ok ? r.json() : null).then(d => {
+    const s = d && d.profile;
+    if (!s || !s.reg) return;
+    const restored = { reg: s.reg, form: s.form || 'ryczalt',
+      vat: !!s.vat, ulga: s.ulga !== 0 };
+    setProfile(restored);
+    fillForm(restored);
+    renderStages(); renderDeadlines();
+    if (s.dl_sub) localStorage.setItem(DLKEY, '1'), dlSync();
+    document.getElementById('dlmsg').textContent =
+      'Профиль восстановлен с сервера — проверь, всё ли верно.';
+  }).catch(() => {});
+}
+
+function syncProfile(extra) {
+  // серверная копия профиля — для персональных пушей; молча, без блокировки UI
+  if (!(tg && tg.initData)) return Promise.reject();
+  const pr = getProfile();
+  return fetch('/api/profile', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ initData: tg.initData, reg: pr.reg,
+      form: pr.form, vat: !!pr.vat, ulga: pr.ulga !== false }, extra || {})),
+  }).then(r => { if (!r.ok) throw 0; return r.json(); });
+}
+
+function saveProfile() {
+  setProfile({
+    reg: preg.value || null,
+    form: document.querySelector('#pform button.on').dataset.v,
+    vat: document.getElementById('pvat').checked,
+    ulga: document.getElementById('pulga').checked,
+  });
+  renderStages(); renderDeadlines();
+  syncProfile().catch(() => {});
+}
+
+// ── напоминания о дедлайнах ──
+const DLKEY = 'jdg_dlsub';
+const dlbtn = document.getElementById('dlbtn');
+function dlSync() {
+  const on = localStorage.getItem(DLKEY) === '1';
+  dlbtn.textContent = on ? '🔕 Отключить напоминания' : '🔔 Включить напоминания';
+  dlbtn.classList.toggle('ghost', on);
+}
+dlbtn.onclick = () => {
+  if (!(tg && tg.initData)) {
+    document.getElementById('dlmsg').textContent = 'Открой через Telegram, чтобы включить.';
+    return;
+  }
+  haptic('medium');
+  const on = localStorage.getItem(DLKEY) === '1';
+  syncProfile({ dl_sub: !on }).then(() => {
+    localStorage.setItem(DLKEY, on ? '0' : '1');
+    document.getElementById('dlmsg').textContent = on ? '' : 'Готово! Первый пуш придёт утром в день напоминания.';
+    dlSync();
+  }).catch(() => {
+    document.getElementById('dlmsg').textContent = 'Не получилось, попробуй позже.';
+  });
+};
+dlSync();
+preg.addEventListener('change', saveProfile);
+document.getElementById('pvat').addEventListener('change', saveProfile);
+document.getElementById('pulga').addEventListener('change', saveProfile);
+document.getElementById('pform').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#pform button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); haptic(); saveProfile();
+});
+
+// ── этапы ZUS ──
+// Правила дат живут в app.js (window.stageDates) — здесь была вторая копия,
+// и она умела расходиться: профиль без поля ulga эта копия считала «без ulgi»,
+// а главная — «с ulgą». Единый источник + единая трактовка пустого поля.
+const fmtD = (d) => d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+const useUlga = (prof) => prof.ulga !== false;
+
+function renderStages() {
+  const prof = getProfile();
+  const card = document.getElementById('stages-card');
+  if (!prof.reg) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  const reg = new Date(prof.reg + 'T00:00:00');
+  const { ulgaEnd, prefEnd } = stageDates(reg, useUlga(prof));
+  const now = new Date();
+  const st = [];
+  if (useUlga(prof)) st.push({ t: 'Ulga na start', d: 'до ' + fmtD(ulgaEnd), end: ulgaEnd });
+  st.push({ t: 'Preferencyjne', d: 'до ' + fmtD(prefEnd), end: prefEnd });
+  st.push({ t: 'Duży ZUS', d: 'далее', end: null });
+  let cur = st.findIndex(s => s.end === null || now <= s.end);
+  document.getElementById('stageline').innerHTML = st.map((s, i) =>
+    `<div class="st ${i < cur ? 'past' : i === cur ? 'now' : ''}"><b>${s.t}</b>${s.d}</div>`).join('');
+  const curSt = st[cur];
+  let note = `Сейчас: <b>${curSt.t}</b>.`;
+  if (curSt.end) {
+    const days = Math.ceil((curSt.end - now) / 864e5);
+    note += ` До перехода на следующий режим ~${days} дн. — заявление в ZUS подаётся самостоятельно, не пропусти!`;
+  }
+  document.getElementById('stagenote').innerHTML = note;
+}
+
+// ── дедлайны ──
+function renderDeadlines() {
+  const prof = getProfile();
+  const card = document.getElementById('dl-card');
+  card.classList.remove('hidden');
+  const now = new Date();
+  const evs = [];
+  for (let k = 0; k < 3; k++) {
+    const m = new Date(now.getFullYear(), now.getMonth() + k, 1);
+    const mName = m.toLocaleDateString('ru-RU', { month: 'long' });
+    evs.push({ d: new Date(m.getFullYear(), m.getMonth(), 20),
+      t: 'ZUS DRA + składki', s: 'и аванс налога за прошлый месяц' });
+    if (prof.vat) evs.push({ d: new Date(m.getFullYear(), m.getMonth(), 25),
+      t: 'JPK_V7M за прошлый месяц', s: 'декларация VAT (' + mName + ')' });
+  }
+  evs.push({ d: new Date(now.getMonth() < 4 ? now.getFullYear() : now.getFullYear() + 1, 3, 30),
+    t: 'Годовая декларация PIT', s: prof.form === 'ryczalt' ? 'PIT-28' : prof.form === 'liniowy' ? 'PIT-36L' : 'PIT-36' });
+  const prof2 = getProfile();
+  if (prof2.reg) {
+    const { ulgaEnd, prefEnd } = stageDates(new Date(prof2.reg + 'T00:00:00'), useUlga(prof2));
+    if (useUlga(prof2) && ulgaEnd >= now) evs.push({ d: ulgaEnd, t: 'Конец Ulga na Start', s: 'подать ZUS ZUA (переход на preferencyjne)', hot: true });
+    if (prefEnd >= now) evs.push({ d: prefEnd, t: 'Конец Preferencyjnych', s: 'переход на Duży ZUS', hot: true });
+  }
+  const up = evs.filter(e => e.d >= new Date(now.getFullYear(), now.getMonth(), now.getDate()))
+    .sort((a, b) => a.d - b.d).slice(0, 5);
+  document.getElementById('deadlines').innerHTML = up.map(e => {
+    const days = Math.ceil((e.d - now) / 864e5);
+    return `<div class="deadline ${days <= 7 || e.hot ? 'soon' : ''}">
+      <div class="dd">${e.d.getDate()}.${String(e.d.getMonth() + 1).padStart(2, '0')}<small>${days} дн.</small></div>
+      <div class="body"><div class="t">${e.hot ? `<span class="emi" style="color:var(--warn)">${Icons.svg('flame')}</span>` : ''}${e.t}</div><div class="d">${e.s}</div></div>
+    </div>`;
+  }).join('') || '<div class="state">Заполни профиль — покажу твои сроки</div>';
+}
+
+// ── чек-листы ──
+function renderChecklist(hostId, meterId, key, items) {
+  const done = JSON.parse(localStorage.getItem('jdg_chk_' + key) || '{}');
+  const host = document.getElementById(hostId);
+  host.innerHTML = items.map(i => `
+    <label class="chk ${done[i.id] ? 'done' : ''}" data-id="${i.id}">
+      <input type="checkbox" ${done[i.id] ? 'checked' : ''}>
+      <span class="tt">${i.t}${i.a ? ` <a class="ilink" href="article.html?id=${i.a}" onclick="event.stopPropagation()" title="Подробнее в гайде">${Icons.svg('info')}</a>` : ''}</span>
+    </label>`).join('');
+  const upd = () => {
+    const n = items.filter(i => done[i.id]).length;
+    document.getElementById(meterId).style.width = (n / items.length * 100) + '%';
+  };
+  host.addEventListener('change', (e) => {
+    const row = e.target.closest('.chk'); if (!row) return;
+    done[row.dataset.id] = e.target.checked;
+    row.classList.toggle('done', e.target.checked);
+    localStorage.setItem('jdg_chk_' + key, JSON.stringify(done));
+    haptic(); upd();
+  });
+  upd();
+}
+renderChecklist('chk1', 'chk1-m', 'open', CHECKLISTS.open);
+renderChecklist('chk2', 'chk2-m', 'monthly', CHECKLISTS.monthly);
+
+renderStages(); renderDeadlines();

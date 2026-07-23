@@ -1,0 +1,134 @@
+renderDock('home');
+
+// Профиль заполнен → онбординг прячем, показываем «кокпит»: фаза ZUS с суммой
+// и переходом + полоска месяца с дедлайнами. Всё считается на устройстве из
+// профиля и таблицы ставок (calc.js). Пустой профиль → остаётся онбординг.
+(function () {
+  const p = getProfile();
+  if (!p.reg) return;
+  document.getElementById('onboard').classList.add('hidden');
+  ratesReady.then(() => buildCockpit(p)).catch(() => {});
+})();
+
+function buildCockpit(p) {
+  const now = new Date();
+  const useUlga = p.ulga !== false;
+  const phases = zusPhases(p.reg, useUlga);
+  let i = phases.findIndex(ph => ph.end === null || now <= ph.end);
+  if (i < 0) i = phases.length - 1;
+  const cur = phases[i], nxt = phases[i + 1] || null;
+
+  // кольцо — доля пройденного текущей фазы; цвет теплеет ближе к переходу
+  const daysToEnd = cur.end ? Math.ceil((cur.end - now) / 864e5) : null;
+  let pct = 100;
+  if (cur.end) {
+    const span = cur.end - cur.start;
+    pct = span > 0 ? Math.min(Math.max((now - cur.start) / span * 100, 0), 100) : 100;
+  }
+  const ringColor = cur.stage === 'duzy' ? 'var(--accent)'
+    : (daysToEnd != null && daysToEnd <= 60) ? 'var(--warn)' : 'var(--ok)';
+  const ring = document.getElementById('cpRing');
+  ring.style.setProperty('--p', Math.round(pct));
+  ring.style.setProperty('--ring-color', ringColor);
+  document.getElementById('cpPct').textContent = Math.round(pct) + '%';
+  document.getElementById('cpPhase').textContent = cur.name;
+
+  // сумма — składki społeczne текущей фазы (с добровольной chorobową); в ulga = 0
+  const socCur = spoleczneMonthly(cur.stage, true).total;
+  const amt = document.getElementById('cpAmount');
+  const sub = document.getElementById('cpSub');
+  if (cur.stage === 'ulga') {
+    amt.textContent = '0 zł';
+    sub.textContent = 'Соцвзносы не платишь — только składka zdrowotna';
+  } else {
+    amt.textContent = fmtZl(socCur);
+    sub.textContent = 'składki społeczne / мес · + zdrowotna по доходу';
+  }
+
+  // строка перехода — деньги и дата следующей ступени ZUS
+  const nx = document.getElementById('cpNext');
+  if (nxt) {
+    const delta = spoleczneMonthly(nxt.stage, true).total - socCur;
+    const MON = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+    const mon = MON[cur.end.getMonth()] + " '" + String(cur.end.getFullYear()).slice(2);
+    const dTxt = daysToEnd > 45 ? '~' + Math.round(daysToEnd / 30) + ' мес' : daysToEnd + ' дн.';
+    const hot = daysToEnd <= 60;
+    nx.className = 'cp-next' + (hot ? ' hot' : '');
+    nx.innerHTML = '<span class="emi">' + Icons.svg(hot ? 'flame' : 'trending-up') + '</span>' +
+      '<span>' + nxt.name + ' через <b>' + dTxt + '</b> (' + mon + ')' +
+      (delta > 0 ? ' · <b>+' + fmtZl(delta) + '</b>/мес' : '') + '</span>';
+  } else {
+    nx.className = 'cp-next calm';
+    nx.innerHTML = '<span class="emi">' + Icons.svg('check') + '</span>' +
+      '<span>Постоянный режим — ставка ZUS дальше не растёт</span>';
+  }
+
+  buildMonthStrip(p, now);
+  buildVat(p, now);
+  document.getElementById('cockpit').classList.remove('hidden');
+  if (window.Icons) Icons.hydrate();
+}
+
+// VAT-блок: для зволнения — метр оборота к лимиту 240k (реальный из inFakt,
+// если подключён; иначе приглашение). Для czynny płatnika — короткая строка.
+function buildVat(p, now) {
+  const host = document.getElementById('cpVat');
+  const ic = n => window.Icons ? Icons.svg(n) : '';
+  host.classList.remove('hidden');
+  if (p.vat) {
+    host.innerHTML =
+      '<div class="cp-vat-head"><span><span class="emi">' + ic('file-text') +
+      '</span>VAT</span><span class="cp-vat-val">плательщик</span></div>' +
+      '<div class="cp-vat-note">Декларация JPK_V7M ежемесячно до 25-го · лимит зволнения не применяется</div>';
+    return;
+  }
+  const startedThisYear = new Date(p.reg + 'T00:00:00').getFullYear() === now.getFullYear() ? p.reg : null;
+  const draw = (used, live) => {
+    const v = vatLimit(used || 0, startedThisYear);
+    const pct = Math.min(v.used / v.limit * 100, 100);
+    const cls = v.exceeded ? 'bad' : pct > 80 ? 'warn' : 'ok';
+    host.innerHTML =
+      '<div class="cp-vat-head"><span><span class="emi">' + ic('file-text') +
+      '</span>Лимит VAT (зволнение)</span>' +
+      '<span class="cp-vat-val">' + (live ? fmtZl(v.used) + ' / ' + fmtZl(v.limit) : fmtZl(v.limit) + '/год') + '</span></div>' +
+      '<div class="meter ' + (live ? cls : '') + '"><i style="width:' + (live ? pct : 0) + '%"></i></div>' +
+      '<div class="cp-vat-note">' + (live
+        ? pct.toFixed(0) + '% лимита · при превышении — обязательная регистрация VAT'
+        : 'Подключи inFakt в «Плане» — покажу твой оборот к лимиту') + '</div>';
+    if (window.Icons) Icons.hydrate();
+  };
+  draw(0, false);
+  if (tg && tg.initData && localStorage.getItem('jdg_infakt_on') === '1') {
+    fetch('/api/infakt/summary', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: tg.initData }) })
+      .then(r => r.ok ? r.json() : null)
+      .then(s => { if (s && s.connected && typeof s.net_ytd === 'number') draw(s.net_ytd, true); })
+      .catch(() => {});
+  }
+}
+
+// Полоска текущего месяца: заливка до «сегодня» + пины дедлайнов (20 ZUS, 25 VAT).
+function buildMonthStrip(p, now) {
+  const y = now.getFullYear(), m = now.getMonth(), today = now.getDate();
+  const last = new Date(y, m + 1, 0).getDate();
+  const pos = d => (last > 1 ? (d - 1) / (last - 1) * 100 : 0);
+  const marks = [{ d: 20, cls: 'zus', t: 'ZUS DRA' }];
+  if (p.vat) marks.push({ d: 25, cls: 'vat', t: 'JPK VAT' });
+
+  let track = '<div class="cp-fill" style="width:' + pos(today) + '%"></div>' +
+    '<i class="cp-today" style="left:' + pos(today) + '%"></i>';
+  marks.forEach(mk => {
+    track += '<i class="cp-pin ' + mk.cls + (mk.d < today ? ' past' : '') +
+      '" style="left:' + pos(mk.d) + '%"><span class="lbl">' + mk.d + '</span></i>';
+  });
+  document.getElementById('cpTrack').innerHTML = track;
+
+  const seg = ['<span><i class="now"></i>сегодня <b>' + today + '.' +
+    String(m + 1).padStart(2, '0') + '</b></span>'];
+  marks.forEach(mk => {
+    const c = mk.d - today;
+    const txt = c > 0 ? 'через <b>' + c + '</b> дн.' : c === 0 ? '<b>сегодня</b>' : 'прошёл';
+    seg.push('<span><i class="' + mk.cls + '"></i>' + mk.d + ' ' + mk.t + ' — ' + txt + '</span>');
+  });
+  document.getElementById('cpLegend').innerHTML = seg.join('');
+}

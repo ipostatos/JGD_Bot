@@ -79,7 +79,7 @@ jdg-46-224-220-94.sslip.io {
 	@nocache { path / *.html *.css *.js *.webmanifest }
 	header @nocache Cache-Control "no-cache"
 	header {
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors https://web.telegram.org https://telegram.org 'self'"
+		Content-Security-Policy "default-src 'self'; script-src 'self' https://telegram.org; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors https://web.telegram.org https://telegram.org 'self'"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
@@ -91,7 +91,14 @@ jdg-46-224-220-94.sslip.io {
 
 ⚠️ `worker-src blob:` нужен pdf.js в читалке, `script-src https://telegram.org` —
 скрипту Mini App, `frame-ancestors` — Telegram Web. Менял CSP — прогони
-страницы под ней (16 штук) и убедись, что в консоли нет отказов.
+страницы под ней (20 штук) и убедись, что в консоли нет отказов.
+
+**`'unsafe-inline'` убран из `script-src` 2026-07-23**: весь код страниц вынесен
+в `webapp/js/<страница>.js` (`tools/extract_inline_js.py`), инлайновые onclick
+заменены на `addEventListener`. Тест `test_csp.py` не даст вернуть инлайн обратно.
+В `style-src` директива осталась сознательно: 175 атрибутов `style` — это вёрстка,
+выполнить через них скрипт нельзя, а переписывать всё — отдельная задача без
+выигрыша в безопасности.
 После правки: `caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy`.
 
 ## Бэкап базы

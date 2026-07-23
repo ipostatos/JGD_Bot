@@ -1,0 +1,78 @@
+renderDock('guide');
+const secIdx = qs.get('sec');
+
+function rowCard(href, tone, icon, title, desc, count) {
+  return `<a class="row-card" href="${href}">
+    <span class="ic-tile ${tone}">${Icons.svg(icon)}</span>
+    <span class="body"><span class="t">${title}</span>
+    <span class="d clamp2">${desc || ''}</span></span>
+    <span class="chev">${count ? `<span class="chip">${count}</span>` : '›'}</span></a>`;
+}
+
+loadJSON('data/content.json').then(({ sections }) => {
+  const secs = sections.filter(s => !['Главная', 'Поддержать'].includes(s.title));
+  const head = document.getElementById('head');
+  const list = document.getElementById('list');
+
+  if (secIdx !== null && secs[+secIdx]) {
+    // ── уровень 2: статьи секции ──
+    const s = secs[+secIdx];
+    head.innerHTML = `<div class="hero">
+      <span class="ic-tile ${s.tone}" style="align-self:center">${Icons.svg(s.icon)}</span>
+      <h1 style="align-self:center">${s.title}</h1></div>
+      <p class="sub">${s.items.length} ${s.items.length === 1 ? 'статья' : s.items.length < 5 ? 'статьи' : 'статей'} · по порядку действий</p>`;
+    list.innerHTML = s.items.map((a, i) =>
+      `<a class="row-card" href="article.html?id=${a.id}">
+        <span class="num">${i + 1}</span>
+        <span class="body"><span class="t" style="font-size:15px">${a.title}</span>
+        ${a.desc ? `<span class="d clamp2">${a.desc}</span>` : ''}</span>
+        <span class="chev">›</span></a>`).join('');
+    setupBack('guide.html');   // уровень 2 (?sec=N) → к списку разделов
+  } else {
+    // ── уровень 1: разделы гайда ──
+    head.innerHTML = `<div class="hero"><span class="logo emi" data-icon="book-open"></span><h1>Гайд</h1></div>
+      <p class="sub">Путь предпринимателя — по шагам, от документов до деклараций</p>`;
+    const main = secs.filter(s => !s.ref), ref = secs.filter(s => s.ref);
+    const render = (s) => {
+      const i = secs.indexOf(s);
+      if (s.single)
+        return rowCard(`article.html?id=${s.items[0].id}`, s.tone, s.icon,
+          s.title, s.items[0].desc);
+      return rowCard(`guide.html?sec=${i}`, s.tone, s.icon, s.title,
+        s.items.map(a => a.title).slice(0, 3).join(' · '), s.items.length);
+    };
+    list.innerHTML =
+      `<div class="section-title">Путь предпринимателя</div>` +
+      main.map(render).join('') +
+      `<div class="section-title">Справочное</div>` +
+      ref.map(render).join('');
+    Icons.hydrate();
+  }
+});
+
+// поиск: индекс грузим лениво при первом фокусе
+let IDX = null;
+const q = document.getElementById('q'), hits = document.getElementById('hits');
+q.addEventListener('focus', () => { if (!IDX) loadJSON('data/search.json').then(j => IDX = j); });
+q.addEventListener('input', () => {
+  const s = q.value.trim().toLowerCase();
+  if (!s || !IDX || s.length < 2) { hits.classList.add('hidden'); return; }
+  const found = [];
+  for (const a of IDX) {
+    const inTitle = a.title.toLowerCase().includes(s);
+    const pos = a.text.indexOf(s);
+    if (inTitle || pos >= 0) {
+      const snippet = pos >= 0
+        ? '…' + a.text.slice(Math.max(0, pos - 30), pos + 70) + '…' : '';
+      found.push({ a, snippet, rank: inTitle ? 0 : 1 });
+      if (found.length > 30) break;
+    }
+  }
+  found.sort((x, y) => x.rank - y.rank);
+  hits.innerHTML = found.slice(0, 10).map(f =>
+    `<a class="search-hit" href="article.html?id=${f.a.id}&q=${encodeURIComponent(s)}">
+      <b>${f.a.title}</b><span class="sn">${f.snippet}</span></a>`).join('')
+    || '<div class="state">Ничего не нашлось</div>';
+  hits.classList.remove('hidden');
+});
+if (qs.get('focus')) setTimeout(() => q.focus(), 100);
