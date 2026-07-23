@@ -186,3 +186,37 @@ def test_zus_stages_match_python_mirror(browser, base_url):
                 f"расхождение для {reg}, ulga={ulga}: JS {js} vs Python {py}")
     finally:
         ctx.close()
+
+
+def test_pkd_card_shows_only_its_own_exclusions(browser, base_url):
+    """Карточка подкласса не показывает чужой текст.
+
+    Карточка рендерит только первую строку описания, и она была чистой —
+    загрязнение из PDF жило в исключениях и в дальних строках описания,
+    то есть в ответе API и в будущих правилах движка, а не на экране.
+    Тест сторожит и то, и другое: и текст на экране, и то, что приходит
+    с сервера в карточку.
+    """
+    ctx, page, _, _ = _open(browser, base_url + "/pkd.html")
+    try:
+        page.fill("#q", "01.19.Z")
+        page.click("#go")
+        page.wait_for_selector("#out .card", timeout=15000)
+        text = page.inner_text("#out")
+        assert "Pozostałe uprawy rolne" in text
+        assert "Uprawa roślin wieloletnich" not in text     # заголовок группы 01.2
+        for marker in ("Grupa ta obejmuje", "Grupa ta nie obejmuje", "Dział ten"):
+            assert marker not in text, marker
+
+        # и то, что пришло с сервера: исключения подкласса — его собственные
+        data = page.evaluate("""async () => {
+            const r = await fetch('/api/pkd', {method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({q: '01.19.Z', limit: 1})});
+            return (await r.json()).results[0];
+        }""")
+        assert any("buraka cukrowego" in e for e in data["excludes"])
+        assert all(not e.startswith(("Grupa ta", "Dział ten", "SEKCJA"))
+                   for e in data["excludes"] + data["includes"])
+    finally:
+        ctx.close()
