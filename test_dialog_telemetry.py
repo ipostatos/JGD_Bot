@@ -111,3 +111,30 @@ def test_stats_window_excludes_old_events(tele):
         c.execute("UPDATE dialog_events SET ts = ts - ?", (40 * 86400,))
     assert tele.stats(days=14)["sessions_started"] == 0
     assert tele.stats(days=60)["sessions_started"] == 1
+
+
+def test_prune_removes_only_what_outlived_the_retention(tele):
+    tele.record(event="ask", session=SID, http=200)
+    tele.record(event="ask", session=SID, http=200)
+    with sqlite3.connect(tele.DB_PATH) as c:      # одна запись старше срока
+        c.execute("UPDATE dialog_events SET ts = ts - ? WHERE rowid = 1",
+                  ((tele.KEEP_DAYS + 1) * 86400,))
+    assert tele.prune() == 1
+    assert len(rows(tele)) == 1
+    assert tele.prune() == 0                      # повторный вызов безвреден
+
+
+def test_retention_runs_on_schedule_not_on_traffic(tele):
+    """Срок хранения соблюдает фоновый цикл сервера, а не удачное совпадение
+    при записи: на малом потоке «иногда при вставке» не сработало бы месяцами.
+
+    Зовём ровно ту функцию, которую вызывает `monitor_loop`, — иначе тест
+    проверял бы уборку, но не то, что её кто-то запускает.
+    """
+    import server
+    tele.record(event="ask", session=SID, http=200)
+    with sqlite3.connect(tele.DB_PATH) as c:
+        c.execute("UPDATE dialog_events SET ts = ts - ?",
+                  ((tele.KEEP_DAYS + 1) * 86400,))
+    server._housekeeping()
+    assert rows(tele) == []

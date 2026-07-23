@@ -100,11 +100,25 @@ def record(*, event: str, session=None, status=None, question_id=None,
                 "INSERT INTO dialog_events(ts,session,event,status,question_id,"
                 "routing_hint,answers,http,ms,rules_version,schema_version) "
                 "VALUES(?,?,?,?,?,?,?,?,?,?,?)", row)
-            if row[0] % 97 == 0:          # чистим изредка, а не каждый запрос
-                c.execute("DELETE FROM dialog_events WHERE ts < ?",
-                          (row[0] - KEEP_DAYS * 86400,))
     except sqlite3.Error:
         pass
+
+
+def prune() -> int:
+    """Удалить события старше срока хранения. Возвращает число строк.
+
+    Зовётся из фонового цикла сервера (`_housekeeping`), а не «иногда при
+    записи»: срок хранения, который соблюдается пропорционально трафику, —
+    это не срок хранения. На малом потоке такая уборка не сработала бы
+    месяцами, а обещание про 180 дней осталось бы только в документации.
+    """
+    try:
+        with _db() as c:
+            cur = c.execute("DELETE FROM dialog_events WHERE ts < ?",
+                            (int(time.time()) - KEEP_DAYS * 86400,))
+            return cur.rowcount
+    except sqlite3.Error:
+        return 0
 
 
 def stats(days: int = 14) -> dict:

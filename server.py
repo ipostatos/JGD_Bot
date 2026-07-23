@@ -219,8 +219,7 @@ async def monitor_loop(app: FastAPI):
                             pass  # юзер заблокировал бота и т.п.
         except Exception as e:
             log.warning("monitor loop error: %s", e)
-        _tmp_cleanup()   # временные файлы юзеров: чистим по расписанию, а не
-                         # только когда кто-то грузит новый
+        _housekeeping()
         await asyncio.sleep(MONITOR_INTERVAL)
 
 
@@ -875,6 +874,20 @@ def _tmp_cleanup():
     for f in TMP_DIR.iterdir():
         if now - f.stat().st_mtime > TMP_TTL:
             f.unlink(missing_ok=True)
+
+
+def _housekeeping():
+    """Уборка по расписанию (фоновый цикл, раз в MONITOR_INTERVAL).
+
+    Сроки хранения обязаны соблюдаться механизмом, а не удачей: временные
+    файлы чистим не только когда кто-то грузит новый, а телеметрию — не
+    «иногда при записи», иначе на малом потоке 180 дней остались бы обещанием.
+    """
+    import dialog_telemetry
+    _tmp_cleanup()
+    dropped = dialog_telemetry.prune()
+    if dropped:
+        log.info("telemetry: удалено событий старше срока хранения: %d", dropped)
 
 
 @app.post("/api/tmpfile")
