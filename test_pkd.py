@@ -56,6 +56,14 @@ def test_old_code_shows_migration():
     assert "31.12.2026" in r["note"]
 
 
+def test_search_hides_old_numbering():
+    """В обычной выдаче «раньше это было 62.01.Z» — шум: спрашивают про сейчас."""
+    assert all("was_pkd2007" not in r for r in pkd.lookup("пишу код")["results"])
+    # но там, где старый код и есть предмет разговора, он остаётся
+    assert "was_pkd2007" in pkd.index().analyse("62.10.B")
+    assert pkd.audit(["62.01.Z"])["items"][0]["status"] == "outdated"
+
+
 def test_vat_flag_only_when_activity_is_in_the_name():
     """Doradztwo в названии — предупреждение; упоминание в пояснениях — не более чем
     повод присмотреться, иначе графический дизайн ложно объявляется потерей льготы."""

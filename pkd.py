@@ -162,6 +162,9 @@ class Index:
                         "заметной частью работы, право на освобождение от VAT "
                         "теряется — формулировки в договоре и на фактуре стоит "
                         "согласовать с бухгалтером."})
+        # Старый код полезен ровно в двух местах: когда человек сам его ввёл и
+        # когда он стоит у него в реестре. В обычной выдаче «раньше это было
+        # 62.01.Z» — шум: спрашивают, какой код нужен сейчас, а не каким он был.
         old = [o for o, v in self.keys.items() if code in v["to"]]
         return {
             "code": code,
@@ -241,9 +244,13 @@ def lookup(query: str, limit: int = 5) -> dict:
                             "занимаетесь на самом деле. Лучше обновить самому."}
 
     hits, matched = idx.search(query, limit)
+    results = []
+    for code, score in hits:
+        r = dict(idx.analyse(code), score=score)
+        r.pop("was_pkd2007", None)     # в поиске старый номер только отвлекает
+        results.append(r)
     return {"query": query, "kind": "search", "matched": matched,
-            "results": [dict(idx.analyse(code), score=score) for code, score in hits],
-            "note": _rate_note()}
+            "results": results, "note": _rate_note()}
 
 
 def audit(codes: list[str]) -> dict:

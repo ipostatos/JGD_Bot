@@ -16,6 +16,9 @@ chat_export*.json
 ChatExport_*/
 chat_analysis/
 
+# Документация GUS BIR — чужие PDF/XLSX на пару мегабайт, качаются с stat.gov.pl
+GUS-Regon-Usluga*/
+
 # Hermes cockpit: аудит и реальные DRA (персональные данные) — не в публичный репо
 audit/
 zus_dra_*.xml

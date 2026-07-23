@@ -137,6 +137,56 @@ def _tag(xml: str, name: str) -> str | None:
     return m.group(1).strip() if m else None
 
 
+# Лимиты GUS на один ключ (официальные, по часам суток): секунда, минута, час.
+# Превышение блокировку не даёт сразу, но «пользователей, превышающих лимиты,
+# будут информировать» — то есть это путь к отзыву ключа, а не к 429.
+GUS_LIMITS = {
+    "day": (3, 120, 6000),     # 08:00-16:59
+    "shoulder": (3, 150, 8000),  # 06:00-07:59 и 17:00-21:59
+    "night": (4, 200, 10000),  # 22:00-05:59
+}
+_gus_calls: list[float] = []
+_gus_session: dict = {"sid": None, "born": 0.0}
+_GUS_SESSION_TTL = 55 * 60     # сессия GUS живёт 60 минут, берём с запасом
+
+
+def _gus_window(hour: int) -> tuple[int, int, int]:
+    if 8 <= hour <= 16:
+        return GUS_LIMITS["day"]
+    if 22 <= hour or hour <= 5:
+        return GUS_LIMITS["night"]
+    return GUS_LIMITS["shoulder"]
+
+
+def _gus_allow() -> bool:
+    """Влезаем ли в лимиты ключа. Считаем свои же вызовы за секунду/минуту/час."""
+    now = time.time()
+    _gus_calls[:] = [t for t in _gus_calls if now - t < 3600]
+    per_sec, per_min, per_hour = _gus_window(time.localtime(now).tm_hour)
+    if (sum(1 for t in _gus_calls if now - t < 1) >= per_sec
+            or sum(1 for t in _gus_calls if now - t < 60) >= per_min
+            or len(_gus_calls) >= per_hour):
+        return False
+    _gus_calls.append(now)
+    return True
+
+
+async def _gus_sid(cl: httpx.AsyncClient, key: str, headers: dict) -> str | None:
+    """Сессия GUS переиспользуется: логиниться на каждый запрос — прямой путь
+    в «слишком много обращений», которые инструкция запрещает отдельным пунктом."""
+    now = time.time()
+    if _gus_session["sid"] and now - _gus_session["born"] < _GUS_SESSION_TTL:
+        return _gus_session["sid"]
+    if not _gus_allow():
+        return None
+    r = await cl.post(GUS_BASE, headers=headers, content=_gus_envelope(
+        "Zaloguj", f"<ns:Zaloguj><ns:pKluczUzytkownika>{key}</ns:pKluczUzytkownika></ns:Zaloguj>"))
+    r.raise_for_status()
+    sid = _tag(r.text, "ZalogujResult")
+    _gus_session.update(sid=sid or None, born=now if sid else 0.0)
+    return sid or None
+
+
 async def gus_lookup(cl: httpx.AsyncClient, nip: str) -> dict | None:
     """GUS BIR 1.1: логин ключом → sid → поиск по NIP. Протокол проверен на
     тестовой среде (wyszukiwarkaregontest + публичный тестовый ключ)."""
@@ -144,12 +194,12 @@ async def gus_lookup(cl: httpx.AsyncClient, nip: str) -> dict | None:
     if not key:
         return None
     headers = {"Content-Type": "application/soap+xml; charset=utf-8"}
-    r = await cl.post(GUS_BASE, headers=headers, content=_gus_envelope(
-        "Zaloguj", f"<ns:Zaloguj><ns:pKluczUzytkownika>{key}</ns:pKluczUzytkownika></ns:Zaloguj>"))
-    r.raise_for_status()
-    sid = _tag(r.text, "ZalogujResult")
+    sid = await _gus_sid(cl, key, headers)
     if not sid:
-        log.warning("GUS: логин не дал sid")
+        log.warning("GUS: нет сессии (логин не дал sid либо упёрлись в лимит ключа)")
+        return None
+    if not _gus_allow():
+        log.warning("GUS: свой лимит запросов исчерпан, пропускаем реестр")
         return None
     r = await cl.post(GUS_BASE, headers=dict(headers, sid=sid), content=_gus_envelope(
         "DaneSzukajPodmioty",
@@ -157,6 +207,18 @@ async def gus_lookup(cl: httpx.AsyncClient, nip: str) -> dict | None:
         f"<dat:Nip>{nip}</dat:Nip></ns:pParametryWyszukiwania></ns:DaneSzukajPodmioty>"))
     r.raise_for_status()
     payload = (_tag(r.text, "DaneSzukajPodmiotyResult") or "").replace("&lt;", "<").replace("&gt;", ">")
+    if not _tag(payload, "Regon") and _gus_session["sid"]:
+        # пустой ответ бывает и когда сессия протухла раньше нашего TTL —
+        # один раз перелогиниваемся, прежде чем считать, что записи нет
+        _gus_session.update(sid=None, born=0.0)
+        sid = await _gus_sid(cl, key, headers)
+        if sid and _gus_allow():
+            r = await cl.post(GUS_BASE, headers=dict(headers, sid=sid), content=_gus_envelope(
+                "DaneSzukajPodmioty",
+                f"<ns:DaneSzukajPodmioty><ns:pParametryWyszukiwania>"
+                f"<dat:Nip>{nip}</dat:Nip></ns:pParametryWyszukiwania></ns:DaneSzukajPodmioty>"))
+            payload = (_tag(r.text, "DaneSzukajPodmiotyResult") or "").replace(
+                "&lt;", "<").replace("&gt;", ">")
     if not _tag(payload, "Regon"):
         return None
     street = " ".join(x for x in (_tag(payload, "Ulica"), _tag(payload, "NrNieruchomosci")) if x)

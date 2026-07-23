@@ -86,6 +86,8 @@ function card(x, opts = {}) {
     <span><b>${esc(f.title)}</b> — ${esc(f.text)}</span></div>`).join('');
   const rates = (x.rate_hints || []).map(rateRow).join('');
   const desc = (x.includes || [])[0];
+  // старый номер показываем только там, где он и есть предмет разговора:
+  // в аудите своих кодов и при вводе кода PKD 2007 (сервер его там и присылает)
   const old = (x.was_pkd2007 || []).length
     ? `<span class="chip">раньше ${esc(x.was_pkd2007.join(', '))}</span>` : '';
   return `<div class="card" style="margin-bottom:12px${opts.border ? ';border-left:3px solid ' + opts.border : ''}">

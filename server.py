@@ -330,11 +330,12 @@ def _pkd_reply(query: str) -> str:
         block = [f"<b>{esc_html(x['code'])}</b> — {esc_html(x['name'])}"]
         if x["includes"]:
             block.append(f"<i>{esc_html(x['includes'][0][:220])}</i>")
+        if x.get("rate_hints"):
+            h = x["rate_hints"][0]
+            block.append(f"Ставка ryczałtu ориентировочно <b>{h['rate']}%</b>")
         for f in x["flags"]:
             mark = "⚠️" if f["level"] == "warn" else "ℹ️"
             block.append(f"{mark} <b>{esc_html(f['title'])}</b>: {esc_html(f['text'])}")
-        if x["was_pkd2007"]:
-            block.append(f"Раньше это было {esc_html(', '.join(x['was_pkd2007']))}.")
         out.append("\n".join(block))
     out.append(f"<i>{esc_html(r['note'])}</i>")
     return "\n\n".join(out)
