@@ -13,6 +13,7 @@
 import json
 import logging
 import math
+import os
 import re
 from collections import Counter, defaultdict
 from functools import lru_cache
@@ -20,7 +21,9 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parent
-DATA = ROOT / "webapp" / "data"
+# справочник генерируется tools/pkd_build.py и в git не едет, поэтому тесты
+# (и CI, где его физически нет) подсовывают через JDG_PKD_DATA маленькую фикстуру
+DATA = Path(os.environ.get("JDG_PKD_DATA") or ROOT / "webapp" / "data")
 
 WORD = re.compile(r"[a-zа-яёąćęłńóśźż0-9]+", re.I)
 CODE_IN_QUERY = re.compile(r"\b(\d{2})[.,](\d{2})(?:[.,\s]?([A-Za-z]))?\b")
@@ -38,13 +41,15 @@ def _tok(text: str):
 
 
 class Index:
-    def __init__(self):
-        raw = json.loads((DATA / "pkd.json").read_text(encoding="utf-8"))
+    def __init__(self, data: Path | None = None):
+        data = data or Path(os.environ.get("JDG_PKD_DATA") or DATA)
+        self.dir = data
+        raw = json.loads((data / "pkd.json").read_text(encoding="utf-8"))
         self.meta = {k: v for k, v in raw.items() if k != "codes"}
         self.codes = {c["code"]: c for c in raw["codes"]}
         try:
             self.keys = json.loads(
-                (DATA / "pkd_keys.json").read_text(encoding="utf-8"))["map"]
+                (data / "pkd_keys.json").read_text(encoding="utf-8"))["map"]
         except Exception:
             self.keys = {}
         try:

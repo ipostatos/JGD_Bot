@@ -1,0 +1,149 @@
+{
+ "note": "PKD 2007 -> PKD 2025, официальные ключи GUS",
+ "map": {
+  "47.91.Z": {
+   "name": "Sprzedaż detaliczna prowadzona przez domy sprzedaży wysyłkowej lub Internet",
+   "to": [
+    "47.11.Z",
+    "47.12.Z",
+    "47.21.Z",
+    "47.22.Z",
+    "47.23.Z",
+    "47.24.Z",
+    "47.25.Z",
+    "47.26.Z",
+    "47.27.Z",
+    "47.40.Z",
+    "47.51.Z",
+    "47.52.Z",
+    "47.53.Z",
+    "47.54.Z",
+    "47.55.Z",
+    "47.61.Z",
+    "47.62.Z",
+    "47.63.Z",
+    "47.64.Z",
+    "47.69.A",
+    "47.69.B",
+    "47.69.C",
+    "47.71.Z",
+    "47.72.Z",
+    "47.73.Z",
+    "47.74.Z",
+    "47.75.Z",
+    "47.76.A",
+    "47.76.B",
+    "47.77.Z",
+    "47.78.Z",
+    "47.79.A",
+    "47.79.B",
+    "47.79.C",
+    "47.91.Z",
+    "47.92.Z",
+    "60.39.Z"
+   ]
+  },
+  "62.01.Z": {
+   "name": "Działalność związana z oprogramowaniem",
+   "to": [
+    "62.10.A",
+    "62.10.B"
+   ]
+  },
+  "62.02.Z": {
+   "name": "Działalność związana z doradztwem w zakresie informatyki",
+   "to": [
+    "62.20.A",
+    "62.20.B"
+   ]
+  },
+  "62.03.Z": {
+   "name": "Działalność związana z zarządzaniem urządzeniami informatycznymi",
+   "to": [
+    "62.20.B"
+   ]
+  },
+  "62.09.Z": {
+   "name": "Pozostała działalność usługowa w zakresie technologii informatycznych i komputerowych",
+   "to": [
+    "62.90.Z"
+   ]
+  },
+  "63.11.Z": {
+   "name": "Przetwarzanie danych; zarządzanie stronami internetowymi (hosting) i podobna działalność",
+   "to": [
+    "60.20.Z",
+    "60.39.Z",
+    "63.10.A",
+    "63.10.B",
+    "63.10.C",
+    "63.10.D"
+   ]
+  },
+  "63.12.Z": {
+   "name": "Działalność portali internetowych",
+   "to": [
+    "60.39.Z",
+    "63.91.Z"
+   ]
+  },
+  "69.10.Z": {
+   "name": "Działalność prawnicza",
+   "to": [
+    "69.10.Z"
+   ]
+  },
+  "70.22.Z": {
+   "name": "Pozostałe doradztwo w zakresie prowadzenia działalności gospodarczej i zarządzania",
+   "to": [
+    "70.20.Z"
+   ]
+  },
+  "73.11.Z": {
+   "name": "Działalność agencji reklamowych",
+   "to": [
+    "73.11.Z"
+   ]
+  },
+  "74.10.Z": {
+   "name": "Działalność w zakresie specjalistycznego projektowania",
+   "to": [
+    "74.11.Z",
+    "74.12.Z",
+    "74.13.Z",
+    "74.14.Z"
+   ]
+  },
+  "85.59.B": {
+   "name": "Pozostałe pozaszkolne formy edukacji, gdzie indziej niesklasyfikowane",
+   "to": [
+    "85.59.B",
+    "85.59.D"
+   ]
+  },
+  "90.01.Z": {
+   "name": "Działalność związana z wystawianiem przedstawień artystycznych",
+   "to": [
+    "90.20.A",
+    "90.20.B",
+    "90.20.C"
+   ]
+  },
+  "90.03.Z": {
+   "name": "Artystyczna i literacka działalność twórcza",
+   "to": [
+    "90.11.Z",
+    "90.12.Z",
+    "90.13.Z",
+    "91.30.Z"
+   ]
+  },
+  "96.02.Z": {
+   "name": "Fryzjerstwo i pozostałe zabiegi kosmetyczne",
+   "to": [
+    "96.21.Z",
+    "96.22.Z"
+   ]
+  }
+ }
+}
