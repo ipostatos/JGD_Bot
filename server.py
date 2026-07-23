@@ -571,6 +571,63 @@ async def api_pkd(req: Request):
     return await asyncio.to_thread(pkd.lookup, query, int(body.get("limit", 5)))
 
 
+def _client_key(req: Request) -> int:
+    """Кого ограничивать там, где нет initData.
+
+    Берём адрес клиента и сворачиваем в число: сам адрес в базу лимитов
+    не пишем, полный текст запроса — тем более. Лимитеру нужен только
+    стабильный ключ, а не досье.
+    """
+    host = (req.client.host if req.client else "") or "unknown"
+    return int(hashlib.sha256(host.encode()).hexdigest()[:12], 16)
+
+
+@app.post("/api/pkd/dialog")
+async def api_pkd_dialog(req: Request):
+    """Диалоговый подбор PKD за флагом PKD_DIALOG_ENABLED.
+
+    Ручка тонкая намеренно: провалидировать вход, позвать чистую функцию,
+    сериализовать ответ. Ни выбора вопроса, ни правки признаков, ни выбора
+    кода здесь нет — иначе появилась бы вторая, неявная реализация правил.
+
+    Состояние не хранится: клиент присылает исходный текст и уже данные
+    ответы, сервер каждый раз считает всё заново. Поэтому один и тот же
+    запрос обязан давать один и тот же ответ, и это проверено тестом.
+    """
+    if os.getenv("PKD_DIALOG_ENABLED", "").lower() not in ("1", "true", "yes"):
+        # выключенный флаг не должен намекать на будущую функциональность:
+        # ни 503, ни «скоро будет» — ручки просто нет
+        raise HTTPException(404, "Not Found")
+
+    from pkd_dialog import api as dialog_api
+    from pkd_dialog.resolution import resolve_furniture_dialog
+
+    raw = await req.body()
+    if len(raw) > dialog_api.MAX_BODY_BYTES:
+        # молча обрезать запрос нельзя: человек не поймёт, почему ответ
+        # не про то, что он написал
+        raise HTTPException(413, "Запрос слишком большой.")
+    _limit_or_429("pkd_dialog", _client_key(req))
+
+    try:
+        body = json.loads(raw or b"{}")
+    except ValueError:
+        raise HTTPException(400, "Тело запроса должно быть валидным JSON.")
+
+    try:
+        parsed = dialog_api.parse_request(body)
+        result = await asyncio.to_thread(
+            resolve_furniture_dialog, query=parsed.query,
+            answers=parsed.answers, intent=parsed.intent)
+        return dialog_api.serialize(result)
+    except Exception as exc:                      # noqa: BLE001 — маппинг в HTTP
+        err = dialog_api.to_api_error(exc)
+        if err.http_status == 500:
+            # наружу ни трассы, ни путей, ни id правил
+            log.exception("pkd/dialog: %s", exc)
+        raise HTTPException(err.http_status, err.payload()["error"])
+
+
 @app.post("/api/pkd/my")
 async def api_pkd_my(req: Request):
     """Коды PKD, которые реально стоят в CEIDG у этого NIP, + разбор.
