@@ -97,6 +97,30 @@ def test_empty_query_is_safe():
     assert pkd.lookup("qwertyuiop")["results"] == []
 
 
+def test_russian_layer_works_without_profession_entry():
+    """Русские слова ищут по переводу самой классификации, а не по списку
+    профессий: словарь покрывает частные случаи, глоссарий — все 728 кодов."""
+    # «юридические услуги» на фикстуре из 16 кодов неоднозначны: слово «услуги»
+    # тянет за собой usługową. Проверяем на словах, где перевод решает
+    assert pkd.lookup("адвокат право")["results"][0]["code"] == "69.10.Z"
+    assert pkd.lookup("парикмахерская стрижка")["results"][0]["code"] == "96.21.Z"
+
+
+def test_stemming_does_not_glue_different_words():
+    """«продажа» и «продакт», «фотосъёмка» и «фотосток» — разные слова.
+    При обрезке до пяти символов они слипались, и срабатывал не тот синоним."""
+    t = pkd._tok("продажа продакт фотосъёмка фотосток мебель мебели")
+    assert t[0] != t[1] and t[2] != t[3]
+    assert t[4] == t[5], "«мебель» и «мебели» должны сойтись"
+
+
+def test_glossary_merges_colliding_stems():
+    """У «produkcja» и «produktów» одна основа — значения обязаны слиться,
+    иначе коды получают чужой перевод."""
+    ru = pkd.index().ru_terms.get("produk", [])
+    assert "производство" in ru and "продукты" in ru
+
+
 def test_hint_codes_look_like_codes():
     """Подсказка с опечаткой молча игнорируется — профессия теряет буст."""
     import re
@@ -127,3 +151,30 @@ def test_full_catalogue_when_built(monkeypatch):
     assert len(data["codes"]) > 700, "в PKD 2025 около 728 подклассов"
     assert data["version"] == "PKD 2025"
     assert pkd.lookup("я блогер")["results"][0]["code"] == "90.11.Z"
+
+
+@pytest.mark.skipif(not FULL.is_file(),
+                    reason="полный справочник собирается tools/pkd_build.py и не в git")
+@pytest.mark.parametrize("query,code", [
+    ("производство мебели", "31.00.Z"),
+    ("ремонт автомобилей", "95.31.B"),
+    ("уборка квартир", "81.21.Z"),
+    ("перевозка грузов", "49.41.Z"),
+    ("выращивание овощей", "01.13.Z"),
+    ("детский сад няня", "88.91.Z"),
+    ("туристическое агентство", "79.11.Z"),
+    ("пекарня хлеб", "47.24.Z"),
+    ("ветеринар", "75.00.Z"),
+    ("переводчик текстов", "74.30.Z"),
+    ("хостинг серверов", "63.10.D"),
+    ("фотосъёмка свадеб", "74.20.Z"),
+    ("курьерская доставка еды", "53.20.Z"),
+    ("стоматолог", "86.23.Z"),
+    ("ремонт телефонов", "95.10.Z"),
+    ("аренда квартир посуточно", "68.20.Z"),
+])
+def test_russian_queries_across_sectors(monkeypatch, query, code):
+    """Отрасли, которых нет в словаре профессий: работает перевод классификации."""
+    monkeypatch.delenv("JDG_PKD_DATA", raising=False)
+    pkd.index.cache_clear()
+    assert pkd.lookup(query)["results"][0]["code"] == code

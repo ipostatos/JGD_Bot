@@ -36,8 +36,27 @@ VAT_EXCLUDED = re.compile(r"doradzt|prawnicz|jubilers|inkas|ściągani[ae] dług
 VAT_SOFT = re.compile(r"doradztwem w zakresie informatyki|doradztwo w zakresie sprzętu", re.I)
 
 
+RU = re.compile(r"^[а-яё]")
+# Обрезать кириллицу до пяти символов нельзя: «продажа» слипается с «продакт»,
+# «фотосъёмка» с «фотостоком», и словарь срабатывает не на ту запись.
+# Сначала снимаем окончание, потом уже режем.
+RU_END = re.compile(r"(иями|ями|ами|ыми|ими|ого|ему|ому|ой|ей|ая|ое|ые|ий|ый|"
+                    r"ам|ах|ов|ев|ии|ия|ию|ье|ья|ы|и|а|я|у|ю|е|о|ь|й)$")
+
+
 def _tok(text: str):
-    return [w[:STEM] for w in WORD.findall(text.lower()) if len(w) > 2]
+    """Грубая нормализация: у русского словоизменение богаче польского,
+    «мебель» и «мебели» должны сойтись, а «продажа» и «продакт» — нет."""
+    out = []
+    for w in WORD.findall(text.lower()):
+        if len(w) <= 2:
+            continue
+        if RU.match(w):
+            base = RU_END.sub("", w) if len(w) > 4 else w
+            out.append(base[:STEM])
+        else:
+            out.append(w[:STEM])
+    return out
 
 
 class Index:
@@ -64,13 +83,35 @@ class Index:
                 (ROOT / "webapp" / "pkd_rates.json").read_text(encoding="utf-8"))
         except Exception:
             self.rates = {"rates": [], "note": ""}
+        # русский слой поверх польских названий: словарь профессий покрывает
+        # частные случаи, а это — саму классификацию, все 728 подклассов
+        try:
+            terms = json.loads(
+                (ROOT / "webapp" / "pkd_ru_terms.json").read_text(encoding="utf-8"))["terms"]
+            # у «produkcja» и «produktów» одна основа: значения сливаем, иначе
+            # последний ключ молча затирает первый и коды получают чужой перевод
+            self.ru_terms = {}
+            for pl, ru in terms.items():
+                t = _tok(pl)
+                if t:
+                    self.ru_terms.setdefault(t[0], [])
+                    self.ru_terms[t[0]] += [w for w in ru if w not in self.ru_terms[t[0]]]
+        except Exception:
+            self.ru_terms = {}
 
         self.docs: dict[str, Counter] = {}
+        self.names: dict[str, set] = {}
         self.df: Counter = Counter()
         for code, c in self.codes.items():
             # название весит больше пояснений: оно и есть суть подкласса
-            toks = _tok(c["name"]) * 3 + _tok(" ".join(c["includes"]))
+            name_toks = _tok(c["name"])
+            ru = [t for w in name_toks for t in _tok(" ".join(self.ru_terms.get(w, [])))]
+            # пояснения обрезаем: у «Produkcja mebli» название короткое, а список
+            # «obejmuje» длинный, и BM25 штрафует документ за длину — короткий
+            # точный подкласс проигрывал соседям с пухлым описанием
+            toks = name_toks * 3 + ru * 2 + _tok(" ".join(c["includes"]))[:120]
             self.docs[code] = Counter(toks)
+            self.names[code] = set(name_toks) | set(ru)
             self.df.update(set(toks))
         self.avg_len = sum(sum(d.values()) for d in self.docs.values()) / max(len(self.docs), 1)
         self.n = len(self.docs)
@@ -129,6 +170,14 @@ class Index:
                     continue
                 dl = sum(doc.values())
                 scores[code] += idf * f * (K1 + 1) / (f + K1 * (1 - B + B * dl / self.avg_len))
+        # попадание прямо в название весомее совпадения в пояснениях: BM25 иначе
+        # предпочитает короткий «Naprawa mebli» точному «Produkcja mebli»
+        qset = {t for t in set(_tok(query)) if self.df.get(t)}
+        if qset:
+            for code, hit in ((c, len(qset & n)) for c, n in self.names.items()):
+                if hit:
+                    scores[code] += 9.0 * (hit / len(qset))
+
         # подсказка словаря поднимает код, но не назначает его: официальный текст
         # всё равно показывается, и решение остаётся за человеком
         for h, w in hints.items():
