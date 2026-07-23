@@ -35,32 +35,59 @@ EXCL = re.compile(r"^Podklasa ta nie obejmuje.*$", re.I)
 NOISE = re.compile(r"^(Wyjaśnienia do PKD 2025|Struktura klasyfikacji|SEKCJA [A-U]|\d+)\s*$")
 
 
-def from_xls(path: Path):
-    """Коды, названия, секции PKD 2025 + карта старый код -> новые."""
+SECTION_ROW = re.compile(r"^SEKCJA\s+([A-U])$", re.I)
+
+
+def from_structure(path: Path):
+    """Коды, названия, секции и разделы — из официальной структуры PKD 2025.
+
+    Секции ОБЯЗАНЫ приходить отсюда, а не из файла ключей: там одной секции
+    PKD 2007 соответствует несколько секций PKD 2025 (у C их три: A, C, S),
+    и «текущая секция» при потоковом чтении застревает на последней строке.
+    Из-за этого электромонтаж 43.21.Z оказывался в секции «культура и спорт».
+    """
+    df = pd.read_excel(path, sheet_name=0, header=0, dtype=str)
+    df.columns = ["dzial", "grupa", "klasa", "podklasa", "name"]
+
+    names, sections, div_names = {}, {}, {}
+    section, section_name = None, None
+    for r in df.itertuples(index=False):
+        col0 = str(r.dzial).strip() if r.dzial and str(r.dzial) != "nan" else ""
+        m = SECTION_ROW.match(col0)
+        if m:                                        # «SEKCJA F» + название в колонке класса
+            section = m.group(1).upper()
+            section_name = str(r.klasa).strip()
+            continue
+        name = str(r.name).strip() if r.name and str(r.name) != "nan" else ""
+        code = str(r.podklasa).strip() if r.podklasa and str(r.podklasa) != "nan" else ""
+        # у разделов с единственным классом (31 «Produkcja mebli», 75 «weterynaryjna»)
+        # GUS кладёт раздел, группу, класс и подкласс в ОДНУ строку: если после
+        # раздела делать continue, такие подклассы теряются — их было девять
+        if re.fullmatch(r"\d{2}", col0):             # дział
+            div_names[col0] = name
+            if not SUBCLASS.match(code):
+                continue
+        if SUBCLASS.match(code):
+            names[code] = name
+            sections[code] = (section, section_name)
+    return names, sections, div_names
+
+
+def keys_from_xls(path: Path):
+    """Только карта старый код PKD 2007 -> новые подклассы PKD 2025."""
     df = pd.read_excel(path, sheet_name=0, header=2, dtype=str)
     df.columns = ["lp", "level", "old", "old_name", "code", "name", "scope", "n", "rel"]
     df = df.dropna(subset=["code"])
 
-    names, sections, keys = {}, {}, {}
-    section, section_name = None, None
-    div_names = {}
+    keys = {}
     for r in df.itertuples(index=False):
-        code, name = str(r.code).strip(), str(r.name).strip()
-        level = str(r.level).strip()
-        if level == "1" and len(code) == 1:          # секция: A..U
-            section, section_name = code, name
-            continue
-        if level == "2" and len(code) == 2:          # дział
-            div_names[code] = name
-        if SUBCLASS.match(code):
-            names[code] = name
-            sections[code] = (section, section_name)
-            old = str(r.old).strip() if r.old else ""
-            if SUBCLASS.match(old):
-                keys.setdefault(old, {"name": str(r.old_name).strip(), "to": []})
-                if code not in keys[old]["to"]:
-                    keys[old]["to"].append(code)
-    return names, sections, div_names, keys
+        code = str(r.code).strip()
+        old = str(r.old).strip() if r.old else ""
+        if SUBCLASS.match(code) and SUBCLASS.match(old):
+            keys.setdefault(old, {"name": str(r.old_name).strip(), "to": []})
+            if code not in keys[old]["to"]:
+                keys[old]["to"].append(code)
+    return keys
 
 
 def from_pdf(path: Path, valid: set):
@@ -142,7 +169,8 @@ def download():
     """Скачать исходники GUS — нужно на чистой машине (VPS, CI)."""
     import urllib.request
     SRC.mkdir(parents=True, exist_ok=True)
-    for name in ("KlasyfikacjaPKD2025.pdf", "KluczePKD_2007_2025.xls"):
+    for name in ("KlasyfikacjaPKD2025.pdf", "KluczePKD_2007_2025.xls",
+                 "StrukturaPKD2025.xls"):
         dst = SRC / name
         if dst.exists():
             print(f"  {name}: уже есть")
@@ -156,6 +184,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pdf", default=str(SRC / "KlasyfikacjaPKD2025.pdf"))
     ap.add_argument("--keys", default=str(SRC / "KluczePKD_2007_2025.xls"))
+    ap.add_argument("--structure", default=str(SRC / "StrukturaPKD2025.xls"))
     ap.add_argument("--download", action="store_true",
                     help="скачать исходники GUS, если их нет локально")
     args = ap.parse_args()
@@ -163,9 +192,11 @@ def main():
     if args.download:
         download()
 
-    print("XLS: коды и названия…")
-    names, sections, divs, keys = from_xls(Path(args.keys))
-    print(f"  подклассов PKD 2025: {len(names)}, старых кодов в ключах: {len(keys)}")
+    print("XLS: структура — коды, названия, секции…")
+    names, sections, divs = from_structure(Path(args.structure))
+    keys = keys_from_xls(Path(args.keys))
+    print(f"  подклассов PKD 2025: {len(names)}, секций: "
+          f"{len({s for s, _ in sections.values()})}, старых кодов в ключах: {len(keys)}")
 
     print("PDF: пояснения…")
     expl = from_pdf(Path(args.pdf), set(names))

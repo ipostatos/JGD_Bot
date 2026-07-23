@@ -139,6 +139,35 @@ def test_glossary_merges_colliding_stems():
     assert "производство" in ru and "продукты" in ru
 
 
+# Официальные диапазоны разделов по секциям PKD 2025 (StrukturaPKD2025.xls).
+# Буквы не совпадают с NACE Rev. 2: у GUS ICT разделён на J (58–60, издательская
+# и вещательная) и K (61–63, телеком и IT), из-за чего всё дальше сдвинуто.
+SECTION_RANGES = [
+    ("A", 1, 3), ("B", 5, 9), ("C", 10, 33), ("D", 35, 35), ("E", 36, 39),
+    ("F", 41, 43), ("G", 46, 47), ("H", 49, 53), ("I", 55, 56), ("J", 58, 60),
+    ("K", 61, 63), ("L", 64, 66), ("M", 68, 68), ("N", 69, 75), ("O", 77, 82),
+    ("P", 84, 84), ("Q", 85, 85), ("R", 86, 88), ("S", 90, 93), ("T", 94, 96),
+    ("U", 97, 99),
+]
+
+
+def test_section_matches_the_code():
+    """Секция обязана следовать из номера раздела.
+
+    Секции собирались из файла ключей PKD 2007→2025, где одной старой секции
+    отвечает несколько новых, и «текущая секция» застревала на последней строке:
+    электромонтаж 43.21.Z уезжал в «культуру и спорт», а человек читал это
+    в карточке. Теперь источник — официальная структура, а тест сторожит.
+    """
+    def expected(code):
+        d = int(code[:2])
+        return next((s for s, lo, hi in SECTION_RANGES if lo <= d <= hi), None)
+
+    wrong = {c: (v["section"], expected(c)) for c, v in pkd.index().codes.items()
+             if v["section"] != expected(c)}
+    assert not wrong
+
+
 def test_hint_codes_look_like_codes():
     """Подсказка с опечаткой молча игнорируется — профессия теряет буст."""
     import re
@@ -166,9 +195,14 @@ def test_full_catalogue_when_built(monkeypatch):
     monkeypatch.delenv("JDG_PKD_DATA", raising=False)
     pkd.index.cache_clear()
     data = json.loads(FULL.read_text(encoding="utf-8"))
-    assert len(data["codes"]) > 700, "в PKD 2025 около 728 подклассов"
+    assert len(data["codes"]) == 728, "в PKD 2025 ровно 728 подклассов"
     assert data["version"] == "PKD 2025"
     assert pkd.lookup("я блогер")["results"][0]["code"] == "90.11.Z"
+    # разделы с единственным классом (31 «Produkcja mebli», 75 «weterynaryjna»)
+    # GUS кладёт в одну строку с разделом — на них сборка спотыкалась
+    for code in ("31.00.Z", "75.00.Z", "12.00.Z", "97.00.Z", "99.00.Z"):
+        assert code in pkd.index().codes, code
+    test_section_matches_the_code()   # тот же инвариант, но на всех 728
 
 
 @pytest.mark.skipif(not FULL.is_file(),
