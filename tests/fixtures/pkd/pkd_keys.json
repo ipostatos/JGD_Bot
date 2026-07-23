@@ -1,5 +1,6 @@
 {
  "note": "PKD 2007 -> PKD 2025, официальные ключи GUS",
+ "schema_version": 2,
  "map": {
   "47.91.Z": {
    "name": "Sprzedaż detaliczna prowadzona przez domy sprzedaży wysyłkowej lub Internet",

@@ -1,9 +1,8 @@
 """Маленькая фикстура PKD для тестов и CI.
 
-Полный справочник (webapp/data/pkd.json, ~1 МБ) генерируется из файлов GUS и в
-git не едет, поэтому на раннере его нет. Вырезаем из него десяток настоящих
-записей — так тесты проверяют логику поиска и флагов, не завися от сборки
-данных и не выдумывая содержимое.
+Полный справочник (data/pkd/pkd.json.gz) лежит в git и гоняется в CI целиком.
+Фикстура нужна не вместо него, а для быстрых unit-тестов: маленький индекс
+строится за миллисекунды, а поведение проверяется на настоящих записях GUS.
 
     python tools/pkd_fixture.py
 """
@@ -11,8 +10,10 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "webapp" / "data"
+SRC = ROOT / "data" / "pkd"
 DST = ROOT / "tests" / "fixtures" / "pkd"
 
 # по одному представителю на проверяемый случай: IT, doradztwo (жёсткий флаг VAT),
@@ -24,8 +25,9 @@ KEEP = ["62.10.A", "62.10.B", "62.20.B", "62.90.Z", "69.10.Z", "70.20.Z",
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    full = json.loads((SRC / "pkd.json").read_text(encoding="utf-8"))
-    keys = json.loads((SRC / "pkd_keys.json").read_text(encoding="utf-8"))
+    import pkd as pkd_module                    # тот же загрузчик, что и в проде
+    full = pkd_module._load(SRC / "pkd.json")
+    keys = pkd_module._load(SRC / "pkd_keys.json")
 
     codes = [c for c in full["codes"] if c["code"] in KEEP]
     missing = set(KEEP) - {c["code"] for c in codes}

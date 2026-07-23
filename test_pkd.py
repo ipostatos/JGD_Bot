@@ -13,7 +13,9 @@ import pkd
 
 ROOT = Path(__file__).resolve().parent
 FIXTURE = ROOT / "tests" / "fixtures" / "pkd"
-FULL = ROOT / "webapp" / "data" / "pkd.json"
+# полный справочник лежит в git сжатым и гоняется в CI целиком: «облегчённого
+# корпуса для CI» быть не должно — он разойдётся с тем, что работает у людей
+FULL = ROOT / "data" / "pkd" / "pkd.json.gz"
 
 
 @pytest.fixture(autouse=True)
@@ -176,6 +178,76 @@ def test_hint_codes_look_like_codes():
             assert re.fullmatch(r"\d{2}\.\d{2}\.[A-Z]", h), f"{e['ru'][0]}: {h}"
 
 
+@pytest.fixture
+def full_index(monkeypatch):
+    """Настоящий справочник целиком — тот же артефакт, что работает в проде."""
+    monkeypatch.delenv("JDG_PKD_DATA", raising=False)
+    pkd.index.cache_clear()
+    yield pkd.index()
+    pkd.index.cache_clear()
+
+
+class TestCorpusIntegrity:
+    """Целостность официального корпуса: проверяем артефакт, а не поиск.
+
+    Справочник собирается из трёх файлов GUS, и порча здесь не видна на глаз —
+    секции уже один раз разъехались с кодами и доехали до людей в карточках.
+    """
+
+    def test_all_728_subclasses_unique(self, full_index):
+        codes = list(full_index.codes)
+        assert len(codes) == 728 and len(set(codes)) == 728
+
+    def test_hierarchy_chain_is_consistent(self, full_index):
+        """Подкласс → класс → группа → раздел → секция: каждый уровень обязан
+        быть префиксом следующего, иначе запись собрана из разных строк файла."""
+        broken = []
+        for code, c in full_index.codes.items():
+            if not (code.startswith(c["class"]) and c["class"].startswith(c["group"])
+                    and c["group"].startswith(c["division"])
+                    and c["section"] and len(c["section"]) == 1):
+                broken.append((code, c["class"], c["group"], c["division"], c["section"]))
+        assert not broken
+
+    def test_every_level_has_official_name(self, full_index):
+        nameless = [c["code"] for c in full_index.codes.values()
+                    if not all(c.get(k) for k in
+                               ("name", "section_name", "division_name",
+                                "group_name", "class_name"))]
+        assert not nameless
+
+    def test_exclusion_links_point_to_existing_codes(self, full_index):
+        """Разобранная ссылка обязана вести в существующий подкласс.
+        Нераспознанный текст исключения — это нормально: GUS ссылается и на
+        «odpowiednie podklasy działu 43», и на чужие классификации."""
+        broken = {c["code"]: sorted(pkd.exclusion_targets(c) - set(full_index.codes))
+                  for c in full_index.codes.values()}
+        assert not {k: v for k, v in broken.items() if v}
+
+    def test_exclusion_raw_text_is_never_lost(self, full_index):
+        empty = [c["code"] for c in full_index.codes.values()
+                 for x in c["excludes"] if not x.get("raw")]
+        assert not empty
+
+    def test_artifact_declares_sources_and_versions(self, full_index):
+        meta = full_index.meta
+        assert meta["schema_version"] == 2 and meta["pkd_version"] == "2025"
+        assert meta["builder_version"]
+        by_file = {s["filename"]: s["sha256"] for s in meta["sources"]}
+        assert {"StrukturaPKD2025.xls", "KluczePKD_2007_2025.xls",
+                "KlasyfikacjaPKD2025.pdf"} <= set(by_file)
+        assert all(len(h) == 64 for h in by_file.values())
+        # метки времени в артефакте быть не должно: одинаковый вход обязан
+        # давать одинаковые байты, иначе хеши источников бессмысленны
+        assert "generated_at" not in meta
+
+    def test_official_wording_is_intact(self, full_index):
+        """Официальный текст не пересказан и не переведён."""
+        c = full_index.codes["43.32.Z"]
+        assert c["name"] == "Zakładanie stolarki budowlanej"
+        assert any("meble wbudowane" in x for x in c["includes"])
+
+
 @pytest.mark.skipif(not FULL.is_file(),
                     reason="полный справочник собирается tools/pkd_build.py и не в git")
 def test_hints_exist_in_catalogue(monkeypatch):
@@ -194,7 +266,7 @@ def test_hints_exist_in_catalogue(monkeypatch):
 def test_full_catalogue_when_built(monkeypatch):
     monkeypatch.delenv("JDG_PKD_DATA", raising=False)
     pkd.index.cache_clear()
-    data = json.loads(FULL.read_text(encoding="utf-8"))
+    data = pkd._load(FULL.with_suffix("").with_suffix(".json"))
     assert len(data["codes"]) == 728, "в PKD 2025 ровно 728 подклассов"
     assert data["version"] == "PKD 2025"
     assert pkd.lookup("я блогер")["results"][0]["code"] == "90.11.Z"

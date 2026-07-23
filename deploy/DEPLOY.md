@@ -37,23 +37,22 @@ ssh root@46.224.220.94 "cd /opt/jdg/sources/guide && git pull && cd /opt/jdg && 
 
 ## Справочник PKD 2025 (нужен для /pkd и поиска кодов)
 
-`webapp/data/pkd.json` и `pkd_keys.json` генерируются из файлов GUS и в git
-не едут (весь `webapp/data/` в `.gitignore`), поэтому на новой машине их
-надо собрать, иначе `/api/pkd` и команда бота ответят ошибкой:
+Копировать больше ничего не нужно: `data/pkd/pkd.json.gz` и `pkd_keys.json.gz`
+лежат в git (вместе ~230 КБ) и едут обычным `git archive`. Тесты, CI и прод
+работают с одним и тем же артефактом — «облегчённого справочника для CI»
+специально нет, иначе порча данных всплывает у людей, а не на сборке.
 
-Проще собрать локально и скопировать — на VPS тогда не нужны ни pandas,
-ни pymupdf (вместе ~100 МБ ради разовой операции):
+Пересобирать только когда GUS правит классификацию:
 
 ```bash
-python tools/pkd_build.py --download          # локально, ~9 МБ с klasyfikacje.stat.gov.pl
-scp C:/Users/user/Desktop/JDG/webapp/data/pkd*.json root@46.224.220.94:/opt/jdg/webapp/data/
-ssh root@46.224.220.94 "chown jdg:jdg /opt/jdg/webapp/data/pkd*.json"
+python tools/pkd_build.py --download   # локально, ~9 МБ с klasyfikacje.stat.gov.pl
+git add data/pkd && git commit         # артефакт воспроизводимый: тот же вход -> те же байты
 ```
 
-Если всё же собирать на сервере: `venv/bin/pip install -r requirements-tools.txt`,
-затем `venv/bin/python tools/pkd_build.py --download`. Сборка около минуты —
-PDF на 767 страниц. Повторять только когда GUS правит классификацию.
-Словарь синонимов `webapp/pkd_synonyms.json` — ручной, лежит в git.
+Сборке нужны pandas и pymupdf (`requirements-tools.txt`, вместе ~100 МБ) —
+на VPS они не ставятся намеренно. Сборка около минуты: PDF на 767 страниц.
+В артефакте лежат sha256 всех трёх исходников GUS — по ним видно, из чего он
+собран. Словарь синонимов `webapp/pkd_synonyms.json` — ручной, тоже в git.
 
 ## Первичная установка
 

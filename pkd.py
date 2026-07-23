@@ -21,9 +21,10 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parent
-# справочник генерируется tools/pkd_build.py и в git не едет, поэтому тесты
-# (и CI, где его физически нет) подсовывают через JDG_PKD_DATA маленькую фикстуру
-DATA = Path(os.environ.get("JDG_PKD_DATA") or ROOT / "webapp" / "data")
+# канонический справочник лежит в git сжатым (~200 КБ) и едет в прод как есть:
+# тесты, CI и прод обязаны работать с одним артефактом, иначе порча справочника
+# всплывает у людей, а не на сборке. JDG_PKD_DATA подменяет каталог в тестах.
+DATA = Path(os.environ.get("JDG_PKD_DATA") or ROOT / "data" / "pkd")
 
 WORD = re.compile(r"[a-zа-яёąćęłńóśźż0-9]+", re.I)
 CODE_IN_QUERY = re.compile(r"\b(\d{2})[.,](\d{2})(?:[.,\s]?([A-Za-z]))?\b")
@@ -70,16 +71,38 @@ def _tok(text: str):
     return out
 
 
+def exclusion_texts(code_record: dict) -> list[str]:
+    """Сырые тексты исключений. В артефакте они лежат вместе с разобранными
+    ссылками ({raw, target_codes}), а старые фикстуры хранят просто строки."""
+    return [x["raw"] if isinstance(x, dict) else x
+            for x in code_record.get("excludes", [])]
+
+
+def exclusion_targets(code_record: dict) -> set[str]:
+    """Коды, на которые ссылаются исключения подкласса, — материал для правил:
+    официальное «nie obejmuje» это единственное проверяемое основание запрета."""
+    return {t for x in code_record.get("excludes", []) if isinstance(x, dict)
+            for t in x.get("target_codes", [])}
+
+
+def _load(path: Path) -> dict:
+    """Артефакт справочника: сжатый в git и в проде, несжатый — у фикстур."""
+    if path.is_file():
+        return json.loads(path.read_text(encoding="utf-8"))
+    import gzip
+    with gzip.open(path.with_suffix(".json.gz"), "rt", encoding="utf-8") as f:
+        return json.load(f)
+
+
 class Index:
     def __init__(self, data: Path | None = None):
         data = data or Path(os.environ.get("JDG_PKD_DATA") or DATA)
         self.dir = data
-        raw = json.loads((data / "pkd.json").read_text(encoding="utf-8"))
+        raw = _load(data / "pkd.json")
         self.meta = {k: v for k, v in raw.items() if k != "codes"}
         self.codes = {c["code"]: c for c in raw["codes"]}
         try:
-            self.keys = json.loads(
-                (data / "pkd_keys.json").read_text(encoding="utf-8"))["map"]
+            self.keys = _load(data / "pkd_keys.json")["map"]
         except Exception:
             self.keys = {}
         try:
@@ -232,7 +255,9 @@ class Index:
             "section": c["section"],
             "section_name": (c["section_name"] or "").capitalize(),
             "includes": c["includes"][:6],
-            "excludes": c["excludes"][:4],
+            # наружу отдаём тот же плоский текст, что и раньше: ссылки на коды
+            # разобраны внутри артефакта и нужны правилам, а не карточке
+            "excludes": exclusion_texts(c)[:4],
             "was_pkd2007": old[:4],
             "flags": flags,
             "rate_hints": self.rate_hints(code),
