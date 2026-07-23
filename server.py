@@ -299,6 +299,21 @@ def _zus_error_reply(query: str) -> str:
             f"{e['why_ru']}\n\n<b>Что делать:</b>\n{steps}")
 
 
+async def _json_or_400(req: Request) -> dict:
+    """Тело запроса или честная 400.
+
+    `await req.json()` на битой кодировке или не-JSON бросает исключение, и
+    наружу уходит 500 с трейсбеком в журнале — шумно и незачем.
+    """
+    try:
+        body = await req.json()
+    except Exception:
+        raise HTTPException(400, "Ожидается JSON в UTF-8")
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Ожидается JSON-объект")
+    return body
+
+
 def _pkd_reply(query: str) -> str:
     """Ответ бота на /pkd: тот же движок, что у API, но короче — три кода."""
     import pkd
@@ -512,7 +527,7 @@ async def api_pkd(req: Request):
     """Подбор кода PKD по описанию деятельности. Работает офлайн по данным GUS,
     без обращений к платному API, поэтому initData здесь не требуется."""
     import pkd
-    body = await req.json()
+    body = await _json_or_400(req)
     query = (body.get("q") or "").strip()[:200]
     if not query:
         raise HTTPException(400, "Опиши, чем занимаешься, или пришли код PKD")
@@ -525,7 +540,7 @@ async def api_pkd_my(req: Request):
     Лимиты те же, что у проверки контрагента: ходим в чужой реестр."""
     import pkd
     import registries
-    body = await req.json()
+    body = await _json_or_400(req)
     user = verify_init_data(body.get("initData", ""))
     if user is None:
         raise HTTPException(401, "bad initData")
