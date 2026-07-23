@@ -135,6 +135,11 @@ window.pkdSetMode = function (mode) {
 fetch('/api/health').then(r => r.json()).then(cfg => {
   if (!cfg || !cfg.pkd_dialog) return;      // флаг выключен — кнопки нет вовсе
   modes.classList.add('on');
-  document.getElementById('mode-dialog').onclick = () => window.pkdSetMode('dialog');
+  document.getElementById('mode-dialog').onclick = () => {
+    window.pkdSetMode('dialog');
+    // «открыл точный подбор» знает только вкладка: сам диалог инициализируется
+    // при загрузке страницы и не отличает открытие от простого присутствия
+    if (window.pkdDialogOpened) window.pkdDialogOpened();
+  };
   document.getElementById('mode-legacy').onclick = () => window.pkdSetMode('legacy');
 }).catch(() => {});

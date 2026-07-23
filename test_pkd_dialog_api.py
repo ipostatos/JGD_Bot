@@ -330,3 +330,78 @@ def test_rate_limit_uses_the_test_database():
     assert os.environ.get("JDG_DB"), "conftest обязан подменить базу"
     import ratelimit
     assert str(ratelimit.DB_PATH) == os.environ["JDG_DB"]
+
+
+# ── телеметрия ────────────────────────────────────────────────────────────
+
+def _events():
+    import sqlite3
+
+    import dialog_telemetry
+    dialog_telemetry._db().close()
+    with sqlite3.connect(dialog_telemetry.DB_PATH) as db:
+        return db.execute("SELECT event,session,status,question_id,routing_hint,"
+                          "answers,http,rules_version FROM dialog_events").fetchall()
+
+
+@pytest.fixture(autouse=True)
+def fresh_telemetry():
+    import sqlite3
+
+    import dialog_telemetry
+    dialog_telemetry._db().close()
+    with sqlite3.connect(dialog_telemetry.DB_PATH) as db:
+        db.execute("DELETE FROM dialog_events")
+    yield
+
+
+SID = "0123456789abcdef"
+
+
+def test_request_is_measured_without_storing_the_query():
+    """Мерим статус, вопрос и версию правил — но не то, что человек написал."""
+    with client() as c:
+        r = c.post(URL, json={"dialog_schema_version": 1, "query": "Собираю кухни"},
+                   headers={"X-Dialog-Session": SID})
+        assert r.status_code == 200
+    (event, session, status, qid, hint, answers, http, rules), = _events()
+    assert (event, session, http) == ("ask", SID, 200)
+    assert status == "needs_clarification"
+    assert qid == "furniture.object_context" and answers == 0
+    assert rules and hint is None
+    # ни одного поля с текстом человека — проверяем всю строку целиком
+    import sqlite3
+
+    import dialog_telemetry
+    with sqlite3.connect(dialog_telemetry.DB_PATH) as db:
+        raw = str(db.execute("SELECT * FROM dialog_events").fetchall())
+    assert "кухн" not in raw.lower()
+
+
+def test_client_errors_are_measured_too():
+    """Иначе 429 и 400 не видно в статистике: молчащий отказ выглядит
+    как «люди просто не пользуются»."""
+    with client() as c:
+        c.post(URL, json={"query": "x", "unknown": 1}, headers={"X-Dialog-Session": SID})
+        c.post(URL, content=b"{", headers={"X-Dialog-Session": SID,
+                                    "Content-Type": "application/json"})
+    codes = sorted(e[6] for e in _events())
+    assert codes == [400, 400]
+
+
+def test_ui_event_endpoint_accepts_only_whitelisted_names():
+    with client() as c:
+        assert c.post(URL + "/event", json={"event": "start"},
+                      headers={"X-Dialog-Session": SID}).status_code == 204
+        # неизвестное имя не ломает ответ, но и не пишется
+        assert c.post(URL + "/event", json={"event": "собираю кухни"},
+                      headers={"X-Dialog-Session": SID}).status_code == 204
+        # лишнее поле — ошибка контракта, а не тихий приём текста
+        assert c.post(URL + "/event", json={"event": "start", "query": "кухни"},
+                      headers={"X-Dialog-Session": SID}).status_code == 400
+    assert [(e[0], e[1]) for e in _events()] == [("start", SID)]
+
+
+def test_ui_event_endpoint_hidden_behind_the_flag():
+    with client(enabled=False) as c:
+        assert c.post(URL + "/event", json={"event": "start"}).status_code == 404

@@ -28,6 +28,34 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+  // ── обезличенный счётчик разговоров ──────────────────────────────────────
+  // Случайные 16 hex живут во вкладке и нужны ровно для того, чтобы один
+  // разговор не считался пятью. Ни к пользователю, ни к Telegram, ни к IP
+  // это не привязано; вкладку закрыли — идентификатора нет.
+  const SKEY = 'pkd_dialog_sid';
+  let sid = '';
+  try {
+    sid = sessionStorage.getItem(SKEY) || '';
+    if (!/^[0-9a-f]{16}$/.test(sid)) {
+      const b = new Uint8Array(8);
+      crypto.getRandomValues(b);
+      sid = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+      sessionStorage.setItem(SKEY, sid);
+    }
+  } catch (e) { sid = ''; }            // приватный режим — просто не считаемся
+
+  function note(event) {
+    // сообщать интерфейсные события — дело необязательное: молчащая
+    // аналитика не должна ломать подбор, поэтому ошибки глотаем
+    try {
+      fetch('/api/pkd/dialog/event', {
+        method: 'POST', keepalive: true,
+        headers: { 'Content-Type': 'application/json', 'X-Dialog-Session': sid },
+        body: JSON.stringify({ event }),
+      }).catch(() => {});
+    } catch (e) {}
+  }
+
   // ── необязательное восстановление после refresh ──────────────────────────
   function persist() {
     try {
@@ -54,7 +82,7 @@
     try {
       const r = await fetch('/api/pkd/dialog', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Dialog-Session': sid },
         signal: controller.signal,
         body: JSON.stringify({
           query: S.query, intent: S.intent, answers: S.answers,
@@ -146,7 +174,7 @@
     });
   }
 
-  function reset() { forget(); S.query = ''; start(); }
+  function reset() { note('reset'); forget(); S.query = ''; start(); }
 
   function render(d) {
     if (d.status === 'needs_clarification' && d.next_question)
@@ -206,6 +234,7 @@
   function back() {
     // сервер без состояния: возврат — это снять последний ответ и спросить
     // заново, а не откатиться на заранее сохранённый прошлый экран
+    note('back');
     if (!S.answers.length) return start();
     S.answers.pop();
     ask();
@@ -302,6 +331,7 @@
 
     const legacy = document.getElementById('dlg-legacy');
     if (legacy) legacy.onclick = () => {
+      note('legacy');
       const q = document.getElementById('q');
       if (q) q.value = S.query;                    // переносим исходный запрос
       window.pkdSetMode && window.pkdSetMode('legacy');
@@ -337,5 +367,9 @@
   // только как удобство: подставляем прошлый текст и задачу, но заново их
   // не отправляем — источник истины всегда сервер.
   window.pkdDialogStart = () => start(restore());
+  // открытие режима считаем один раз на вкладку: щёлканье между вкладками —
+  // это не пять разных разговоров
+  let opened = false;
+  window.pkdDialogOpened = () => { if (!opened) { opened = true; note('start'); } };
   window.pkdDialogStart();
 })();

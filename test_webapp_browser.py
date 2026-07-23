@@ -7,6 +7,7 @@
 
 Требует playwright + chromium; без них тесты пропускаются (в CI ставятся явно).
 """
+import re
 import socket
 import threading
 import time
@@ -375,5 +376,41 @@ def test_dialog_unrecognized_activity(browser, dialog_url):
         assert "Не удалось определить деятельность" in text
         # про «чужой раздел» здесь писать нельзя: движок этого не знает
         assert "другой раздел" not in text
+    finally:
+        ctx.close()
+
+
+def test_dialog_session_id_is_temporary_and_anonymous(browser, dialog_url):
+    """Счётчик разговоров живёт во вкладке и ничего о человеке не знает.
+
+    Проверяем ровно то, что обещано в приватности: идентификатор случайный,
+    лежит в sessionStorage (а не в localStorage и не в cookie), и на сервер
+    уходит заголовком, а не полем запроса.
+    """
+    ctx = browser.new_context(viewport=PHONE)
+    page = ctx.new_page()
+    sent = []
+    page.on("request", lambda r: sent.append(
+        (r.url, r.headers.get("x-dialog-session"), r.post_data or ""))
+        if "/api/pkd/dialog" in r.url else None)
+    try:
+        page.goto(dialog_url + "/pkd.html", wait_until="networkidle")
+        tap(page, "#mode-dialog")
+        page.fill("#dlg-q", "Собираю кухни")
+        tap(page, "#dlg-go")
+        page.wait_for_selector("#dlg-question", timeout=15000)
+
+        sid = page.evaluate("sessionStorage.getItem('pkd_dialog_sid')")
+        assert sid and re.fullmatch(r"[0-9a-f]{16}", sid), sid
+        assert page.evaluate("localStorage.length") == 0, "в localStorage ничего не кладём"
+        assert not ctx.cookies(), "куки для счёта разговоров не заводим"
+
+        assert sent, "запросы диалога не пойманы"
+        for url, header, body in sent:
+            assert header == sid, url
+            assert sid not in body, "идентификатор не должен ехать в теле запроса"
+        # «открыл режим» ушло отдельным событием, и в нём нет текста человека
+        events = [b for u, _, b in sent if u.endswith("/event")]
+        assert events and all("кухн" not in b.lower() for b in events), events
     finally:
         ctx.close()

@@ -16,7 +16,7 @@ from urllib.parse import parse_qsl
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
@@ -612,19 +612,45 @@ async def api_pkd_dialog(req: Request):
         # ни 503, ни «скоро будет» — ручки просто нет
         raise HTTPException(404, "Not Found")
 
+    import dialog_telemetry
     from pkd_dialog import api as dialog_api
     from pkd_dialog.resolution import resolve_furniture_dialog
 
+    # идентификатор разговора приходит ЗАГОЛОВКОМ, а не полем тела: контракт
+    # запроса строгий (неизвестное поле = 400), и заводить в нём место
+    # для аналитики значило бы смешать разговор с наблюдением за ним
+    session = req.headers.get("X-Dialog-Session")
+    started = time.monotonic()
+
+    def note(http, result=None):
+        q = result.next_question if result else None
+        dialog_telemetry.record(
+            event="ask", session=session, http=http,
+            ms=int((time.monotonic() - started) * 1000),
+            status=result.status.value if result else None,
+            question_id=q.id if q else None,
+            routing_hint=result.routing_hint if result else None,
+            answers=len(parsed.answers) if result and parsed else None,
+            rules_version=result.versions.get("rules") if result else None,
+            schema_version=dialog_api.SCHEMA_VERSION)
+
+    parsed = None
     raw = await req.body()
     if len(raw) > dialog_api.MAX_BODY_BYTES:
         # молча обрезать запрос нельзя: человек не поймёт, почему ответ
         # не про то, что он написал
+        note(413)
         raise HTTPException(413, "Запрос слишком большой.")
-    _limit_or_429("pkd_dialog", _client_key(req))
+    try:
+        _limit_or_429("pkd_dialog", _client_key(req))
+    except HTTPException:
+        note(429)
+        raise
 
     try:
         body = json.loads(raw or b"{}")
     except ValueError:
+        note(400)
         raise HTTPException(400, "Тело запроса должно быть валидным JSON.")
 
     try:
@@ -632,13 +658,43 @@ async def api_pkd_dialog(req: Request):
         result = await asyncio.to_thread(
             resolve_furniture_dialog, query=parsed.query,
             answers=parsed.answers, intent=parsed.intent)
+        note(200, result)
         return dialog_api.serialize(result)
     except Exception as exc:                      # noqa: BLE001 — маппинг в HTTP
         err = dialog_api.to_api_error(exc)
         if err.http_status == 500:
             # наружу ни трассы, ни путей, ни id правил
             log.exception("pkd/dialog: %s", exc)
+        note(err.http_status)
         raise HTTPException(err.http_status, err.payload()["error"])
+
+
+@app.post("/api/pkd/dialog/event")
+async def api_pkd_dialog_event(req: Request):
+    """События интерфейса, которых сервер не видит: старт, «Назад», уход в поиск.
+
+    Ручка принимает только имя события из белого списка и идентификатор
+    сессии — ни текста, ни произвольных полей. Отвечает 204 всегда, когда
+    запрос корректен по форме: аналитика не повод показывать человеку ошибку.
+    """
+    if not _dialog_enabled():
+        raise HTTPException(404, "Not Found")
+    import dialog_telemetry
+
+    raw = await req.body()
+    if len(raw) > 512:
+        raise HTTPException(413, "Запрос слишком большой.")
+    _limit_or_429("pkd_dialog", _client_key(req))
+    try:
+        body = json.loads(raw or b"{}")
+    except ValueError:
+        raise HTTPException(400, "Тело запроса должно быть валидным JSON.")
+    if not isinstance(body, dict) or set(body) - {"event"}:
+        raise HTTPException(400, "Неизвестное поле в запросе.")
+    dialog_telemetry.record(event=body.get("event"),
+                            session=req.headers.get("X-Dialog-Session"),
+                            schema_version=1)
+    return Response(status_code=204)
 
 
 @app.post("/api/pkd/my")
