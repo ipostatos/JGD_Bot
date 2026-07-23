@@ -1,0 +1,152 @@
+{
+ "note": "Признаки -> самостоятельные виды деятельности. Кодов PKD здесь нет: сопоставление деятельности и кода живёт в отдельном пакете правил. Смысл слоя в том, что набор признаков не равен набору деятельностей: «проектирую и произвожу мебель» может быть одним процессом, а «ремонтирую и иногда делаю новую» — двумя направлениями.",
+ "schema_version": 1,
+ "units": [
+
+  {"id": "unit.manufacture_furniture.v1",
+   "kind": "manufacture_furniture",
+   "object": "furniture",
+   "independence": "standalone",
+   "why": "Изготовление мебели — самостоятельное направление независимо от того, монтирует ли человек её потом сам",
+   "when": {"all": [
+     {"any_true": ["activity.manufacture_new"]},
+     {"any_true": ["object.furniture", "object.kitchen_furniture",
+                   "object.freestanding_furniture", "object.built_in_furniture"]}
+   ]}},
+
+  {"id": "unit.manufacture_windows_doors.wood.v1",
+   "kind": "manufacture_wood_windows_doors",
+   "object": "windows_or_doors",
+   "qualifiers": ["wood"],
+   "independence": "standalone",
+   "why": "Производство окон и дверей классификация делит по материалу, поэтому материал входит в саму деятельность",
+   "when": {"all": [
+     {"any_true": ["activity.manufacture_new"]},
+     {"any_true": ["object.windows_or_doors"]},
+     {"feature": "material.windows_doors", "equals": "wood"}
+   ]}},
+
+  {"id": "unit.manufacture_windows_doors.plastic.v1",
+   "kind": "manufacture_plastic_windows_doors",
+   "object": "windows_or_doors",
+   "qualifiers": ["plastic"],
+   "independence": "standalone",
+   "why": "То же самое для пластика",
+   "when": {"all": [
+     {"any_true": ["activity.manufacture_new"]},
+     {"any_true": ["object.windows_or_doors"]},
+     {"feature": "material.windows_doors", "equals": "plastic"}
+   ]}},
+
+  {"id": "unit.manufacture_windows_doors.metal.v1",
+   "kind": "manufacture_metal_windows_doors",
+   "object": "windows_or_doors",
+   "qualifiers": ["metal"],
+   "independence": "standalone",
+   "why": "То же самое для металла",
+   "when": {"all": [
+     {"any_true": ["activity.manufacture_new"]},
+     {"any_true": ["object.windows_or_doors"]},
+     {"feature": "material.windows_doors", "equals": "metal"}
+   ]}},
+
+  {"id": "unit.manufacture_building_elements.v1",
+   "kind": "manufacture_building_elements",
+   "object": "stairs_railings_or_building_elements",
+   "independence": "standalone",
+   "why": "Лестницы, ограждения и прочая строительная столярка — не мебель",
+   "when": {"all": [
+     {"any_true": ["activity.manufacture_new"]},
+     {"any_true": ["object.stairs_railings_or_building_elements"]}
+   ]}},
+
+  {"id": "unit.install_built_in.v1",
+   "kind": "install_built_in_furniture",
+   "object": "built_in_furniture",
+   "independence": "standalone",
+   "why": "Монтаж встроенной мебели — работа на объекте, отдельная от изготовления",
+   "when": {"all": [
+     {"any_true": ["activity.install_or_assemble"]},
+     {"any_true": ["object.built_in_furniture"]}
+   ]}},
+
+  {"id": "unit.assemble_freestanding.v1",
+   "kind": "assemble_freestanding_furniture",
+   "object": "freestanding_furniture",
+   "independence": "standalone",
+   "why": "Сборка отдельно стоящей мебели — своя услуга",
+   "when": {"all": [
+     {"any_true": ["activity.install_or_assemble"]},
+     {"any_true": ["object.freestanding_furniture"]}
+   ]}},
+
+  {"id": "unit.install_windows_doors.v1",
+   "kind": "install_windows_doors",
+   "object": "windows_or_doors",
+   "independence": "standalone",
+   "why": "Монтаж столярки на объекте; материал здесь роли не играет",
+   "when": {"all": [
+     {"any_true": ["activity.install_or_assemble"]},
+     {"any_true": ["object.windows_or_doors"]}
+   ]}},
+
+  {"id": "unit.repair_furniture.v1",
+   "kind": "repair_or_restore_furniture",
+   "object": "furniture",
+   "independence": "standalone",
+   "why": "Ремонт и реставрация — самостоятельное направление, даже если человек ещё и производит",
+   "when": {"all": [
+     {"any_true": ["activity.repair_or_restore"]},
+     {"any_true": ["object.furniture", "object.kitchen_furniture",
+                   "object.freestanding_furniture", "object.built_in_furniture"]}
+   ]}},
+
+  {"id": "unit.design_furniture.v1",
+   "kind": "design_furniture",
+   "object": "furniture",
+   "independence": "integrated",
+   "why": "Проектирование по умолчанию считается частью изготовления: у мебельщика чертёж — этап работы, а не отдельная услуга. Самостоятельным оно становится только при явном основании: «только проектирую», услуга названа отдельной, либо человек прямо сказал, что не производит.",
+   "when": {"all": [
+     {"any_true": ["activity.design"]},
+     {"any_true": ["object.furniture", "object.kitchen_furniture",
+                   "object.freestanding_furniture", "object.built_in_furniture"]}
+   ]},
+   "standalone_when": {"any": [
+     {"any_true": ["activity.design_only", "qualifier.offered_separately"]},
+     {"feature": "activity.manufacture_new", "equals": false}
+   ]},
+   "integrated_when": {"any_true": ["activity.manufacture_new"]}},
+
+  {"id": "unit.resell_furniture.wholesale.v1",
+   "kind": "resell_furniture_wholesale",
+   "object": "furniture",
+   "qualifiers": ["wholesale"],
+   "independence": "standalone",
+   "why": "Опт и розница — разные подклассы торговли",
+   "when": {"all": [
+     {"any_true": ["activity.resell"]},
+     {"any_true": ["object.furniture", "object.kitchen_furniture"]},
+     {"any_true": ["trade.wholesale"]}
+   ]}},
+
+  {"id": "unit.resell_furniture.retail.v1",
+   "kind": "resell_furniture_retail",
+   "object": "furniture",
+   "qualifiers": ["retail"],
+   "independence": "standalone",
+   "why": "Продажа конечному покупателю. Если про опт ничего не сказано, торговля мебелью по умолчанию розничная — это подтверждено золотыми сценариями, а не догадка",
+   "when": {"all": [
+     {"any_true": ["activity.resell"]},
+     {"any_true": ["object.furniture", "object.kitchen_furniture"]},
+     {"none_true": ["trade.wholesale"]}
+   ]}},
+
+  {"id": "unit.whole_room_renovation.v1",
+   "kind": "whole_room_renovation",
+   "object": "whole_room",
+   "pack": "construction",
+   "independence": "standalone",
+   "why": "Отделка помещения целиком — строительный пакет правил, а не мебельный. Деятельность распознана, просто отвечает за неё не этот набор правил",
+   "when": {"any_true": ["object.whole_room"]}}
+ ]
+}

@@ -32,6 +32,10 @@ class Status(str, Enum):
     RESOLVED_CANDIDATES = "resolved_candidates"
     # несколько отдельных деятельностей и пакет кодов под них
     RESOLVED_PACKAGE = "resolved_package"
+    # деятельность распознана, но за неё отвечает другой пакет правил.
+    # Это не «кода нет» и не повод спрашивать дальше: ни один мебельный
+    # вопрос не поможет тому, кто делает отделку комнаты
+    OUTSIDE_CURRENT_PACK = "outside_current_pack"
 
 
 class PrimaryStatus(str, Enum):
@@ -45,6 +49,18 @@ class PrimaryStatus(str, Enum):
     NOT_REQUESTED = "not_requested"
     REVENUE_INFORMATION_REQUIRED = "revenue_information_required"
     USER_SELECTED = "user_selected"
+
+
+class DialogIntent(str, Enum):
+    """Зачем человек пришёл. Разные намерения — разные обязательные вопросы.
+
+    Спрашивать про долю выручки уместно только тогда, когда человек хочет
+    знать ГЛАВНЫЙ код. Если он просто выясняет, какие коды ему подходят,
+    вопрос про выручку — лишняя работа для него и ничего не меняет в ответе.
+    """
+
+    FIND_CODES = "find_codes"
+    FIND_PRIMARY_CODE = "find_primary_code"
 
 
 class FeatureSource(str, Enum):

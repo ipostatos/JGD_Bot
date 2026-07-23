@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from pkd_dialog import Answer, contracts, features as feat
+from pkd_dialog import Answer, DialogIntent, contracts, features as feat
 from pkd_dialog.extraction import RuleBasedFeatureExtractor
 from pkd_dialog.models import Feature, FeatureSource
 from pkd_dialog.resolved import FeatureState, resolve_features
@@ -136,8 +136,11 @@ def test_revenue_question_is_not_asked_from_verb_count():
 def test_revenue_question_appears_only_with_confirmed_independence():
     fs = resolve_features(
         [Feature(feat.MULTIPLE_ACTIVITIES, True, FeatureSource.INFERRED)], [])
-    r = select_next_question(features=fs)
+    # человек спросил про главный код — вопрос уместен
+    r = select_next_question(features=fs, intent=DialogIntent.FIND_PRIMARY_CODE)
     assert r.question is not None and r.question.id == "activity.primary_revenue"
+    # человек просто искал подходящие коды — про выручку молчим
+    assert select_next_question(features=fs).question is None
 
 
 # ── конфликты ─────────────────────────────────────────────────────────────

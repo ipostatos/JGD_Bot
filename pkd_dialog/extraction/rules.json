@@ -209,6 +209,46 @@
     {"type": "token", "value": "балюстрады"}
    ]}},
 
+  {"id": "trade.wholesale.explicit.v1",
+   "feature": "trade.wholesale",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Опт и розница — разные подклассы торговли",
+   "match": {"any": [
+    {"type": "token", "value": "оптом"},
+    {"type": "token", "value": "опт"},
+    {"type": "token", "value": "оптовая"},
+    {"type": "phrase", "value": "продаю магазинам"},
+    {"type": "phrase", "value": "продаю в магазины"}
+   ]}},
+
+  {"id": "trade.retail.explicit.v1",
+   "feature": "trade.retail",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Продажа конечному покупателю",
+   "match": {"any": [
+    {"type": "token", "value": "розница"},
+    {"type": "token", "value": "розницу"},
+    {"type": "token", "value": "розничная"},
+    {"type": "phrase", "value": "через свой магазин"},
+    {"type": "phrase", "value": "свой магазин"},
+    {"type": "token", "value": "покупателям"}
+   ]}},
+
+  {"id": "qualifier.separately.explicit.v1",
+   "feature": "qualifier.offered_separately",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "«Отдельно» означает самостоятельную услугу, а не часть комплекса",
+   "match": {"any": [
+    {"type": "token", "value": "отдельно"},
+    {"type": "phrase", "value": "как отдельную услугу"}
+   ]}},
+
   {"id": "object.woodwork.generic.v1",
    "feature": "object.woodwork_generic",
    "value": true,

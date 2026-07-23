@@ -21,7 +21,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from . import contracts
-from .models import Answer, Question
+from .models import Answer, DialogIntent, Question
 from .resolved import FeatureState, ResolvedFeatureSet
 
 POLICIES = Path(__file__).resolve().parent / "question_policies.json"
@@ -95,12 +95,17 @@ def policies() -> list[dict]:
 
 # ── условия ───────────────────────────────────────────────────────────────
 
-def _check(cond: dict, fs: ResolvedFeatureSet) -> tuple[bool, list[str]]:
+def _check(cond: dict, fs: ResolvedFeatureSet,
+           intent: DialogIntent = DialogIntent.FIND_CODES) -> tuple[bool, list[str]]:
     """Условие политики -> (выполнено, человеческие причины)."""
+    if "intent_is" in cond:
+        ok = intent.value == cond["intent_is"]
+        return ok, [f"намерение: {intent.value}"] if ok else [
+            f"вопрос нужен только при намерении {cond['intent_is']}"]
     if "all" in cond:
         reasons = []
         for sub in cond["all"]:
-            ok, why = _check(sub, fs)
+            ok, why = _check(sub, fs, intent)
             reasons += why
             if not ok:
                 return False, reasons
@@ -108,7 +113,7 @@ def _check(cond: dict, fs: ResolvedFeatureSet) -> tuple[bool, list[str]]:
     if "any" in cond:
         reasons = []
         for sub in cond["any"]:
-            ok, why = _check(sub, fs)
+            ok, why = _check(sub, fs, intent)
             if ok:
                 return True, why
             reasons += why
@@ -139,7 +144,9 @@ def _check(cond: dict, fs: ResolvedFeatureSet) -> tuple[bool, list[str]]:
 
 
 def select_next_question(*, features: ResolvedFeatureSet,
-                         answers: tuple[Answer, ...] = ()) -> QuestionSelectionResult:
+                         answers: tuple[Answer, ...] = (),
+                         intent: DialogIntent = DialogIntent.FIND_CODES
+                         ) -> QuestionSelectionResult:
     """Чистая функция: одни и те же признаки и ответы -> один и тот же вопрос."""
     catalog = contracts.questions()
     answered = {(a.question_id, a.question_version) for a in answers}
@@ -153,10 +160,10 @@ def select_next_question(*, features: ResolvedFeatureSet,
         conflicted = tuple(k for k in p["resolves"]
                            if features.state(k) is FeatureState.CONFLICTED)
 
-        ok, why = _check(p["when"], features)
+        ok, why = _check(p["when"], features, intent)
         reasons += why
         if ok and "unless" in p:
-            blocked, why_not = _check(p["unless"], features)
+            blocked, why_not = _check(p["unless"], features, intent)
             if blocked:
                 ok = False
                 reasons += why_not

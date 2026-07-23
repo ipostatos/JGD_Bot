@@ -238,11 +238,13 @@ def test_rules_never_mention_pkd_codes():
 def test_no_prefix_stemming_anywhere():
     """Ни одного образца короче четырёх букв и ни одной обрезки: правило
     «10 доказанных форм лучше одного широкого корня» проверяется тестом."""
-    abbreviations = {"пвх"}
+    # короткие, но целые слова: это не обрезанный корень, а слово целиком
+    whole_short_words = {"пвх", "опт"}
     for r in load_rules()["rules"]:
         for p in r["match"]["any"]:
             value = p["value"]
-            assert len(value) >= 4 or value in abbreviations,                 f"{r['id']}: слишком короткий образец «{value}» — похоже на обрезанный корень"
+            assert len(value) >= 4 or value in whole_short_words, (
+                f"{r['id']}: слишком короткий образец «{value}» — похоже на обрезанный корень")
 
 
 # ── сценарии: только то, что относится к разбору ──────────────────────────
