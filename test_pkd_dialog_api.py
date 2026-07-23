@@ -9,10 +9,16 @@ import json
 import os
 from contextlib import contextmanager
 
-import pytest
-from fastapi.testclient import TestClient
+# Бот в тестах выключен. Без этого TestClient поднимает боевого бота: полинг
+# и SetChatMenuButton по проду, а через несколько прогонов — flood control.
+# В общем прогоне спасал импорт test_server, но файл обязан быть изолирован сам.
+os.environ["DISABLE_BOT"] = "1"
+os.environ.setdefault("BOT_TOKEN", "12345:TESTTOKEN")
 
-import server
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+import server  # noqa: E402
 
 URL = "/api/pkd/dialog"
 
@@ -166,6 +172,29 @@ def test_mixed_package_keeps_both_units():
         packs = {u["id"]: u["suggested_pack"] for u in body["activity_units"]}
         assert packs["whole_room_renovation"] == "construction"
         assert body["primary_code_status"] == "activity_resolution_required"
+
+
+def test_units_carry_a_human_label_not_an_identifier():
+    """Каждая деятельность приходит с именем для человека: в пакете иначе
+    непонятно, какой код к чему относится, а внутренний `kind` показывать
+    нельзя."""
+    with client() as c:
+        body = ask(c, query="Ремонтирую шкафы и делаю мебель на заказ").json()
+        labels = {u["id"]: u["label"] for u in body["activity_units"]}
+        assert labels["repair_or_restore_furniture"] == "Ремонт мебели"
+        assert labels["manufacture_furniture"] == "Производство мебели"
+
+
+def test_unit_outside_the_pack_is_also_named():
+    """Чужой раздел тоже надо назвать: «этот раздел пока не поддерживается»
+    без имени деятельности человек не соотнесёт со своей фразой."""
+    with client() as c:
+        body = ask(c, query="Ремонтирую шкафы и делаю ремонт кухни",
+                   answers=[{"question_id": "furniture.object_context",
+                             "question_version": 2, "option_ids": ["whole_room"]}]).json()
+        outside = [u for u in body["activity_units"]
+                   if u["state"] == "outside_current_pack"]
+        assert [u["label"] for u in outside] == ["Ремонт помещения"]
 
 
 def test_codes_carry_official_name_and_human_reason():

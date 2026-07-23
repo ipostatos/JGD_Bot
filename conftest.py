@@ -17,3 +17,12 @@ from pathlib import Path
 _TMP = tempfile.mkdtemp(prefix="jdg-tests-")
 os.environ["JDG_DB"] = str(Path(_TMP) / "test.db")
 atexit.register(shutil.rmtree, _TMP, True)
+
+# Бот в тестах выключен ГЛОБАЛЬНО, до импорта любого тест-модуля.
+# server.py делает load_dotenv() при импорте и подхватывает боевой BOT_TOKEN
+# из локального .env; DISABLE_BOT читается там же, при импорте. Раньше флаг
+# ставили в отдельных тест-файлах, но какой из них импортирует server первым —
+# зависит от порядка сборки pytest, и один голый прогон поднимал прод-бота
+# (полинг + SetChatMenuButton по проду, дальше flood control от Telegram).
+# conftest выполняется раньше всех, поэтому флаг надёжнее держать здесь.
+os.environ["DISABLE_BOT"] = "1"

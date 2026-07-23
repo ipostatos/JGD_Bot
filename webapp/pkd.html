@@ -23,12 +23,31 @@
   .ex{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px }
   .ex button{ font-size:12px; padding:5px 10px; border-radius:999px; border:1px solid var(--line);
     background:transparent; color:var(--hint); cursor:pointer }
+  /* переключатель режимов появляется только при включённом флаге */
+  .modes{ display:none; gap:6px; margin-bottom:12px }
+  .modes.on{ display:flex }
+  .modes button{ flex:1; padding:9px 10px; border-radius:12px; border:1px solid var(--line);
+    background:transparent; color:var(--hint); font-size:13px; font-weight:600; cursor:pointer }
+  .modes button[aria-pressed="true"]{ background:var(--card2,rgba(127,127,127,.12));
+    color:var(--text); border-color:var(--accent) }
+  .opt{ display:flex; gap:10px; align-items:flex-start; padding:10px 0;
+    border-bottom:1px solid var(--line); cursor:pointer; line-height:1.4 }
+  .opt:last-of-type{ border-bottom:0 }
+  .opt input{ margin-top:3px; width:18px; height:18px; flex:0 0 18px }
 </style>
 </head>
 <body>
 <div class="hero"><span class="logo emi" data-icon="list"></span><h1>Код PKD</h1></div>
 <p class="sub">Опиши, чем занимаешься — подберу подклассы PKD 2025 по справочнику GUS</p>
 
+<div class="modes" id="modes" role="group" aria-label="Режим подбора">
+  <button id="mode-legacy" type="button" aria-pressed="true">Обычный поиск</button>
+  <button id="mode-dialog" type="button" aria-pressed="false">Точный подбор — beta</button>
+</div>
+
+<div id="dialog" hidden></div>
+
+<div id="legacy">
 <div class="card" style="margin-bottom:12px">
   <div class="field"><label>Чем занимаешься</label>
     <input id="q" type="text" placeholder="я блогер / пишу код / маникюр на дому"
@@ -44,6 +63,7 @@
 </div>
 
 <div id="out"></div>
+</div>
 
 <div class="card" id="mycard" style="margin-bottom:12px">
   <div class="h2" style="margin-bottom:4px">Проверить свои коды</div>
@@ -65,5 +85,6 @@ Ministrów от 18.12.2024, Dz. U. poz. 1936) и официальные ключ
 <script src="icons.js"></script>
 <script src="app.js"></script>
 <script src="js/pkd.js"></script>
+<script src="js/pkd-dialog.js"></script>
 </body>
 </html>

@@ -109,3 +109,32 @@ document.getElementById('mygo').onclick = async () => {
     Icons.hydrate();
   } catch (e) { box.innerHTML = `<div class="muted">${esc(e.message)}</div>`; }
 };
+
+
+/* Точный подбор — второй режим той же страницы.
+ *
+ * Доступность узнаём у сервера тем же способом, которым он её и включает:
+ * один флаг на ручку и на интерфейс. Щупать закрытый endpoint ради 404 —
+ * плохой способ выяснить, есть ли функция.
+ */
+const modes = document.getElementById('modes');
+const legacyBox = document.getElementById('legacy');
+const dialogBox = document.getElementById('dialog');
+
+window.pkdSetMode = function (mode) {
+  const dialog = mode === 'dialog';
+  dialogBox.hidden = !dialog;
+  legacyBox.hidden = dialog;
+  document.getElementById('mode-dialog').setAttribute('aria-pressed', String(dialog));
+  document.getElementById('mode-legacy').setAttribute('aria-pressed', String(!dialog));
+  // диалог сам инициализируется при загрузке; переключение вкладок его не
+  // пересоздаёт, иначе наполовину пройденный подбор потеряется при взгляде
+  // на обычный поиск
+};
+
+fetch('/api/health').then(r => r.json()).then(cfg => {
+  if (!cfg || !cfg.pkd_dialog) return;      // флаг выключен — кнопки нет вовсе
+  modes.classList.add('on');
+  document.getElementById('mode-dialog').onclick = () => window.pkdSetMode('dialog');
+  document.getElementById('mode-legacy').onclick = () => window.pkdSetMode('legacy');
+}).catch(() => {});

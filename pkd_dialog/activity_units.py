@@ -40,6 +40,7 @@ class ActivityIndependence(str, Enum):
 class ActivityUnit:
     id: str
     kind: str
+    title: str                      # человеческое имя деятельности для интерфейса
     object: str | None
     independence: ActivityIndependence
     qualifiers: tuple[str, ...] = ()
@@ -67,6 +68,10 @@ def policies() -> list[dict]:
         ActivityIndependence(p["independence"])
         if not p.get("why"):
             raise ContractError(f"{p['id']}: политика без объяснения")
+        if not p.get("title"):
+            # без имени интерфейс покажет `kind` — внутренний идентификатор
+            # вместо деятельности, и человек не поймёт, к чему относится код
+            raise ContractError(f"{p['id']}: политика без имени деятельности")
         for key in _keys_of(p["when"]):
             if key not in feat.REGISTRY:
                 raise ContractError(f"{p['id']}: неизвестный признак {key}")
@@ -130,7 +135,7 @@ def build_units(fs: ResolvedFeatureSet) -> tuple[ActivityUnit, ...]:
 
         keys = tuple(sorted(k for k in _keys_of(p["when"]) if fs.is_true(k)))
         units.append(ActivityUnit(
-            id=p["id"], kind=p["kind"], object=p.get("object"),
+            id=p["id"], kind=p["kind"], title=p["title"], object=p.get("object"),
             independence=independence, qualifiers=tuple(p.get("qualifiers", ())),
             source_features=keys,
             evidence=tuple(e for e in (fs.features[k].evidence for k in keys) if e),

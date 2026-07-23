@@ -194,6 +194,9 @@ def _question(q) -> dict | None:
 def _unit(unit, idx) -> dict:
     return {
         "id": unit.kind,
+        # имя для человека приходит с сервера намеренно: иначе интерфейс начнёт
+        # переводить `kind` сам, и правила разъедутся между слоями
+        "label": unit.title,
         "state": unit.state,
         "codes": [{"code": code,
                    "name": idx.codes[code]["name"],

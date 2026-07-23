@@ -83,6 +83,22 @@ def browser():
         b.close()
 
 
+
+def tap(page, selector):
+    """Нажатие без ожидания actionability.
+
+    Playwright требует, чтобы элемент был «стабилен» — не двигался между
+    кадрами. На кнопках с `transform` при `:active` эта проверка в headless
+    Chromium зависает: сам обработчик при этом работает, что подтверждается
+    принудительным кликом. Поэтому проверяем то, что важно (кнопка видима
+    и доступна), и отправляем событие напрямую — иначе тест меряет
+    особенности эмуляции, а не поведение страницы.
+    """
+    el = page.locator(selector)
+    assert el.is_visible() and el.is_enabled(), selector
+    el.dispatch_event("click")
+
+
 def _open(browser, url):
     """Открывает страницу, возвращает (page, errors, bad_responses)."""
     ctx = browser.new_context(viewport=PHONE, device_scale_factor=2, is_mobile=True,
@@ -200,7 +216,7 @@ def test_pkd_card_shows_only_its_own_exclusions(browser, base_url):
     ctx, page, _, _ = _open(browser, base_url + "/pkd.html")
     try:
         page.fill("#q", "01.19.Z")
-        page.click("#go")
+        tap(page, "#go")
         page.wait_for_selector("#out .card", timeout=15000)
         text = page.inner_text("#out")
         assert "Pozostałe uprawy rolne" in text
@@ -218,5 +234,146 @@ def test_pkd_card_shows_only_its_own_exclusions(browser, base_url):
         assert any("buraka cukrowego" in e for e in data["excludes"])
         assert all(not e.startswith(("Grupa ta", "Dział ten", "SEKCJA"))
                    for e in data["excludes"] + data["includes"])
+    finally:
+        ctx.close()
+
+
+# ── точный подбор: живёт только за включённым флагом ──────────────────────
+
+@pytest.fixture(scope="module")
+def dialog_url():
+    """Отдельный сервер с включённым флагом: основной поднят с выключенным,
+    и проверять надо оба состояния, а не переключать глобальную переменную
+    под работающим приложением."""
+    import os
+    import uvicorn
+
+    import server
+
+    os.environ["DISABLE_BOT"] = "1"
+    os.environ.setdefault("BOT_TOKEN", "12345:TESTTOKEN")
+    os.environ["PKD_DIALOG_ENABLED"] = "true"
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    cfg = uvicorn.Config(server.app, host="127.0.0.1", port=port, log_level="warning")
+    srv = uvicorn.Server(cfg)
+    t = threading.Thread(target=srv.run, daemon=True)
+    t.start()
+    for _ in range(100):
+        if srv.started:
+            break
+        time.sleep(0.1)
+    assert srv.started
+    yield f"http://127.0.0.1:{port}"
+    srv.should_exit = True
+    t.join(timeout=10)
+    os.environ.pop("PKD_DIALOG_ENABLED", None)
+
+
+def test_dialog_mode_is_invisible_without_the_flag(browser, base_url):
+    """Выключенный флаг: кнопки нет, к закрытой ручке никто не ходит,
+    обычный поиск работает как раньше."""
+    ctx = browser.new_context(viewport=PHONE)
+    page = ctx.new_page()
+    calls = []
+    page.on("request", lambda r: calls.append(r.url) if "/api/pkd/dialog" in r.url else None)
+    try:
+        page.goto(base_url + "/pkd.html", wait_until="networkidle")
+        assert not page.locator("#modes.on").count()
+        assert page.locator("#dialog").is_hidden()
+        assert not calls, "новый JS не должен трогать выключенную ручку"
+
+        page.fill("#q", "производство мебели")
+        tap(page, "#go")
+        page.wait_for_selector("#out .card", timeout=15000)
+        assert "31.00.Z" in page.inner_text("#out")
+    finally:
+        ctx.close()
+
+
+def test_dialog_full_cycle(browser, dialog_url):
+    """Сквозной путь человека: описание -> вопрос -> ответ -> код.
+
+    Тот же запрос с другим ответом обязан давать другой код: если это
+    сломается, диалог превратится в декорацию вокруг угадывания.
+    """
+    ctx = browser.new_context(viewport=PHONE)
+    page = ctx.new_page()
+    errors = []
+    page.on("console", lambda m: errors.append(m.text) if m.type == "error"
+            and not any(x in m.text for x in IGNORE_URL_PARTS) else None)
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    try:
+        page.goto(dialog_url + "/pkd.html", wait_until="networkidle")
+        tap(page, "#mode-dialog")
+
+        page.fill("#dlg-q", "Собираю кухни")
+        tap(page, "#dlg-go")
+        page.wait_for_selector("#dlg-question", timeout=15000)
+        assert "работаете" in page.inner_text("#dlg-question")
+
+        # кнопка неактивна, пока вариант не выбран
+        assert page.locator("#dlg-next").is_disabled()
+        page.check('input[value="built_in_furniture"]')
+        tap(page, "#dlg-next")
+        page.wait_for_selector("#dlg-result", timeout=15000)
+        result = page.inner_text("#dlg-result")
+        assert "43.32.Z" in result and "Zakładanie stolarki budowlanej" in result
+
+        # другой ответ — другой код
+        tap(page, "#dlg-reset")
+        page.fill("#dlg-q", "Собираю кухни")
+        tap(page, "#dlg-go")
+        page.wait_for_selector("#dlg-question", timeout=15000)
+        page.check('input[value="freestanding_furniture"]')
+        tap(page, "#dlg-next")
+        page.wait_for_selector("#dlg-result", timeout=15000)
+        assert "95.24.Z" in page.inner_text("#dlg-result")
+
+        # «Назад» снимает последний ответ и возвращает к вопросу
+        tap(page, "#dlg-back")
+        page.wait_for_selector("#dlg-question", timeout=15000)
+
+        assert not errors, errors
+    finally:
+        ctx.close()
+
+
+def test_dialog_package_and_technical_data(browser, dialog_url):
+    """Пакет показывается по деятельностям, а внутренние поля наружу не текут."""
+    ctx = browser.new_context(viewport=PHONE)
+    page = ctx.new_page()
+    try:
+        page.goto(dialog_url + "/pkd.html", wait_until="networkidle")
+        tap(page, "#mode-dialog")
+        page.fill("#dlg-q", "ремонтирую и иногда делаю мебель")
+        tap(page, "#dlg-go")
+        page.wait_for_selector("#dlg-result", timeout=15000)
+        text = page.inner_text("#dlg-result")
+        assert "31.00.Z" in text and "95.24.Z" in text
+        assert "несколько кодов" in text
+
+        body = page.inner_text("body")
+        for leak in ("input_fingerprint", "furniture-v1", "pkd-2025", "rules_version",
+                     "activity.", "object.", "routing_hint"):
+            assert leak not in body, leak
+    finally:
+        ctx.close()
+
+
+def test_dialog_unrecognized_activity(browser, dialog_url):
+    ctx = browser.new_context(viewport=PHONE)
+    page = ctx.new_page()
+    try:
+        page.goto(dialog_url + "/pkd.html", wait_until="networkidle")
+        tap(page, "#mode-dialog")
+        page.fill("#dlg-q", "ремонт сайта")
+        tap(page, "#dlg-go")
+        page.wait_for_selector("#dlg-result", timeout=15000)
+        text = page.inner_text("#dlg-result")
+        assert "Не удалось определить деятельность" in text
+        # про «чужой раздел» здесь писать нельзя: движок этого не знает
+        assert "другой раздел" not in text
     finally:
         ctx.close()

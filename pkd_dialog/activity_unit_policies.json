@@ -5,6 +5,7 @@
 
   {"id": "unit.manufacture_furniture.v1",
    "kind": "manufacture_furniture",
+   "title": "Производство мебели",
    "object": "furniture",
    "independence": "standalone",
    "why": "Изготовление мебели — самостоятельное направление независимо от того, монтирует ли человек её потом сам",
@@ -16,6 +17,7 @@
 
   {"id": "unit.manufacture_windows_doors.wood.v1",
    "kind": "manufacture_wood_windows_doors",
+   "title": "Производство деревянных окон и дверей",
    "object": "windows_or_doors",
    "qualifiers": ["wood"],
    "independence": "standalone",
@@ -28,6 +30,7 @@
 
   {"id": "unit.manufacture_windows_doors.plastic.v1",
    "kind": "manufacture_plastic_windows_doors",
+   "title": "Производство пластиковых окон и дверей",
    "object": "windows_or_doors",
    "qualifiers": ["plastic"],
    "independence": "standalone",
@@ -40,6 +43,7 @@
 
   {"id": "unit.manufacture_windows_doors.metal.v1",
    "kind": "manufacture_metal_windows_doors",
+   "title": "Производство металлических окон и дверей",
    "object": "windows_or_doors",
    "qualifiers": ["metal"],
    "independence": "standalone",
@@ -52,6 +56,7 @@
 
   {"id": "unit.manufacture_building_elements.v1",
    "kind": "manufacture_building_elements",
+   "title": "Производство строительной столярки",
    "object": "stairs_railings_or_building_elements",
    "independence": "standalone",
    "why": "Лестницы, ограждения и прочая строительная столярка — не мебель",
@@ -62,6 +67,7 @@
 
   {"id": "unit.install_built_in.v1",
    "kind": "install_built_in_furniture",
+   "title": "Монтаж встроенной мебели",
    "object": "built_in_furniture",
    "independence": "standalone",
    "why": "Монтаж встроенной мебели — работа на объекте, отдельная от изготовления",
@@ -72,6 +78,7 @@
 
   {"id": "unit.assemble_freestanding.v1",
    "kind": "assemble_freestanding_furniture",
+   "title": "Сборка отдельно стоящей мебели",
    "object": "freestanding_furniture",
    "independence": "standalone",
    "why": "Сборка отдельно стоящей мебели — своя услуга",
@@ -82,6 +89,7 @@
 
   {"id": "unit.install_windows_doors.v1",
    "kind": "install_windows_doors",
+   "title": "Монтаж окон и дверей",
    "object": "windows_or_doors",
    "independence": "standalone",
    "why": "Монтаж столярки на объекте; материал здесь роли не играет",
@@ -92,6 +100,7 @@
 
   {"id": "unit.repair_furniture.v1",
    "kind": "repair_or_restore_furniture",
+   "title": "Ремонт мебели",
    "object": "furniture",
    "independence": "standalone",
    "why": "Ремонт и реставрация — самостоятельное направление, даже если человек ещё и производит. Слово «кухня» само по себе мебель не доказывает: если человек ответил, что ремонтирует помещение целиком, кухня в его фразе означала комнату. Но названная отдельно мебель («шкафы») остаётся мебелью, поэтому смешанный случай не теряет полезную деятельность.",
@@ -107,6 +116,7 @@
 
   {"id": "unit.design_furniture.v1",
    "kind": "design_furniture",
+   "title": "Проектирование мебели",
    "object": "furniture",
    "independence": "integrated",
    "why": "Проектирование по умолчанию считается частью изготовления: у мебельщика чертёж — этап работы, а не отдельная услуга. Самостоятельным оно становится только при явном основании: «только проектирую», услуга названа отдельной, либо человек прямо сказал, что не производит.",
@@ -123,6 +133,7 @@
 
   {"id": "unit.resell_furniture.wholesale.v1",
    "kind": "resell_furniture_wholesale",
+   "title": "Оптовая торговля мебелью",
    "object": "furniture",
    "qualifiers": ["wholesale"],
    "independence": "standalone",
@@ -135,6 +146,7 @@
 
   {"id": "unit.resell_furniture.retail.v1",
    "kind": "resell_furniture_retail",
+   "title": "Розничная торговля мебелью",
    "object": "furniture",
    "qualifiers": ["retail"],
    "independence": "standalone",
@@ -147,6 +159,7 @@
 
   {"id": "unit.whole_room_renovation.v1",
    "kind": "whole_room_renovation",
+   "title": "Ремонт помещения",
    "object": "whole_room",
    "pack": "construction",
    "independence": "standalone",

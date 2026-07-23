@@ -177,6 +177,20 @@ def test_policies_validate():
         ActivityIndependence(p["independence"])
 
 
+def test_every_activity_has_a_human_name():
+    """Имя деятельности — часть контракта, а не украшение интерфейса.
+
+    Без него страница покажет `kind` («repair_or_restore_furniture») или
+    начнёт переводить идентификаторы сама — и правила разъедутся между
+    сервером и браузером.
+    """
+    titles = [p["title"] for p in policies()]
+    for p in policies():
+        assert p["title"] and p["title"] != p["kind"], p["id"]
+        assert not p["title"].isascii(), f"{p['id']}: имя не на языке пользователя"
+    assert len(set(titles)) == len(titles), "две деятельности с одним именем"
+
+
 def test_units_layer_knows_no_pkd_codes():
     import re
     raw = (ROOT / "pkd_dialog" / "activity_unit_policies.json").read_text(encoding="utf-8")

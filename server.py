@@ -473,9 +473,22 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
+def _dialog_enabled() -> bool:
+    """Один источник истины для ручки и для интерфейса.
+
+    Отдельного флага для UI намеренно нет: иначе появятся состояния
+    «кнопка есть, ручки нет» и «ручка открыта, а нажать негде».
+    """
+    return os.getenv("PKD_DIALOG_ENABLED", "").lower() in ("1", "true", "yes")
+
+
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "bot": app.state.bot is not None}
+    # флаг отдаём здесь, а не отдельной ручкой: страница и так знает этот
+    # адрес, а щупать закрытый endpoint ради 404 — плохой способ узнать
+    # о доступности функции
+    return {"ok": True, "bot": app.state.bot is not None,
+            "pkd_dialog": _dialog_enabled()}
 
 
 @app.get("/api/news")
@@ -594,7 +607,7 @@ async def api_pkd_dialog(req: Request):
     ответы, сервер каждый раз считает всё заново. Поэтому один и тот же
     запрос обязан давать один и тот же ответ, и это проверено тестом.
     """
-    if os.getenv("PKD_DIALOG_ENABLED", "").lower() not in ("1", "true", "yes"):
+    if not _dialog_enabled():
         # выключенный флаг не должен намекать на будущую функциональность:
         # ни 503, ни «скоро будет» — ручки просто нет
         raise HTTPException(404, "Not Found")

@@ -45,6 +45,7 @@ class UncoveredActivityUnitError(RuntimeError):
 class UnitResolution:
     activity_unit_id: str
     kind: str
+    title: str                      # имя деятельности для человека, не идентификатор
     state: str                      # resolved | unresolved | outside_current_pack
     candidate_decisions: tuple[CandidateDecision, ...] = ()
     suggested_pack: str | None = None
@@ -135,7 +136,7 @@ def _as_features(fs: ResolvedFeatureSet) -> list[Feature]:
 
 def _resolve_unit(unit: ActivityUnit, fs: ResolvedFeatureSet) -> UnitResolution:
     if unit.outside_current_pack:
-        return UnitResolution(unit.id, unit.kind, OUTSIDE, (), unit.pack,
+        return UnitResolution(unit.id, unit.kind, unit.title, OUTSIDE, (), unit.pack,
                               (unit.why,))
     decisions = apply_rules(unit, fs)
     if not decisions:
@@ -144,7 +145,7 @@ def _resolve_unit(unit: ActivityUnit, fs: ResolvedFeatureSet) -> UnitResolution:
             f"а правила под неё нет — это дыра в покрытии, а не чужой пакет")
     codes = eligible_codes(decisions)
     state = RESOLVED if codes else UNRESOLVED
-    return UnitResolution(unit.id, unit.kind, state, decisions, None,
+    return UnitResolution(unit.id, unit.kind, unit.title, state, decisions, None,
                           tuple(d.explanation for d in decisions
                                 if d.state is CandidateState.ELIGIBLE))
 
