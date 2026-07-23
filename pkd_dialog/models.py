@@ -49,6 +49,10 @@ class PrimaryStatus(str, Enum):
     NOT_REQUESTED = "not_requested"
     REVENUE_INFORMATION_REQUIRED = "revenue_information_required"
     USER_SELECTED = "user_selected"
+    # одна из самостоятельных деятельностей относится к ещё не подключённому
+    # пакету правил: спрашивать про выручку рано, человек может выбрать
+    # именно ту деятельность, кода которой мы пока не знаем
+    ACTIVITY_RESOLUTION_REQUIRED = "activity_resolution_required"
 
 
 class DialogIntent(str, Enum):

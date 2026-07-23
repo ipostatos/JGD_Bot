@@ -94,11 +94,15 @@
    "kind": "repair_or_restore_furniture",
    "object": "furniture",
    "independence": "standalone",
-   "why": "Ремонт и реставрация — самостоятельное направление, даже если человек ещё и производит",
+   "why": "Ремонт и реставрация — самостоятельное направление, даже если человек ещё и производит. Слово «кухня» само по себе мебель не доказывает: если человек ответил, что ремонтирует помещение целиком, кухня в его фразе означала комнату. Но названная отдельно мебель («шкафы») остаётся мебелью, поэтому смешанный случай не теряет полезную деятельность.",
    "when": {"all": [
      {"any_true": ["activity.repair_or_restore"]},
-     {"any_true": ["object.furniture", "object.kitchen_furniture",
-                   "object.freestanding_furniture", "object.built_in_furniture"]}
+     {"any": [
+       {"any_true": ["object.furniture", "object.freestanding_furniture",
+                     "object.built_in_furniture"]},
+       {"all": [{"any_true": ["object.kitchen_furniture"]},
+                {"none_true": ["object.whole_room"]}]}
+     ]}
    ]}},
 
   {"id": "unit.design_furniture.v1",

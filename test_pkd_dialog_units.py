@@ -194,8 +194,12 @@ def test_scenario_units_match_expected_shape(scenario):
     answers = tuple(Answer.from_dict(a) for a in scenario["answers"])
     us = units_for(scenario["query"], answers)
     n = len(standalone([u for u in us if not u.outside_current_pack]))
+    outside = len(outside_pack(us))
     expected = scenario["expected"]["status"]
     if expected == "resolved_package":
-        assert n >= 2, f"{scenario['id']}: ожидался пакет, а деятельностей {n}"
+        # пакет — это либо две деятельности внутри пакета, либо смесь:
+        # одна решается мебельными правилами, вторая относится к чужому
+        assert n >= 2 or (n == 1 and outside), \
+            f"{scenario['id']}: ожидался пакет, а деятельностей {n} (+{outside} чужих)"
     if expected == "resolved_candidates":
         assert n == 1, f"{scenario['id']}: ожидалась одна деятельность, а их {n}"

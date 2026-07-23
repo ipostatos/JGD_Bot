@@ -192,10 +192,10 @@ def test_scenario_set_covers_the_required_shape():
     groups = {}
     for s in base:
         groups[s["group"]] = groups.get(s["group"], 0) + 1
-    assert len(base) == 24
+    assert len(base) == 25
     assert groups == {"однозначные": 6, "требуют вопроса": 6,
                       "несколько деятельностей": 4, "негативные": 4,
-                      "пограничные": 4}
+                      "пограничные": 4, "смешанные": 1}
     # хотя бы один сценарий обязан требовать вопроса и хотя бы один — молчать
     # про главный код: это два поведения, ради которых движок и затевается
     assert any(s["expected"]["status"] == Status.NEEDS_CLARIFICATION.value
