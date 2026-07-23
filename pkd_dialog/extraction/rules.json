@@ -1,0 +1,261 @@
+{
+ "note": "Слово или фраза -> признак деятельности. Здесь НЕТ кодов PKD: связка «признак -> код» живёт в правилах выбора и меняется отдельно. Совпадение только по целому слову или последовательности слов: никаких обрезок до общего корня. Именно они когда-то склеили «перевозку» с «переводчиком», а «монтажника» с «монтажёром».",
+ "schema_version": 1,
+ "rules": [
+
+  {"id": "activity.manufacture.explicit.v1",
+   "feature": "activity.manufacture_new",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Прямое название производства",
+   "match": {"any": [
+    {"type": "token", "value": "произвожу"},
+    {"type": "token", "value": "производим"},
+    {"type": "token", "value": "производство"},
+    {"type": "token", "value": "изготавливаю"},
+    {"type": "token", "value": "изготавливаем"},
+    {"type": "token", "value": "изготовление"},
+    {"type": "token", "value": "мастерю"},
+    {"type": "phrase", "value": "делаю новую"},
+    {"type": "near", "value": "делаю", "window": 3,
+     "with": ["мебель", "изделия", "окна", "двери", "шкафы", "столы", "стулья"]},
+    {"type": "near", "value": "делаем", "window": 3,
+     "with": ["мебель", "изделия", "окна", "двери", "шкафы", "столы", "стулья"]}
+   ]}},
+
+  {"id": "activity.manufacture.outsourced.v1",
+   "feature": "activity.manufacture_new",
+   "value": false,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Изготовление отдано на сторону — человек сам не производит",
+   "match": {"any": [
+    {"type": "phrase", "value": "изготовление отдаю"},
+    {"type": "phrase", "value": "отдаю на фабрику"},
+    {"type": "phrase", "value": "заказываю на фабрике"}
+   ]}},
+
+  {"id": "activity.install.explicit.v1",
+   "feature": "activity.install_or_assemble",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Монтаж или сборка у клиента",
+   "match": {"any": [
+    {"type": "token", "value": "собираю"},
+    {"type": "token", "value": "собираем"},
+    {"type": "token", "value": "сборка"},
+    {"type": "token", "value": "сборку"},
+    {"type": "token", "value": "устанавливаю"},
+    {"type": "token", "value": "устанавливаем"},
+    {"type": "token", "value": "установка"},
+    {"type": "token", "value": "монтирую"},
+    {"type": "token", "value": "монтаж"},
+    {"type": "token", "value": "ставлю"}
+   ]}},
+
+  {"id": "activity.repair.explicit.v1",
+   "feature": "activity.repair_or_restore",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Ремонт или реставрация существующего изделия",
+   "match": {"any": [
+    {"type": "token", "value": "ремонтирую"},
+    {"type": "token", "value": "ремонтируем"},
+    {"type": "token", "value": "ремонт"},
+    {"type": "token", "value": "починка"},
+    {"type": "token", "value": "чиню"},
+    {"type": "token", "value": "реставрирую"},
+    {"type": "token", "value": "реставрация"},
+    {"type": "token", "value": "перетягиваю"},
+    {"type": "token", "value": "обиваю"}
+   ]}},
+
+  {"id": "activity.design.explicit.v1",
+   "feature": "activity.design",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Проектирование; про «только» отдельное правило",
+   "match": {"any": [
+    {"type": "token", "value": "проектирую"},
+    {"type": "token", "value": "проектируем"},
+    {"type": "token", "value": "проектирование"},
+    {"type": "phrase", "value": "рисую эскизы"},
+    {"type": "phrase", "value": "делаю проекты"}
+   ]}},
+
+  {"id": "activity.design_only.restricted.v1",
+   "feature": "activity.design_only",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Явный ограничитель: проектирую и при этом ничего не произвожу",
+   "match": {"any": [
+    {"type": "phrase", "value": "только проектирую"},
+    {"type": "phrase", "value": "только проектируем"},
+    {"type": "phrase", "value": "только дизайн"},
+    {"type": "phrase", "value": "занимаюсь только дизайном"}
+   ]}},
+
+  {"id": "activity.resell.explicit.v1",
+   "feature": "activity.resell",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Перепродажа готового товара",
+   "match": {"any": [
+    {"type": "token", "value": "перепродаю"},
+    {"type": "token", "value": "перепродажа"},
+    {"type": "token", "value": "продаю"},
+    {"type": "token", "value": "продаём"},
+    {"type": "token", "value": "торгую"},
+    {"type": "token", "value": "закупаю"}
+   ]}},
+
+  {"id": "object.furniture.generic.v1",
+   "feature": "object.furniture",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Предмет назван, но вид мебели неизвестен — это повод для вопроса, а не для догадки",
+   "match": {"any": [
+    {"type": "token", "value": "мебель"},
+    {"type": "token", "value": "мебели"},
+    {"type": "token", "value": "мебелью"},
+    {"type": "token", "value": "мебельщик"},
+    {"type": "token", "value": "шкафы"},
+    {"type": "token", "value": "шкафов"},
+    {"type": "token", "value": "стулья"},
+    {"type": "token", "value": "стульев"},
+    {"type": "token", "value": "диваны"},
+    {"type": "token", "value": "столы"}
+   ]}},
+
+  {"id": "object.kitchen.generic.v1",
+   "feature": "object.kitchen_furniture",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Кухня бывает и встроенной, и модульной отдельно стоящей: объект назван, развилка осталась",
+   "match": {"any": [
+    {"type": "token", "value": "кухни"},
+    {"type": "token", "value": "кухня"},
+    {"type": "token", "value": "кухню"},
+    {"type": "token", "value": "кухнями"}
+   ]}},
+
+  {"id": "object.built_in.explicit.v1",
+   "feature": "object.built_in_furniture",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Встроенность названа прямо",
+   "match": {"any": [
+    {"type": "token", "value": "встроенные"},
+    {"type": "token", "value": "встроенная"},
+    {"type": "token", "value": "встроенных"},
+    {"type": "token", "value": "встроенную"},
+    {"type": "token", "value": "купе"},
+    {"type": "phrase", "value": "шкаф купе"},
+    {"type": "phrase", "value": "шкафы купе"}
+   ]}},
+
+  {"id": "object.freestanding.explicit.v1",
+   "feature": "object.freestanding_furniture",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Отдельно стоящая мебель названа прямо",
+   "match": {"any": [
+    {"type": "phrase", "value": "отдельно стоящая"},
+    {"type": "phrase", "value": "отдельно стоящую"},
+    {"type": "token", "value": "отдельностоящая"},
+    {"type": "token", "value": "модульная"}
+   ]}},
+
+  {"id": "object.windows_doors.explicit.v1",
+   "feature": "object.windows_or_doors",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Окна и двери — строительная столярка, не мебель",
+   "match": {"any": [
+    {"type": "token", "value": "окна"},
+    {"type": "token", "value": "окон"},
+    {"type": "token", "value": "окно"},
+    {"type": "token", "value": "двери"},
+    {"type": "token", "value": "дверей"},
+    {"type": "token", "value": "дверь"}
+   ]}},
+
+  {"id": "object.building_elements.explicit.v1",
+   "feature": "object.stairs_railings_or_building_elements",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Лестницы и ограждения идут в строительную столярку",
+   "match": {"any": [
+    {"type": "token", "value": "лестницы"},
+    {"type": "token", "value": "лестниц"},
+    {"type": "token", "value": "ограждения"},
+    {"type": "token", "value": "перила"},
+    {"type": "token", "value": "балюстрады"}
+   ]}},
+
+  {"id": "material.wood.explicit.v1",
+   "feature": "material.windows_doors",
+   "value": "wood",
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Материал разводит 16.25.Z, 22.23.Z и 25.12.Z",
+   "match": {"any": [
+    {"type": "token", "value": "деревянные"},
+    {"type": "token", "value": "деревянных"},
+    {"type": "phrase", "value": "из дерева"}
+   ]}},
+
+  {"id": "material.plastic.explicit.v1",
+   "feature": "material.windows_doors",
+   "value": "plastic",
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Материал разводит 16.25.Z, 22.23.Z и 25.12.Z",
+   "match": {"any": [
+    {"type": "token", "value": "пластиковые"},
+    {"type": "token", "value": "пластиковых"},
+    {"type": "token", "value": "пвх"},
+    {"type": "phrase", "value": "из пластика"}
+   ]}},
+
+  {"id": "material.metal.explicit.v1",
+   "feature": "material.windows_doors",
+   "value": "metal",
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "Материал разводит 16.25.Z, 22.23.Z и 25.12.Z",
+   "match": {"any": [
+    {"type": "token", "value": "металлические"},
+    {"type": "token", "value": "металлических"},
+    {"type": "token", "value": "алюминиевые"},
+    {"type": "phrase", "value": "из металла"}
+   ]}}
+ ],
+
+ "ambiguity_markers": [
+  {"id": "turnkey.v1",
+   "phrases": ["под ключ"],
+   "blocks": ["activity.manufacture_new", "activity.install_or_assemble"],
+   "why": "«Под ключ» означает весь цикл, но не говорит, что человек делает сам: производит, только монтирует чужое или организует чужую работу. Уверенный режим здесь опаснее вопроса."}
+ ],
+
+ "negation": {
+  "window": 3,
+  "markers": ["не", "нет", "без"],
+  "affirmative_exceptions": ["не только"],
+  "clause_breaks": [",", ";", ".", " — ", " - ", " но ", " хотя ", " зато "],
+  "why": "Отрицание фиксируем фактом value=false, а не отсутствием признака: явное «не произвожу» сильнее, чем молчание. «Не только собираю, но и делаю» — это подтверждение обеих деятельностей, а не отрицание."
+ }
+}

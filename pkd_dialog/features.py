@@ -20,15 +20,28 @@ from dataclasses import dataclass
 ACTIVITY_MANUFACTURE = "activity.manufacture_new"
 ACTIVITY_INSTALL = "activity.install_or_assemble"
 ACTIVITY_REPAIR = "activity.repair_or_restore"
-ACTIVITY_DESIGN = "activity.design_only"
+# Проектирование и «только проектирование» — разные факты. Упоминание
+# «проектирую и произвожу» не делает человека проектировщиком без производства,
+# поэтому design_only выставляется лишь при явном ограничителе: «только
+# проектирую», «изготовление отдаю на фабрику», «сам не произвожу».
+ACTIVITY_DESIGN = "activity.design"
+ACTIVITY_DESIGN_ONLY = "activity.design_only"
 ACTIVITY_RESELL = "activity.resell"
 
 # ── с каким объектом ──────────────────────────────────────────────────────
 # Объект отраслевой: у мебели он разводит коды, у транспорта будет свой.
+# Родовой объект: «занимаюсь мебелью» сообщает предмет, но не вид мебели,
+# и подменять его встроенностью нельзя — это и есть повод задать вопрос.
+OBJECT_FURNITURE = "object.furniture"
+OBJECT_KITCHEN = "object.kitchen_furniture"
 OBJECT_FREESTANDING = "object.freestanding_furniture"
 OBJECT_BUILT_IN = "object.built_in_furniture"
 OBJECT_WINDOWS_DOORS = "object.windows_or_doors"
 OBJECT_BUILDING_ELEMENTS = "object.stairs_railings_or_building_elements"
+# «Ремонт кухни» по-русски одинаково значит и починку мебели, и ремонт
+# комнаты. Второе — строительная отделка, то есть другой пакет правил,
+# и признак нужен, чтобы честно сказать «это не сюда», а не угадать.
+OBJECT_ROOM_RENOVATION = "object.room_renovation"
 
 # ── материал ──────────────────────────────────────────────────────────────
 # Нужен ровно там, где классификация делит по нему коды: производство окон
@@ -54,14 +67,20 @@ REGISTRY: dict[str, FeatureKey] = {f.key: f for f in (
     FeatureKey(ACTIVITY_MANUFACTURE, "bool", "производит новое изделие"),
     FeatureKey(ACTIVITY_INSTALL, "bool", "монтирует или собирает у клиента"),
     FeatureKey(ACTIVITY_REPAIR, "bool", "ремонтирует или реставрирует"),
-    FeatureKey(ACTIVITY_DESIGN, "bool", "только проектирует"),
+    FeatureKey(ACTIVITY_DESIGN, "bool", "проектирует"),
+    FeatureKey(ACTIVITY_DESIGN_ONLY, "bool",
+               "проектирует и при этом не производит и не монтирует"),
     FeatureKey(ACTIVITY_RESELL, "bool", "перепродаёт готовое"),
+    FeatureKey(OBJECT_FURNITURE, "bool", "мебель, вид не уточнён"),
+    FeatureKey(OBJECT_KITCHEN, "bool", "кухня: встроенная или отдельно стоящая — неизвестно"),
     FeatureKey(OBJECT_FREESTANDING, "bool", "отдельно стоящая мебель"),
     FeatureKey(OBJECT_BUILT_IN, "bool", "встроенная мебель: кухни, шкафы"),
     FeatureKey(OBJECT_WINDOWS_DOORS, "bool", "окна и двери"),
     FeatureKey(OBJECT_BUILDING_ELEMENTS, "bool",
                "лестницы, ограждения и прочие строительные элементы"),
-    FeatureKey(MATERIAL, "enum", "материал окон и дверей",
+    FeatureKey(OBJECT_ROOM_RENOVATION, "bool",
+               "ремонт помещения целиком — отделка, а не мебель"),
+    FeatureKey(MATERIAL, "enum", "материал изделия; коды разводит только у окон и дверей",
                ("wood", "plastic", "metal")),
     FeatureKey(PRIMARY_REVENUE, "enum", "деятельность с наибольшей выручкой",
                (ACTIVITY_MANUFACTURE, ACTIVITY_INSTALL, ACTIVITY_REPAIR,
@@ -70,6 +89,8 @@ REGISTRY: dict[str, FeatureKey] = {f.key: f for f in (
 
 ACTIVITY_KEYS = (ACTIVITY_MANUFACTURE, ACTIVITY_INSTALL, ACTIVITY_REPAIR,
                  ACTIVITY_DESIGN, ACTIVITY_RESELL)
+# объекты, которые реально разводят коды; родовые (мебель, кухня) в набор
+# не входят намеренно: они не решают развилку, а только называют предмет
 OBJECT_KEYS = (OBJECT_FREESTANDING, OBJECT_BUILT_IN,
                OBJECT_WINDOWS_DOORS, OBJECT_BUILDING_ELEMENTS)
 

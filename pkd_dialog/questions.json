@@ -9,7 +9,8 @@
    "text": "Что вы фактически делаете?",
    "help": "Можно отметить несколько — это разные виды деятельности, и коды у них тоже разные.",
    "resolves": ["activity.manufacture_new", "activity.install_or_assemble",
-                "activity.repair_or_restore", "activity.design_only", "activity.resell"],
+                "activity.repair_or_restore", "activity.design", "activity.design_only",
+                "activity.resell"],
    "options": [
     {"id": "manufacture_new", "label": "Произвожу новые изделия",
      "effects": [{"key": "activity.manufacture_new", "value": true}]},
@@ -18,19 +19,21 @@
     {"id": "repair_or_restore", "label": "Ремонтирую или реставрирую",
      "effects": [{"key": "activity.repair_or_restore", "value": true}]},
     {"id": "design_only", "label": "Только проектирую",
-     "effects": [{"key": "activity.design_only", "value": true}]},
+     "effects": [{"key": "activity.design", "value": true},
+                 {"key": "activity.design_only", "value": true}]},
     {"id": "resell", "label": "Перепродаю готовое",
      "effects": [{"key": "activity.resell", "value": true}]}
    ]
   },
   {
    "id": "furniture.object_context",
-   "version": 1,
+   "version": 2,
    "type": "multi_select",
    "text": "С чем именно вы работаете?",
    "help": "Встроенная кухня и обычный шкаф — это разные коды, поэтому вопрос не формальный.",
    "resolves": ["object.freestanding_furniture", "object.built_in_furniture",
-                "object.windows_or_doors", "object.stairs_railings_or_building_elements"],
+                "object.windows_or_doors", "object.stairs_railings_or_building_elements",
+                "object.room_renovation"],
    "options": [
     {"id": "freestanding_furniture", "label": "Отдельно стоящая мебель",
      "effects": [{"key": "object.freestanding_furniture", "value": true}]},
@@ -40,7 +43,9 @@
      "effects": [{"key": "object.windows_or_doors", "value": true}]},
     {"id": "stairs_railings_or_building_elements",
      "label": "Лестницы, ограждения, другие элементы для стройки",
-     "effects": [{"key": "object.stairs_railings_or_building_elements", "value": true}]}
+     "effects": [{"key": "object.stairs_railings_or_building_elements", "value": true}]},
+    {"id": "room_renovation", "label": "Помещение целиком: отделка комнаты",
+     "effects": [{"key": "object.room_renovation", "value": true}]}
    ]
   },
   {
@@ -75,7 +80,7 @@
     {"id": "repair_or_restore", "label": "Ремонт",
      "effects": [{"key": "revenue.primary_activity", "value": "activity.repair_or_restore"}]},
     {"id": "design_only", "label": "Проектирование",
-     "effects": [{"key": "revenue.primary_activity", "value": "activity.design_only"}]},
+     "effects": [{"key": "revenue.primary_activity", "value": "activity.design"}]},
     {"id": "resell", "label": "Перепродажа",
      "effects": [{"key": "revenue.primary_activity", "value": "activity.resell"}]}
    ]

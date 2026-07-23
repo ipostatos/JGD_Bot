@@ -56,7 +56,7 @@ def test_question_ids_say_what_they_are_about():
 
 def test_answer_gives_user_features():
     fs = FeatureSet(contracts.features_from_answers(
-        [Answer("furniture.object_context", 1, ("built_in_furniture",))]))
+        [Answer("furniture.object_context", 2, ("built_in_furniture",))]))
     assert fs.is_true(features.OBJECT_BUILT_IN)
     assert fs.get(features.OBJECT_BUILT_IN).source is models.FeatureSource.USER_ANSWER
 
