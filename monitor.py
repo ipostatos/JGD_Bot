@@ -20,7 +20,8 @@ import httpx
 
 log = logging.getLogger("jdg.monitor")
 
-DB_PATH = Path(__file__).parent / "news.db"
+DB_PATH = Path(os.environ.get("JDG_DB")
+                or Path(__file__).parent / "news.db")
 UA = {"User-Agent": "Mozilla/5.0 (compatible; JDGGuideBot/1.0)"}
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 HAIKU = "claude-haiku-4-5-20251001"

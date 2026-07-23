@@ -30,7 +30,8 @@ import httpx
 
 log = logging.getLogger("jdg.registries")
 
-DB_PATH = Path(__file__).parent / "news.db"
+DB_PATH = Path(os.environ.get("JDG_DB")
+                or Path(__file__).parent / "news.db")
 WL_BASE = "https://wl-api.mf.gov.pl/api"
 VIES_BASE = "https://ec.europa.eu/taxation_customs/vies/rest-api"
 GUS_BASE = os.environ.get(

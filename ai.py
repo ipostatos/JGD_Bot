@@ -19,7 +19,7 @@ log = logging.getLogger("jdg.ai")
 
 ROOT = Path(__file__).parent
 SEARCH_JSON = ROOT / "webapp" / "data" / "search.json"
-DB_PATH = ROOT / "news.db"
+DB_PATH = Path(os.environ.get("JDG_DB") or ROOT / "news.db")
 
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODEL = "claude-haiku-4-5-20251001"

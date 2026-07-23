@@ -22,7 +22,8 @@ from cryptography.fernet import Fernet
 
 log = logging.getLogger("jdg.infakt")
 
-DB_PATH = Path(__file__).parent / "news.db"
+DB_PATH = Path(os.environ.get("JDG_DB")
+                or Path(__file__).parent / "news.db")
 BASE = "https://api.infakt.pl/api/v3"
 _fernet = None
 

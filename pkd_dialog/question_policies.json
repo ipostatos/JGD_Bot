@@ -1,0 +1,106 @@
+{
+ "note": "Когда какой вопрос уместен. Отдельно от questions.json намеренно: там пользовательский текст и варианты, здесь бизнес-логика применимости. Переписать формулировку вопроса или перевести её на другой язык можно, не трогая условия, и наоборот.",
+ "schema_version": 1,
+ "policies": [
+
+  {"id": "policy.conflict.activity_mode.v1",
+   "question_id": "activity.mode",
+   "question_version": 1,
+   "priority": "conflict_resolution",
+   "why": "Свидетельства о деятельности противоречат друг другу. Молча выбрать одно нельзя, поэтому спрашиваем человека — это первое, что нужно развязать.",
+   "when": {"any_conflicted": ["activity.manufacture_new", "activity.install_or_assemble",
+                               "activity.repair_or_restore", "activity.design",
+                               "activity.resell"]},
+   "resolves": ["activity.manufacture_new", "activity.install_or_assemble",
+                "activity.repair_or_restore", "activity.design", "activity.resell"]},
+
+  {"id": "policy.activity_mode.unknown.v1",
+   "question_id": "activity.mode",
+   "question_version": 1,
+   "priority": "activity_mode",
+   "why": "Предмет назван, а действие — нет. «Занимаюсь мебелью», «мастер мебели», «столярные работы» не говорят, производит человек, монтирует или ремонтирует.",
+   "when": {"all": [
+     {"any_true": ["object.furniture", "object.kitchen_furniture",
+                   "object.woodwork_generic", "object.freestanding_furniture",
+                   "object.built_in_furniture", "object.windows_or_doors",
+                   "object.stairs_railings_or_building_elements"]},
+     {"none_known": ["activity.manufacture_new", "activity.install_or_assemble",
+                     "activity.repair_or_restore", "activity.design",
+                     "activity.resell"]}
+   ]},
+   "resolves": ["activity.manufacture_new", "activity.install_or_assemble",
+                "activity.repair_or_restore", "activity.design", "activity.resell"]},
+
+  {"id": "policy.object_context.install.v1",
+   "question_id": "furniture.object_context",
+   "question_version": 2,
+   "priority": "domain_discriminator",
+   "why": "Монтаж встроенной кухни и сборка отдельно стоящего шкафа — разные коды, и различает их только объект. Ровно эта развилка стоит за «собираю кухни».",
+   "when": {"all": [
+     {"any_true": ["activity.install_or_assemble"]},
+     {"any_true": ["object.furniture", "object.kitchen_furniture",
+                   "object.woodwork_generic"]}
+   ]},
+   "unless": {"any_known": ["object.built_in_furniture", "object.freestanding_furniture",
+                            "object.windows_or_doors",
+                            "object.stairs_railings_or_building_elements",
+                            "object.whole_room"]},
+   "resolves": ["object.built_in_furniture", "object.freestanding_furniture",
+                "object.windows_or_doors", "object.stairs_railings_or_building_elements",
+                "object.whole_room"]},
+
+  {"id": "policy.object_context.kitchen_repair.v1",
+   "question_id": "furniture.object_context",
+   "question_version": 2,
+   "priority": "domain_discriminator",
+   "why": "«Ремонтирую кухни» по-русски — это и починка мебели, и отделка комнаты. Для шкафов и диванов такой развилки нет, поэтому условие сужено до кухни.",
+   "when": {"all": [
+     {"any_true": ["activity.repair_or_restore"]},
+     {"any_true": ["object.kitchen_furniture"]}
+   ]},
+   "unless": {"any_known": ["object.built_in_furniture", "object.freestanding_furniture",
+                            "object.whole_room"]},
+   "resolves": ["object.built_in_furniture", "object.freestanding_furniture",
+                "object.whole_room"]},
+
+  {"id": "policy.object_context.manufacture_unknown_object.v1",
+   "question_id": "furniture.object_context",
+   "question_version": 2,
+   "priority": "domain_discriminator",
+   "why": "«Делаю изделия из дерева» — производство ясно, а что именно, нет: мебель, окна и лестницы идут в разные разделы. Если предмет уже назван мебелью, вопрос не нужен: производство мебели идёт в один код независимо от встроенности.",
+   "when": {"all": [
+     {"any_true": ["activity.manufacture_new"]},
+     {"none_known": ["object.furniture", "object.kitchen_furniture"]}
+   ]},
+   "unless": {"any_known": ["object.built_in_furniture", "object.freestanding_furniture",
+                            "object.windows_or_doors",
+                            "object.stairs_railings_or_building_elements",
+                            "object.whole_room"]},
+   "resolves": ["object.built_in_furniture", "object.freestanding_furniture",
+                "object.windows_or_doors", "object.stairs_railings_or_building_elements",
+                "object.whole_room"]},
+
+  {"id": "policy.material.windows_manufacture.v1",
+   "question_id": "joinery.windows_doors_material",
+   "question_version": 1,
+   "priority": "material_discriminator",
+   "why": "Производство окон и дверей классификация делит по материалу. На монтаж той же столярки материал не влияет, поэтому условие требует именно производства.",
+   "when": {"all": [
+     {"any_true": ["activity.manufacture_new"]},
+     {"any_true": ["object.windows_or_doors"]}
+   ]},
+   "unless": {"any_known": ["material.windows_doors"]},
+   "resolves": ["material.windows_doors"]},
+
+  {"id": "policy.primary_revenue.v1",
+   "question_id": "activity.primary_revenue",
+   "question_version": 1,
+   "priority": "primary_revenue",
+   "why": "Главный код определяется преобладающей деятельностью. Но спрашивать про выручку можно только там, где деятельностей действительно несколько и они самостоятельные. Число глаголов этого не доказывает: «проектирую и произвожу мебель» может быть одним процессом. Признак ставит слой разбора деятельностей, которого ещё нет, поэтому пока вопрос не выбирается никогда — и это лучше, чем спросить его не к месту.",
+   "when": {"all": [
+     {"any_true": ["dialog.multiple_independent_activities"]},
+     {"none_known": ["revenue.primary_activity"]}
+   ]},
+   "resolves": ["revenue.primary_activity"]}
+ ]
+}

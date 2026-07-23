@@ -33,19 +33,19 @@
    "help": "Встроенная кухня и обычный шкаф — это разные коды, поэтому вопрос не формальный.",
    "resolves": ["object.freestanding_furniture", "object.built_in_furniture",
                 "object.windows_or_doors", "object.stairs_railings_or_building_elements",
-                "object.room_renovation"],
+                "object.whole_room"],
    "options": [
-    {"id": "freestanding_furniture", "label": "Отдельно стоящая мебель",
+    {"id": "freestanding_furniture", "label": "Отдельно стоящую мебель",
      "effects": [{"key": "object.freestanding_furniture", "value": true}]},
-    {"id": "built_in_furniture", "label": "Встроенные кухни и шкафы",
+    {"id": "built_in_furniture", "label": "Встроенную кухню или шкаф",
      "effects": [{"key": "object.built_in_furniture", "value": true}]},
     {"id": "windows_or_doors", "label": "Окна и двери",
      "effects": [{"key": "object.windows_or_doors", "value": true}]},
     {"id": "stairs_railings_or_building_elements",
      "label": "Лестницы, ограждения, другие элементы для стройки",
      "effects": [{"key": "object.stairs_railings_or_building_elements", "value": true}]},
-    {"id": "room_renovation", "label": "Помещение целиком: отделка комнаты",
-     "effects": [{"key": "object.room_renovation", "value": true}]}
+    {"id": "whole_room", "label": "Помещение целиком: стены, пол, отделку",
+     "effects": [{"key": "object.whole_room", "value": true}]}
    ]
   },
   {

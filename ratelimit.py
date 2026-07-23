@@ -8,11 +8,13 @@ CEIDG). Суточный кэш спасает только от повторо�
 Хранилище — та же news.db (плодить БД незачем), окно скользящее: считаем
 попадания за последние N секунд и чистим старое при записи.
 """
+import os
 import sqlite3
 import time
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "news.db"
+DB_PATH = Path(os.environ.get("JDG_DB")
+                or Path(__file__).parent / "news.db")
 
 # bucket -> (за минуту на юзера, за сутки на юзера, за минуту на всех)
 LIMITS = {

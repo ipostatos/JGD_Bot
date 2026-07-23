@@ -4,12 +4,14 @@
 и флаги подписок (news_sub — новости мониторинга, dl_sub — напоминания
 о дедлайнах). Логика этапов ZUS — зеркало plan.html (менять синхронно!).
 """
+import os
 import sqlite3
 import time
 from datetime import date, timedelta
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "news.db"
+DB_PATH = Path(os.environ.get("JDG_DB")
+                or Path(__file__).parent / "news.db")
 
 FORMS = ("skala", "liniowy", "ryczalt", "unknown")
 PUSH_DAYS = (5, 1)  # за сколько дней напоминать

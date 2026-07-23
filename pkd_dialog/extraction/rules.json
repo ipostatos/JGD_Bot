@@ -172,6 +172,10 @@
    "match": {"any": [
     {"type": "phrase", "value": "отдельно стоящая"},
     {"type": "phrase", "value": "отдельно стоящую"},
+    {"type": "phrase", "value": "отдельно стоящие"},
+    {"type": "phrase", "value": "отдельно стоящих"},
+    {"type": "phrase", "value": "отдельно стоящий"},
+    {"type": "phrase", "value": "отдельно стоящего"},
     {"type": "token", "value": "отдельностоящая"},
     {"type": "token", "value": "модульная"}
    ]}},
@@ -203,6 +207,21 @@
     {"type": "token", "value": "ограждения"},
     {"type": "token", "value": "перила"},
     {"type": "token", "value": "балюстрады"}
+   ]}},
+
+  {"id": "object.woodwork.generic.v1",
+   "feature": "object.woodwork_generic",
+   "value": true,
+   "source": "explicit_query",
+   "confidence": "exact",
+   "why": "«Столяр» и «столярные работы» называют домен, но не объект: это и мебель, и окна, и монтаж на объекте",
+   "match": {"any": [
+    {"type": "token", "value": "столяр"},
+    {"type": "token", "value": "столяра"},
+    {"type": "token", "value": "столярные"},
+    {"type": "token", "value": "столярных"},
+    {"type": "token", "value": "столярка"},
+    {"type": "token", "value": "столярку"}
    ]}},
 
   {"id": "material.wood.explicit.v1",

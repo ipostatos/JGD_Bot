@@ -41,7 +41,10 @@ OBJECT_BUILDING_ELEMENTS = "object.stairs_railings_or_building_elements"
 # «Ремонт кухни» по-русски одинаково значит и починку мебели, и ремонт
 # комнаты. Второе — строительная отделка, то есть другой пакет правил,
 # и признак нужен, чтобы честно сказать «это не сюда», а не угадать.
-OBJECT_ROOM_RENOVATION = "object.room_renovation"
+OBJECT_WHOLE_ROOM = "object.whole_room"
+# «Столярные работы» и «столяр» называют домен, но не объект: под ними
+# и мебель, и окна, и монтаж на объекте. Это повод спросить, а не выбрать.
+OBJECT_WOODWORK = "object.woodwork_generic"
 
 # ── материал ──────────────────────────────────────────────────────────────
 # Нужен ровно там, где классификация делит по нему коды: производство окон
@@ -53,6 +56,11 @@ MATERIAL = "material.windows_doors"
 # Единственный источник главного кода. Значение — идентификатор деятельности,
 # которую человек назвал преобладающей, а не код: код выводится из неё.
 PRIMARY_REVENUE = "revenue.primary_activity"
+
+# Ставит только слой разбора деятельностей, которого ещё нет. Считать
+# деятельности самостоятельными по числу глаголов нельзя: «проектирую
+# и произвожу мебель» — это может быть один процесс, а не два направления.
+MULTIPLE_ACTIVITIES = "dialog.multiple_independent_activities"
 
 
 @dataclass(frozen=True)
@@ -78,10 +86,14 @@ REGISTRY: dict[str, FeatureKey] = {f.key: f for f in (
     FeatureKey(OBJECT_WINDOWS_DOORS, "bool", "окна и двери"),
     FeatureKey(OBJECT_BUILDING_ELEMENTS, "bool",
                "лестницы, ограждения и прочие строительные элементы"),
-    FeatureKey(OBJECT_ROOM_RENOVATION, "bool",
-               "ремонт помещения целиком — отделка, а не мебель"),
+    FeatureKey(OBJECT_WHOLE_ROOM, "bool",
+               "помещение целиком: отделка комнаты, а не мебель"),
+    FeatureKey(OBJECT_WOODWORK, "bool",
+               "столярка вообще: мебель, строительные изделия или монтаж — неизвестно"),
     FeatureKey(MATERIAL, "enum", "материал изделия; коды разводит только у окон и дверей",
                ("wood", "plastic", "metal")),
+    FeatureKey(MULTIPLE_ACTIVITIES, "bool",
+               "подтверждено, что деятельностей несколько и они самостоятельные"),
     FeatureKey(PRIMARY_REVENUE, "enum", "деятельность с наибольшей выручкой",
                (ACTIVITY_MANUFACTURE, ACTIVITY_INSTALL, ACTIVITY_REPAIR,
                 ACTIVITY_DESIGN, ACTIVITY_RESELL)),
@@ -93,6 +105,8 @@ ACTIVITY_KEYS = (ACTIVITY_MANUFACTURE, ACTIVITY_INSTALL, ACTIVITY_REPAIR,
 # не входят намеренно: они не решают развилку, а только называют предмет
 OBJECT_KEYS = (OBJECT_FREESTANDING, OBJECT_BUILT_IN,
                OBJECT_WINDOWS_DOORS, OBJECT_BUILDING_ELEMENTS)
+# объект назван, но развилку не решает: с ними и надо идти к вопросу
+GENERIC_OBJECT_KEYS = (OBJECT_FURNITURE, OBJECT_KITCHEN, OBJECT_WOODWORK)
 
 
 def validate(key: str, value) -> None:
