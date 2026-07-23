@@ -163,10 +163,32 @@ def test_answer_order_does_not_change_the_result():
     "монтажёр видео", "ремонт сайта", "кухонный блог",
     "производственный менеджер мебельной компании",
 ])
-def test_foreign_domains_get_no_codes(query):
+def test_foreign_domains_are_unrecognized_not_routed(query):
+    """«Ремонт сайта» — это не «понятая деятельность вне мебельного пакета»,
+    а «мы не поняли, чем человек занимается». Разные статусы, потому что
+    маршрут разный: одно передаётся строительному пакету, другое уходит
+    в общий поиск или к переформулировке."""
     r = run(query)
     assert r.codes == () and r.next_question is None
+    assert r.status is Status.UNRECOGNIZED_ACTIVITY
+    assert r.reason == "no_activity_units" and r.routing_hint == "general_search"
+
+
+def test_understood_but_foreign_activity_keeps_its_route():
+    r = run("ремонтирую кухни",
+            (Answer("furniture.object_context", 2, ("whole_room",)),))
     assert r.status is Status.OUTSIDE_CURRENT_PACK
+    assert r.routing_hint == "construction"
+
+
+def test_single_activity_answers_the_primary_question():
+    """Человек просил главный код, деятельность одна и код у неё один —
+    выбирать не из чего, но запрос выполнен. Это не выбор движка."""
+    r = run("делаю мебель на заказ", intent=DialogIntent.FIND_PRIMARY_CODE)
+    assert r.primary_code == "31.00.Z"
+    assert r.primary_code_status is PrimaryStatus.SINGLE_ACTIVITY
+    # без запроса главного кода статус остаётся прежним
+    assert run("делаю мебель на заказ").primary_code_status is PrimaryStatus.NOT_REQUESTED
 
 
 # ── исключения кандидатов ─────────────────────────────────────────────────

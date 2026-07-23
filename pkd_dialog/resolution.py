@@ -67,6 +67,8 @@ class DialogResolution:
     units: tuple[UnitResolution, ...] = ()
     primary_code: str | None = None
     primary_code_status: PrimaryStatus = PrimaryStatus.NOT_REQUESTED
+    reason: str | None = None
+    routing_hint: str | None = None
     input_fingerprint: str = ""
     versions: dict = field(default_factory=dict)
     trace: dict = field(default_factory=dict)
@@ -111,8 +113,10 @@ def resolve_furniture_dialog(*, query: str, answers: tuple[Answer, ...] = (),
 
     status = _top_status(in_pack, outside)
     primary, primary_status = _primary(in_pack, outside, fs, intent)
+    reason, hint = _routing(status, outside)
     return DialogResolution(status=status, units=resolutions,
                             primary_code=primary, primary_code_status=primary_status,
+                            reason=reason, routing_hint=hint,
                             trace={"selection": selection.reason,
                                    "features": sorted(fs.features)}, **base)
 
@@ -154,8 +158,19 @@ def _top_status(in_pack, outside) -> Status:
         return Status.RESOLVED_PACKAGE
     if len(in_pack) == 1:
         return Status.RESOLVED_CANDIDATES
-    # деятельностей не нашлось вовсе: мебельному пакету нечего сказать
-    return Status.OUTSIDE_CURRENT_PACK
+    # Деятельностей не сформировалось вовсе. Это НЕ «понятая деятельность вне
+    # пакета»: мы не знаем, чужой это пакет или разбор не понял формулировку,
+    # и врать про распознавание нельзя — маршрут отсюда другой.
+    return Status.UNRECOGNIZED_ACTIVITY
+
+
+def _routing(status: Status, outside):
+    """Куда девать запрос дальше. Подсказка оркестратору, не пользователю."""
+    if status is Status.UNRECOGNIZED_ACTIVITY:
+        return "no_activity_units", "general_search"
+    if outside:
+        return "activity_outside_pack", outside[0].suggested_pack
+    return None, None
 
 
 def _primary(in_pack, outside, fs: ResolvedFeatureSet, intent: DialogIntent):
@@ -172,10 +187,14 @@ def _primary(in_pack, outside, fs: ResolvedFeatureSet, intent: DialogIntent):
             return unit.codes[0], PrimaryStatus.USER_SELECTED
     if len(in_pack) >= 2:
         return None, PrimaryStatus.REVENUE_INFORMATION_REQUIRED
-    if len(in_pack) == 1 and in_pack[0].codes:
-        # выбирать не из чего: деятельность одна, и она же главная
-        return in_pack[0].codes[0], PrimaryStatus.NOT_REQUESTED
-    return None, PrimaryStatus.NOT_REQUESTED
+    if (len(in_pack) == 1 and in_pack[0].state == RESOLVED
+            and len(in_pack[0].codes) == 1):
+        # выбирать не из чего: деятельность одна и код у неё один. Это не
+        # решение движка — просто у альтернатив нет конкурентов
+        return in_pack[0].codes[0], PrimaryStatus.SINGLE_ACTIVITY
+    # у единственной деятельности осталось несколько допустимых кодов —
+    # сначала надо разобраться с самим кодом, а не назначать главный
+    return None, PrimaryStatus.ACTIVITY_RESOLUTION_REQUIRED if in_pack         else PrimaryStatus.NOT_REQUESTED
 
 
 KIND_BY_ACTIVITY = {
