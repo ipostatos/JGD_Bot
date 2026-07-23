@@ -78,6 +78,18 @@ def exclusion_texts(code_record: dict) -> list[str]:
             for x in code_record.get("excludes", [])]
 
 
+def own_chain(code_record: dict) -> set[str]:
+    """Названия уровней, которым код принадлежит сам.
+
+    Подкласс часто цитирует название своей же группы («górnictwo ropy naftowej»
+    у 06.10.Z) — это его собственный текст. Загрязнением считается название
+    ЧУЖОГО уровня, как «Uprawa roślin wieloletnich» в исключениях 01.19.Z.
+    """
+    return {(code_record.get(k) or "").strip().lower()
+            for k in ("name", "class_name", "group_name",
+                      "division_name", "section_name")} - {""}
+
+
 def exclusion_targets(code_record: dict) -> set[str]:
     """Коды, на которые ссылаются исключения подкласса, — материал для правил:
     официальное «nie obejmuje» это единственное проверяемое основание запрета."""
@@ -219,6 +231,26 @@ class Index:
                 scores[h] += w
         top = sorted(scores.items(), key=lambda kv: -kv[1])[:limit]
         return [(code, round(s, 1)) for code, s in top], matched
+
+    def context_rules(self, code: str) -> list[dict]:
+        """Правила уровней над подклассом: класс → группа → раздел → секция.
+
+        GUS выносит туда общее («Dział ten nie obejmuje naprawy odzieży»
+        над всем производством одежды). К самому подклассу этот текст
+        не относится, но правилам движка он понадобится, поэтому отдаём
+        отдельным списком с указанием уровня.
+        """
+        c = self.codes.get(code)
+        if not c:
+            return []
+        levels = self.meta.get("levels") or {}
+        out = []
+        for level, key in (("класс", "class"), ("группа", "group"),
+                           ("раздел", "division"), ("секция", "section")):
+            rules = levels.get(c.get(key) or "")
+            if rules:
+                out.append({"level": level, "code": c[key], **rules})
+        return out
 
     # ── разбор последствий ────────────────────────────────────────────────
     def analyse(self, code: str) -> dict:

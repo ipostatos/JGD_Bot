@@ -5,6 +5,7 @@
 Отдельный тест проверяет полный набор, если он собран локально.
 """
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -234,8 +235,10 @@ class TestCorpusIntegrity:
         assert meta["schema_version"] == 2 and meta["pkd_version"] == "2025"
         assert meta["builder_version"]
         by_file = {s["filename"]: s["sha256"] for s in meta["sources"]}
-        assert {"StrukturaPKD2025.xls", "KluczePKD_2007_2025.xls",
-                "KlasyfikacjaPKD2025.pdf"} <= set(by_file)
+        # PDF классификации в сборке не участвует: пояснения берутся из XLS,
+        # где текст привязан к своему коду, а не восстанавливается по вёрстке
+        assert {"StrukturaPKD2025.xls", "Wyjasnienia_PKD_2025.xls",
+                "KluczePKD_2007_2025.xls"} == set(by_file)
         assert all(len(h) == 64 for h in by_file.values())
         # метки времени в артефакте быть не должно: одинаковый вход обязан
         # давать одинаковые байты, иначе хеши источников бессмысленны
@@ -246,6 +249,94 @@ class TestCorpusIntegrity:
         c = full_index.codes["43.32.Z"]
         assert c["name"] == "Zakładanie stolarki budowlanej"
         assert any("meble wbudowane" in x for x in c["includes"])
+
+
+GOLDEN = json.loads((FIXTURE / "golden_explanations.json").read_text(encoding="utf-8"))["codes"]
+
+
+class TestExplanationIntegrity:
+    """Пояснения принадлежат своему подклассу.
+
+    Пока они вынимались из PDF, в исключения затекал текст соседних уровней:
+    633 строки из 1401 у 244 кодов, и это видели люди в карточке. Источник
+    заменён на официальный XLS, где код уровня стоит в первой колонке рядом
+    со своим пояснением, а эти тесты сторожат, чтобы загрязнение не вернулось.
+    """
+
+    @pytest.mark.parametrize("code", sorted(GOLDEN))
+    def test_matches_manually_verified_golden(self, full_index, code):
+        """Эталон сверен с ячейкой этого кода в файле GUS (tools/pkd_golden.py)."""
+        rec = full_index.codes[code]
+        exp = GOLDEN[code]
+        assert rec["includes"] == exp["expected_includes"], exp["why"]
+        assert [x["raw"] for x in rec["excludes"]] == exp["expected_excludes"], exp["why"]
+        assert sorted({t for x in rec["excludes"] for t in x["target_codes"]}) \
+            == exp["expected_target_codes"]
+
+    def test_no_foreign_level_headings_inside_explanations(self, full_index):
+        """Ни одна строка пояснения не равна названию ЧУЖОГО уровня.
+
+        Именно так выглядело загрязнение: у 01.19.Z в исключениях стояло
+        «Uprawa roślin wieloletnich» — название соседней группы 01.2. Своё
+        название цитировать законно: 06.10.Z описывает себя словами своей же
+        группы, и это его собственный текст из его же ячейки GUS.
+        """
+        titles = {v[k].strip().lower() for v in full_index.codes.values()
+                  for k in ("name", "class_name", "group_name",
+                            "division_name", "section_name") if v.get(k)}
+        hits = [(c["code"], t) for c in full_index.codes.values()
+                for t in list(c["includes"]) + pkd.exclusion_texts(c)
+                if t.strip().lower() in titles - pkd.own_chain(c)]
+        assert not hits
+
+    def test_no_other_level_rules_inside_explanations(self, full_index):
+        """«Grupa ta nie obejmuje…» относится к группе, а не к подклассу —
+        такие правила лежат отдельно, в group_includes / group_excludes."""
+        marker = re.compile(r"^(Grupa ta|Klasa ta|Dział ten|Sekcja ta|SEKCJA)\b", re.I)
+        hits = [(c["code"], t) for c in full_index.codes.values()
+                for t in list(c["includes"]) + pkd.exclusion_texts(c) if marker.match(t)]
+        assert not hits
+
+    def test_multiline_headings_do_not_sneak_in(self, full_index):
+        """Заголовок приезжает разорванным: «…(działalność» + «mieszana)».
+
+        Проверять одну строку мало — склеиваем соседние пары И тройки, иначе
+        разорванный на три части заголовок проходит детектор насквозь.
+        """
+        titles = {v[k].strip().lower() for v in full_index.codes.values()
+                  for k in ("name", "class_name", "group_name",
+                            "division_name", "section_name") if v.get(k)}
+        hits = []
+        for c in full_index.codes.values():
+            lines = [t.strip() for t in list(c["includes"]) + pkd.exclusion_texts(c)]
+            foreign = titles - pkd.own_chain(c)
+            for n in (2, 3):
+                for i in range(len(lines) - n + 1):
+                    if " ".join(lines[i:i + n]).lower() in foreign:
+                        hits.append((c["code"], lines[i:i + n]))
+        assert not hits
+
+    def test_coverage_does_not_silently_shrink(self, full_index):
+        """Пороги — не украшение: одна неудачная эвристика уже роняла покрытие
+        с 695 кодов до 647, и это прошло бы незамеченным."""
+        codes = full_index.codes.values()
+        assert sum(1 for c in codes if c["includes"]) >= 715
+        assert sum(1 for c in codes if c["excludes"]) >= 612
+        assert sum(len(c["includes"]) for c in codes) >= 4300
+        assert sum(len(x["target_codes"]) for c in codes for x in c["excludes"]) >= 2360
+
+    def test_level_rules_are_kept_but_separate(self, full_index):
+        """Правила уровней не выброшены: они полезны, просто не принадлежат
+        подклассу. У трикотажа 14.10.Z «naprawy i drobnych przeróbek odzieży»
+        стоит на уровне раздела 14, а не в исключениях самого подкласса."""
+        ctx = full_index.context_rules("14.10.Z")
+        assert any(x["level"] == "раздел" and x["code"] == "14"
+                   and any("przeróbek odzieży" in e["raw"] for e in x["excludes"])
+                   for x in ctx)
+        assert all("Dział ten" not in t
+                   for t in pkd.exclusion_texts(full_index.codes["14.10.Z"]))
+        # у каждого правила уровня разобраны ссылки — материал для правил движка
+        assert any(e["target_codes"] for x in ctx for e in x["excludes"])
 
 
 @pytest.mark.skipif(not FULL.is_file(),

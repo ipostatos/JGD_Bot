@@ -1,0 +1,406 @@
+{
+ "note": "Эталон пояснений, сверенный с Wyjasnienia_PKD_2025.xls. Пересобирать только вместе с проверкой tools/pkd_golden.py --check.",
+ "source": "GUS, Wyjasnienia_PKD_2025.xls",
+ "codes": {
+  "01.19.Z": {
+   "why": "раньше содержал заголовок следующей группы",
+   "expected_includes": [
+    "pozostałe uprawy rolne inne niż wieloletnie, na przykład",
+    "uprawę koniczyny, lucerny (alfalfa), esparcety, kukurydzy pastewnej, łubinu pastewnego i pozostałych traw innych niż rośliny wieloletnie, kapusty pastewnej i podobnych roślin pastewnych",
+    "produkcję nasion buraka pastewnego",
+    "produkcję nasion pozostałych roślin pastewnych",
+    "uprawę kwiatów, w tym kwiatów ciętych i pączków kwiatowych",
+    "produkcję nasion kwiatów.",
+    "uprawę kwiatów wieloletnich i innych roślin ozdobnych."
+   ],
+   "expected_excludes": [
+    "produkcji nasion buraka cukrowego, sklasyfikowanej w 01.13.Z",
+    "uprawy roślin przyprawowych i aromatycznych, roślin wykorzystywanych do produkcji leków i wyrobów farmaceutycznych, innych niż rośliny wieloletnie, sklasyfikowanej w 01.28.Z."
+   ],
+   "expected_target_codes": [
+    "01.13.Z",
+    "01.28.Z"
+   ],
+   "review_status": "verified_against_own_source_cell"
+  },
+  "01.50.Z": {
+   "why": "раньше содержал обрывок колонтитула «SEKCJA A»",
+   "expected_includes": [
+    "gospodarstwa rolne prowadzące jednocześnie produkcję roślinną i zwierzęcą, bez specjalizacji produkcji w kierunku upraw rolnych czy też chowu i hodowli zwierząt.",
+    "Wielkość produkcji rolnej nie jest czynnikiem decydującym. Jeżeli jednak stopień specjalizacji produkcji wynosi 66 % i powyżej w jednej dziedzinie, to działalność podmiotu gospodarczego nie powinna być klasyfikowana w niniejszej podklasie, ale do upraw rolnych lub chowu i hodowli zwierząt."
+   ],
+   "expected_excludes": [
+    "działalności podmiotów gospodarczych zajmujących się głównie uprawami rolnymi, sklasyfikowanej w odpowiednich podklasach grup 01.1 i 01.2",
+    "działalności podmiotów gospodarczych zajmujących się głównie chowem i hodowlą zwierząt, sklasyfikowanej w odpowiednich podklasach grupy 01.4."
+   ],
+   "expected_target_codes": [],
+   "review_status": "verified_against_own_source_cell"
+  },
+  "43.32.Z": {
+   "why": "позиционная эвристика уничтожала его собственные исключения",
+   "expected_includes": [
+    "instalowanie drzwi (z wyłączeniem drzwi automatycznych i obrotowych), okien, futryn drzwiowych i okiennych, schodów, z drewna i innych materiałów",
+    "wyposażanie pomieszczeń w meble wbudowane: meble kuchenne, kredensy, szafy wnękowe, meble sklepowe i inne elementy wbudowywane",
+    "wykańczanie wnętrz w zakresie stolarki budowlanej (na przykład sufitów i ruchomych ścianek działowych)",
+    "roboty instalacyjne w zakresie ogrodów zimowych, werand i balkonów, z drewna lub innych materiałów",
+    "montaż stoisk i straganów (na przykład na targach, wystawach, kiermaszach)."
+   ],
+   "expected_excludes": [
+    "instalowania drzwi automatycznych i obrotowych, sklasyfikowanego 43.24.Z",
+    "wynajmu i dzierżawy stoisk i straganów (na przykład na potrzeby wystaw lub targów), sklasyfikowanych w 77.39.Z."
+   ],
+   "expected_target_codes": [
+    "43.24.Z",
+    "77.39.Z"
+   ],
+   "review_status": "verified_against_own_source_cell"
+  },
+  "14.10.Z": {
+   "why": "правила уровня раздела рядом с собственными исключениями",
+   "expected_includes": [
+    "produkcję wyrobów pończoszniczych, w tym skarpet, rajstop i trykotów",
+    "produkcję odzieży dzianej (na przykład pulowerów, swetrów rozpinanych, bluz, koszul, T-shirtów, bluzek, kamizelek, bielizny osobistej i nocnej, odzieży niemowlęcej)",
+    "produkcję odzieży dzianej sportowej i strojów kąpielowych",
+    "produkcję medycznych wyrobów pończoszniczych",
+    "produkcję obuwia dzianego bez nakładanych podeszew."
+   ],
+   "expected_excludes": [
+    "produkcji dzianin metrażowych, sklasyfikowanej w 13.91.Z",
+    "produkcji dzianych biustonoszy i gorsetów, sklasyfikowanej w 14.22.Z."
+   ],
+   "expected_target_codes": [
+    "13.91.Z",
+    "14.22.Z"
+   ],
+   "review_status": "verified_against_own_source_cell"
+  },
+  "31.00.Z": {
+   "why": "раздел из одного класса: код стоит в одной строке с разделом",
+   "expected_includes": [
+    "produkcję mebli różnego rodzaju i przeznaczenia, z dowolnego materiału oraz produkcję części mebli, z wyłączeniem arkuszy i płyt (nawet ciętych do kształtu) ze szkła (w tym luster), marmuru lub innego kamienia, betonu lub podobnych materiałów do produkcji mebli.",
+    "produkcję krzeseł i siedzeń do pomieszczeń biurowych, produkcyjnych, hoteli, restauracji oraz pomieszczeń użyteczności publicznej",
+    "produkcję krzeseł i siedzeń teatralnych, kinowych i tym podobnych",
+    "produkcję specjalnych mebli sklepowych: lad, gablot wystawowych, półek i tym podobnych",
+    "produkcję mebli biurowych",
+    "produkcję ławek laboratoryjnych, stołków i pozostałych siedzeń wykorzystywanych w laboratoriach, pozostałych mebli laboratoryjnych (na przykład szafek, stołów)",
+    "produkcję mebli wykorzystywanych w kościołach, szkołach lub restauracjach",
+    "produkcję mebli kuchennych",
+    "produkcję sof, rozkładanych kanap, kanap do siedzenia i zestawów wypoczynkowych",
+    "produkcję krzeseł i mebli ogrodowych do siedzenia",
+    "produkcję mebli do sypialni, salonów, ogrodów i tym podobnych",
+    "produkcję szafek pod maszyny do szycia, telewizory i tym podobne",
+    "produkcję materaców i stelaży pod materace",
+    "produkcję wózków kateringowych",
+    "produkcję komponentów meblowych przeznaczonych do instalacji wbudowanych mebli sklepowych",
+    "wykańczanie mebli (na przykład malowanie (w tym natryskowe), politurowanie i tapicerowanie)",
+    "produkcję szaf garderobianych."
+   ],
+   "expected_excludes": [
+    "produkcji poduszek, puf, jaśków, kołder i pierzyn, sklasyfikowanej w 13.92.Z",
+    "produkcji listew drewnianych, nieidentyfikowanych jako części mebli, sklasyfikowanej w odpowiednich podklasach grupy 16.1",
+    "produkcji wyrobów stolarskich i ciesielskich dla budownictwa, sklasyfikowanej w 16.23.Z",
+    "produkcji gumowych materaców nadmuchiwanych, sklasyfikowanej w 22.12.Z",
+    "produkcji gumowych materaców do łóżek wodnych, sklasyfikowanej w 22.12.Z",
+    "produkcji arkuszy i płyt (nawet ciętych do kształtu) ceramicznych, betonowych i kamiennych, sklasyfikowanej w 23.42.Z, 23.66.Z, 23.70.A, 23.70.B",
+    "produkcji opraw oświetleniowych lub lamp, sklasyfikowanej w 27.40.Z",
+    "produkcji czarnych tablic do pisania, sklasyfikowanej w 28.23.Z",
+    "produkcji siedzeń do pojazdów samochodowych, w tym fotelików dla niemowląt i dzieci, sklasyfikowanej w 29.32.Z",
+    "produkcji siedzeń do wagonów taboru szynowego, sklasyfikowanej w 30.20.Z",
+    "produkcji siedzeń do statków powietrznych, sklasyfikowanej w 30.31.Z, 30.32.Z",
+    "produkcji mebli lekarskich, chirurgicznych, dentystycznych lub weterynaryjnych, sklasyfikowanej w 32.50.A, 32.50.B",
+    "zakładania stolarki budowlanej: instalowania szaf wnękowych, mebli wbudowanych z modułów meblowych, wbudowanych mebli laboratoryjnych, sklasyfikowanego w 43.32.Z",
+    "instalowania wbudowanych mebli sklepowych z komponentów meblowych, sklasyfikowanego w 43.32.Z",
+    "tapicerowania, renowacji i naprawy mebli, sklasyfikowanych w 95.24.Z."
+   ],
+   "expected_target_codes": [
+    "13.92.Z",
+    "16.23.Z",
+    "22.12.Z",
+    "23.42.Z",
+    "23.66.Z",
+    "23.70.A",
+    "23.70.B",
+    "27.40.Z",
+    "28.23.Z",
+    "29.32.Z",
+    "30.20.Z",
+    "30.31.Z",
+    "30.32.Z",
+    "32.50.A",
+    "32.50.B",
+    "43.32.Z",
+    "95.24.Z"
+   ],
+   "review_status": "verified_against_own_source_cell"
+  },
+  "75.00.Z": {
+   "why": "то же самое, ветеринария",
+   "expected_includes": [
+    "opiekę zdrowotną dla zwierząt gospodarskich i domowych",
+    "działalność asystentów weterynaryjnych lub innego pomocniczego personelu weterynaryjnego",
+    "działalność kliniczno-patologiczną i inną działalność diagnostyczną dotyczącą zwierząt",
+    "działalność pogotowia dla zwierząt",
+    "działalność w zakresie chiropraktyki zwierzęcej",
+    "działalność w zakresie dietetyki zwierzęcej.",
+    "Działalności te mogą być prowadzone w klinikach weterynaryjnych, a także w formie wizyt w gospodarstwach, hodowlach lub domach, w gabinetach konsultacyjnych i zabiegowych lub w innych miejscach."
+   ],
+   "expected_excludes": [
+    "działalności schronisk dla zwierząt gospodarskich, bez zapewnienia opieki weterynaryjnej, sklasyfikowanej w 01.62.Z",
+    "strzyżenia owiec, sklasyfikowanego w 01.62.Z",
+    "opieki nad stadem, wypasania cudzego inwentarza, trzebienia kogutów, sklasyfikowanych w 01.62.Z",
+    "sztucznego unasienniania, sklasyfikowanego w 01.62.Z",
+    "wykonywania badań i analiz związanych z jakością żywności, to jest badań zwierząt rzeźnych przed ubojem, sklasyfikowanego w 71.20.A",
+    "badań naukowych w zakresie genetyki zwierząt, sklasyfikowanych w 72.10.Z",
+    "działalności schronisk dla zwierząt domowych, bez zapewnienia opieki weterynaryjnej, sklasyfikowanej w 96.99.Z."
+   ],
+   "expected_target_codes": [
+    "01.62.Z",
+    "71.20.A",
+    "72.10.Z",
+    "96.99.Z"
+   ],
+   "review_status": "verified_against_own_source_cell"
+  },
+  "62.10.B": {
+   "why": "несколько ссылок на другие подклассы",
+   "expected_includes": [
+    "pozostałą działalność w zakresie programowania, taką jak",
+    "projektowanie struktury i zawartości, pisanie, modyfikowanie (w tym aktualizacje i poprawki), testowanie oraz utrzymanie oprogramowania i aplikacji, obejmujące:",
+    "• oprogramowanie systemowe",
+    "• aplikacje biznesowe i finansowe",
+    "• aplikacje uczenia maszynowego",
+    "• aplikacje sztucznej inteligencji / wizji maszynowej",
+    "• aplikacje cyberbezpieczeństwa",
+    "• aplikacje wykorzystujące rozproszone bazy danych",
+    "• bazy danych i strony internetowe",
+    "dostosowywanie oprogramowania, czyli modyfikowanie i konfigurowanie istniejącej aplikacji tak, aby była funkcjonalna w środowisku systemów informatycznych klientów",
+    "tworzenie aplikacji."
+   ],
+   "expected_excludes": [
+    "działalności wydawniczej w zakresie oprogramowania między innymi systemów operacyjnych, oprogramowania i aplikacji z zakresu technologii biznesowych i finansowych oraz gier komputerowych, sklasyfikowanej w odpowiednich podklasach grupy 58.2",
+    "opracowywania oprogramowania związanego z wydawaniem, sklasyfikowanego w odpowiednich podklasach grupy 58.2",
+    "prowadzenia witryn internetowych z grami online / grami komputerowymi, sklasyfikowanego w 60.39.Z",
+    "planowania i projektowania systemów komputerowych integrujących sprzęt komputerowy, oprogramowanie i technologii komunikacyjnych, nawet jeśli dostarczanie oprogramowania może być ich integralną częścią, sklasyfikowanych w 62.20.B",
+    "przetwarzania danych (na przykład przy użyciu technologii blockchain / technologii rozproszonego rejestru (DLT)), sklasyfikowanego w 63.10.D",
+    "prowadzenia witryn internetowych hazardowych, sklasyfikowanego w 92.00.Z",
+    "naprawy i konserwacji komputerów i sprzętu (tele)komunikacyjnego, sklasyfikowanych w 95.10.Z."
+   ],
+   "expected_target_codes": [
+    "60.39.Z",
+    "62.20.B",
+    "63.10.D",
+    "92.00.Z",
+    "95.10.Z"
+   ],
+   "review_status": "verified_against_own_source_cell"
+  },
+  "96.99.Z": {
+   "why": "ссылки словами, без кода",
+   "expected_includes": [
+    "pozostałą działalność usługową świadczoną głównie na rzecz osób fizycznych",
+    "działalność astrologiczną i spirytystyczną",
+    "działalność biur towarzyskich, biur matrymonialnych, serwisów randkowych, wykonywana stacjonarnie lub w sieci",
+    "działalność agencji hostess",
+    "działalność związaną ze świadczeniem lub organizowaniem usług seksualnych oraz działalność agencji towarzyskich",
+    "działalność usługową obejmującą opiekę, nad zwierzętami domowymi (na przykład w zakresie wyżywienia, pielęgnowania, strzyżenia i tresury)",
+    "strzyżenie i pielęgnacja zwierząt domowych",
+    "działalność schronisk dla zwierząt",
+    "działalność związaną z badaniem genealogii",
+    "działalność studiów piercingu",
+    "wykonywanie tatuaży",
+    "działalność usługową czyścibutów, portierów, bagażowych, parkingowych i tym podobną działalność",
+    "udostępnianie automatów usługowych uruchamianych za opłatą (na przykład kabin fotograficznych, wag i szafek)",
+    "udostępnianie fotokiosków do drukowania zdjęć (na przykład z telefonu, karty pamięci, dysków przenośnych, flash)",
+    "działalność behawiorystów koni",
+    "działalność związaną z planowaniem ślubów."
+   ],
+   "expected_excludes": [
+    "działalności weterynaryjnej, sklasyfikowanej w 75.00.Z",
+    "działalności związanej z niespecjalistycznym sprzątaniem domów, sklasyfikowanej w 81.21.Z",
+    "kursów jogi lub pilatesu, sklasyfikowanego w 85.51.Z",
+    "działalności w zakresie medycyny alternatywnej (na przykład homeopatii, chiropraktyki, osteopatii, terapii kryształami, irydologii, kinezjologii i radioniki), sklasyfikowanych w 86.96.Z",
+    "działalności uzdrowicieli i działalności w zakresie hipnoterapii, sklasyfikowanych w 86.96.Z",
+    "działalności praktyków w zakresie shiatsu, masażu tajskiego, watsu, tui na qigong, sklasyfikowanej w 86.99.D",
+    "dziennej opieki oraz pomocy dla osób starszych lub dorosłych osób niepełnosprawnych, sklasyfikowanej w 88.10.Z",
+    "dziennej opieki nad dziećmi, świadczonej w domach prywatnych lub ośrodkach opieki dziennej, sklasyfikowanej w 88.91.Z",
+    "opieki pozaszkolnej, sklasyfikowanej w 88.91.Z.",
+    "udostępniania automatów do gier za opłatą, sklasyfikowanego w 92.00.Z",
+    "prania samoobsługowego w urządzeniach za opłatą, sklasyfikowanego w 96.10.Z."
+   ],
+   "expected_target_codes": [
+    "75.00.Z",
+    "81.21.Z",
+    "85.51.Z",
+    "86.96.Z",
+    "86.99.D",
+    "88.10.Z",
+    "88.91.Z",
+    "92.00.Z",
+    "96.10.Z"
+   ],
+   "review_status": "verified_against_own_source_cell"
+  },
+  "47.91.Z": {
+   "why": "длинный список включений с вводной фразой",
+   "expected_includes": [
+    "pośrednictwo w zakresie niewyspecjalizowanej sprzedaży detalicznej, polegające na kojarzeniu kupujących i sprzedających w celu zamawiania i/lub dostarczania towarów fizycznych za opłatą lub prowizją, bez dostarczania i przejmowania własności towarów będących przedmiotem pośrednictwa.",
+    "Pośrednictwo może być wykonywane drogą elektroniczną (przez Internet, platformy cyfrowe, e-mail) lub w inny sposób (poprzez kontakt bezpośredni, obwoźnie, telefonicznie, drogą pocztową i tym podobne). Opłata lub prowizja może pochodzić od kupującego lub sprzedającego. Przychody z tytułu pośrednictwa mogą obejmować inne źródła przychodów (przychody z reklam).",
+    "działalność w zakresie wynajmu powierzchni, w tym z personelem, dla sprzedaży detalicznej towarów używanych."
+   ],
+   "expected_excludes": [
+    "pośrednictwa w wyspecjalizowanej sprzedaży detalicznej, sklasyfikowanego w 47.92.Z."
+   ],
+   "expected_target_codes": [
+    "47.92.Z"
+   ],
+   "review_status": "verified_against_own_source_cell"
+  },
+  "52.10.B": {
+   "why": "ссылка на класс, а не на подкласс",
+   "expected_includes": [
+    "działalność polegającą na magazynowaniu i przechowywaniu wszystkich pozostałych rodzajów towarów:",
+    "• magazynach towarowych ogólnego przeznaczenia",
+    "• chłodniach składowych",
+    "• zbiornikach magazynowych i tym podobnych",
+    "magazynowanie mebli niebędące częścią usługi przeprowadzkowej",
+    "magazynowanie towarów w strefach wolnocłowych",
+    "zamrażanie szokowe towarów związane z przechowywaniem i magazynowaniem",
+    "działalność związaną z przechowywaniem archiwów fizycznych i akt papierowych."
+   ],
+   "expected_excludes": [
+    "magazynowania energii elektrycznej, sklasyfikowanego w 35.16.Z",
+    "magazynowania paliw gazowych do celów energetycznych w systemie sieciowym, sklasyfikowanego w 35.24.Z",
+    "przechowywania mebli w ramach usługi związanej z przeprowadzkami, sklasyfikowanego w 49.42.Z",
+    "działalności parkingów dla pojazdów silnikowych, sklasyfikowanej w 52.21.B",
+    "zimowego przechowywania przyczep kempingowych, statków i łodzi oraz statków powietrznych, sklasyfikowanego w 52.21.B, 52.22.A, 52.22.B, 52.23.Z",
+    "wynajmu i zarządzania magazynami samoobsługowymi, sklasyfikowanych w 68.20.Z",
+    "wynajmu wolnej przestrzeni, sklasyfikowanego w 68.20.Z."
+   ],
+   "expected_target_codes": [
+    "35.16.Z",
+    "35.24.Z",
+    "49.42.Z",
+    "52.21.B",
+    "52.22.A",
+    "52.22.B",
+    "52.23.Z",
+    "68.20.Z"
+   ],
+   "review_status": "verified_against_own_source_cell"
+  },
+  "10.71.Z": {
+   "why": "первый подкласс своей группы",
+   "expected_includes": [
+    "chleba i bułek",
+    "ciast, ciastek, placków, tart, naleśników, gofrów i tym podobnych",
+    "pieczywa wstępnie podpieczonego."
+   ],
+   "expected_excludes": [
+    "produkcji suchych wyrobów piekarniczych i ciastkarskich, sklasyfikowanej w 10.72.Z",
+    "produkcji makaronów, klusek, kuskusu i podobnych wyrobów mącznych, sklasyfikowanej w 10.73.Z",
+    "sprzedaży detalicznej chleba i bułek wypiekanych na miejscu z pieczywa wstępnie podpieczonego, sklasyfikowanej w 47.24.Z."
+   ],
+   "expected_target_codes": [
+    "10.72.Z",
+    "10.73.Z",
+    "47.24.Z"
+   ],
+   "review_status": "verified_against_own_source_cell"
+  },
+  "95.31.A": {
+   "why": "последний подкласс своего класса",
+   "expected_includes": [
+    "naprawy mechaniczne i serwisowe pojazdów silnikowych, z wyłączeniem motocykli:",
+    "• naprawy mechaniczne",
+    "• naprawy elektryczne",
+    "• naprawy elektronicznych układów wtryskowych",
+    "• obsługę serwisową",
+    "• naprawy części pojazdów silnikowych",
+    "• naprawy i wymiany szyb i okien pojazdów silnikowych",
+    "• naprawy siedzeń pojazdów silnikowych",
+    "• naprawy i diagnostyki układów mechatronicznych",
+    "naprawy opon i dętek, zakładanie lub wymiana",
+    "wykonywanie zabiegów antykorozyjnych części mechanicznych",
+    "instalowanie części i akcesoriów niebędących częścią procesu produkcji",
+    "naprawę i konserwację amfibii przeznaczonych do użytku cywilnego",
+    "naprawę i konserwację części mieszkalnych przyczep kempingowych i kamperów."
+   ],
+   "expected_excludes": [
+    "bieżnikowania i regeneracji opon, sklasyfikowanych w 22.11.Z",
+    "wyposażania przyczep kempingowych i kamperów, sklasyfikowanego w 29.20.Z",
+    "naprawy wózków widłowych i ciągników rolniczych, sklasyfikowanej w 33.12.Z",
+    "przeprowadzania okresowych badań technicznych pojazdów silnikowych, sklasyfikowanego w 71.20.C",
+    "naprawy i konserwacji motocykli, sklasyfikowanych w 95.32.Z."
+   ],
+   "expected_target_codes": [
+    "22.11.Z",
+    "29.20.Z",
+    "33.12.Z",
+    "71.20.C",
+    "95.32.Z"
+   ],
+   "review_status": "verified_against_own_source_cell"
+  },
+  "88.91.Z": {
+   "why": "короткое пояснение",
+   "expected_includes": [
+    "dzienną opiekę nad dziećmi, świadczoną w domach prywatnych lub ośrodkach opieki dziennej",
+    "opiekę pozaszkolną",
+    "opiekę dzienną nad dziećmi niepełnosprawnymi."
+   ],
+   "expected_excludes": [
+    "wychowania przedszkolnego, sklasyfikowanego w 85.10.Z."
+   ],
+   "expected_target_codes": [
+    "85.10.Z"
+   ],
+   "review_status": "verified_against_own_source_cell"
+  },
+  "25.53.Z": {
+   "why": "термин совпадает с названием соседнего уровня",
+   "expected_includes": [
+    "wiercenie, toczenie, frezowanie, erodowanie, struganie, docieranie, przeciąganie, wyrównywanie, piłowanie, szlifowanie, ostrzenie, usuwanie zadziorów, piaskowanie, bębnowanie, polerowanie, spawanie i tym podobne elementów metalowych",
+    "cięcie i grawerowanie lub pisanie na metalach za pomocą wiązek laserowych."
+   ],
+   "expected_excludes": [
+    "kowalstwa związanego z podkuwaniem zwierząt, sklasyfikowanego w 01.62.Z."
+   ],
+   "expected_target_codes": [
+    "01.62.Z"
+   ],
+   "review_status": "verified_against_own_source_cell"
+  },
+  "86.95.Z": {
+   "why": "несколько списков исключений подряд",
+   "expected_includes": [
+    "indywidualną i grupową działalność fizjoterapeutyczną, prowadzoną w celu zapobiegania lub łagodzenia procesów chorobotwórczych lub likwidacji skutków, a także przywrócenia funkcji ciała lub zmniejszenia bólu u pacjenta, w takich zakresach jak: fizykoterapia, kinezyterapia, masaż leczniczy",
+    "prowadzenie działalności fizjoprofilaktycznej."
+   ],
+   "expected_excludes": [
+    "działalności w zakresie osteopatii, chiropraktyki, sklasyfikowanej w 86.96.Z",
+    "działalności praktyków w zakresie shiatsu, masażu tajskiego, watsu, qigong tui na, sklasyfikowanej w 86.99.D",
+    "działalności salonów spa, sklasyfikowanej w 96.23.Z."
+   ],
+   "expected_target_codes": [
+    "86.96.Z",
+    "86.99.D",
+    "96.23.Z"
+   ],
+   "review_status": "verified_against_own_source_cell"
+  },
+  "56.21.Z": {
+   "why": "название подкласса длинное и переносится",
+   "expected_includes": [
+    "przygotowywanie i dostarczanie żywności i pozostałego zaopatrzenia, świadczone w oparciu o zawartą z klientem umowę, na określone wydarzenia do miejsc przez niego wyznaczonych na specjalne okazje."
+   ],
+   "expected_excludes": [
+    "produkcji gotowej żywności łatwo psującej się, sklasyfikowanej w 10.89.D",
+    "sprzedaży detalicznej gotowej żywności łatwo psującej się, sklasyfikowanej w odpowiednich podklasach grupy 47.2."
+   ],
+   "expected_target_codes": [
+    "10.89.D"
+   ],
+   "review_status": "verified_against_own_source_cell"
+  }
+ }
+}

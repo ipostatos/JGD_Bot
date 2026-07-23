@@ -1,12 +1,15 @@
-"""Официальный PKD 2025 -> webapp/data/pkd.json (+ ключи PKD 2007→2025).
+"""Официальный PKD 2025 -> data/pkd/pkd.json.gz (+ ключи PKD 2007→2025).
 
 Источники (качаются в sources/pkd/, в git не идут):
-  KluczePKD_2007_2025.xls  — таблица GUS: коды и названия обеих классификаций,
-                             уровень группировки и текст соответствия
-  KlasyfikacjaPKD2025.pdf  — пояснения «Podklasa ta obejmuje / nie obejmuje»
+  StrukturaPKD2025.xls     — иерархия: секция, раздел, группа, класс, подкласс
+  Wyjasnienia_PKD_2025.xls — пояснения «obejmuje / nie obejmuje» по уровням
+  KluczePKD_2007_2025.xls  — ключи перехода PKD 2007 -> PKD 2025
 
-Названия и иерархию берём из XLS: в PDF таблица структуры свёрстана колонками,
-и текстовый слой рвёт названия на куски. Из PDF берём только пояснения.
+Всё берём из XLS. PDF классификации в сборке не участвует намеренно: в плоском
+тексте заголовок следующей группы неотличим от строки исключения, и пояснения
+затекали в чужие подклассы — 633 строки из 1401 у 244 кодов. В XLS код уровня
+стоит в первой колонке, а его пояснение — в следующей строке, поэтому привязка
+однозначна по построению.
 
 PKD 2025 введена rozporządzeniem RM от 18.12.2024 (Dz. U. poz. 1936), действует
 с 01.01.2025. Коды PKD 2007 остаются в силе до 31.12.2026; после этого GUS
@@ -21,7 +24,6 @@ import re
 import sys
 from pathlib import Path
 
-import fitz
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -33,10 +35,6 @@ SCHEMA_VERSION = 2
 BUILDER_VERSION = "2.0.0"
 
 SUBCLASS = re.compile(r"^\d{2}\.\d{2}\.[A-Z]$")
-CODE_LINE = re.compile(r"^(\d{2}\.\d{2}\.[A-Z])\s*$")
-INCL = re.compile(r"^Podklasa ta obejmuje.*$", re.I)
-EXCL = re.compile(r"^Podklasa ta nie obejmuje.*$", re.I)
-NOISE = re.compile(r"^(Wyjaśnienia do PKD 2025|Struktura klasyfikacji|SEKCJA [A-U]|\d+)\s*$")
 
 
 SECTION_ROW = re.compile(r"^SEKCJA\s+([A-U])$", re.I)
@@ -157,50 +155,69 @@ def keys_from_xls(path: Path):
     return keys
 
 
-def from_pdf(path: Path, valid: set):
-    """Пояснения по подклассам: что входит и что явно не входит."""
-    doc = fitz.open(path)
-    text = "\n".join(doc[i].get_text() for i in range(doc.page_count)
-                     if "Wyjaśnienia do PKD 2025" in doc[i].get_text())
+LEVEL_ROW = re.compile(r"^(SEKCJA\s+([A-U])|DZIAŁ\s+(\d{2})|(\d{2}\.\d)|(\d{2}\.\d{2})|"
+                       r"(\d{2}\.\d{2}\.[A-Z]))$", re.I)
+# «Podklasa ta obejmuje… / …obejmuje również… / …nie obejmuje…» и то же самое
+# для группы, класса, раздела и секции. Уровень маркера = уровень текста.
+MARKER = re.compile(r"^(Podklasa|Klasa|Grupa|Dział|Sekcja)\s+(?:ta|ten)\s+"
+                    r"(nie\s+obejmuje|obejmuje\s+również|obejmuje|zawiera)", re.I)
+
+
+def from_explanations(path: Path):
+    """Пояснения из официального XLS: код уровня -> что входит и что не входит.
+
+    Раньше пояснения вынимались из PDF, и это было источником целого класса
+    ошибок: в плоском тексте заголовок следующей группы неотличим от строки
+    исключения, и 633 строки из 1401 (244 подкласса) показывали людям чужой
+    текст. Здесь привязка однозначна по построению: в первой колонке стоит код
+    уровня, в следующей строке — его собственное пояснение. Никакой геометрии,
+    пустых строк и догадок.
+    """
+    df = pd.read_excel(path, sheet_name=0, header=None, dtype=str)
+    rows = [(str(a).strip() if a and str(a) != "nan" else "",
+             str(b) if b and str(b) != "nan" else "")
+            for a, b in df.itertuples(index=False)]
+
     out: dict[str, dict] = {}
-    cur, mode = None, None
-    for ln in (l.strip() for l in text.split("\n")):
-        m = CODE_LINE.match(ln)
-        if m and m.group(1) in valid:
-            cur, mode = m.group(1), None
-            out.setdefault(cur, {"includes": [], "excludes": []})
+    for i, (code, _) in enumerate(rows):
+        m = LEVEL_ROW.match(code)
+        if not m:
             continue
-        if cur is None or not ln or NOISE.match(ln):
+        key = (m.group(2) or m.group(3) or m.group(4) or m.group(5) or m.group(6)).upper()
+        nxt = rows[i + 1] if i + 1 < len(rows) else ("", "")
+        if nxt[0]:                      # следом сразу другой код — пояснения нет
             continue
-        if INCL.match(ln):
-            mode = "includes"
-            continue
-        if EXCL.match(ln):
-            mode = "excludes"
-            continue
-        if mode:
-            item = ln.lstrip("-–— ").strip()
-            if item:
-                out[cur][mode].append(item)
+        out[key] = split_explanation(nxt[1])
     return out
 
 
-def merge_wrapped(items):
-    """Строки PDF рвутся посреди предложения — склеиваем продолжения.
+def split_explanation(text: str) -> dict:
+    """Текст пояснения -> {includes, excludes}.
 
-    Обрывок «…taką jak:» — это начало перечисления, а не отдельный пункт:
-    без склейки первым описанием подкласса оказывается голое «jak:».
+    Пункты идут маркированным списком, вводная фраза маркера («…na przykład:»)
+    остаётся отдельной строкой: она несёт смысл и в старом артефакте тоже была.
     """
-    merged = []
-    for it in items:
-        prev = merged[-1] if merged else ""
-        cont = prev and (prev.endswith(":") or
-                         (not prev.endswith((".", ";")) and not it[:1].isupper()))
-        if cont:
-            merged[-1] += " " + it
-        else:
-            merged.append(it)
-    return [m.strip(" ;.") for m in merged if len(m.strip()) > 12]
+    res = {"includes": [], "excludes": []}
+    mode = None
+    for line in (l.strip() for l in text.split("\n")):
+        if not line:
+            continue
+        m = MARKER.match(line)
+        if m:
+            mode = "excludes" if m.group(2).lower().startswith("nie") else "includes"
+            rest = line[m.end():].strip(" :,")
+            # «obejmuje pozostałe uprawy rolne…, na przykład» — это содержание,
+            # а «obejmuje:» — только заголовок списка
+            if len(rest) > 12:
+                res[mode].append(rest)
+            continue
+        if mode:
+            item = line.lstrip("-–— ").strip().rstrip(",")
+            if item:
+                res[mode].append(item)
+    return res
+
+
 
 
 GUS = "https://klasyfikacje.stat.gov.pl/static/pkd_25/pdf/"
@@ -236,8 +253,8 @@ def download():
     """Скачать исходники GUS — нужно на чистой машине (VPS, CI)."""
     import urllib.request
     SRC.mkdir(parents=True, exist_ok=True)
-    for name in ("KlasyfikacjaPKD2025.pdf", "KluczePKD_2007_2025.xls",
-                 "StrukturaPKD2025.xls"):
+    for name in ("StrukturaPKD2025.xls", "Wyjasnienia_PKD_2025.xls",
+                 "KluczePKD_2007_2025.xls"):
         dst = SRC / name
         if dst.exists():
             print(f"  {name}: уже есть")
@@ -249,7 +266,8 @@ def download():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pdf", default=str(SRC / "KlasyfikacjaPKD2025.pdf"))
+    ap.add_argument("--explanations",
+                    default=str(SRC / "Wyjasnienia_PKD_2025.xls"))
     ap.add_argument("--keys", default=str(SRC / "KluczePKD_2007_2025.xls"))
     ap.add_argument("--structure", default=str(SRC / "StrukturaPKD2025.xls"))
     ap.add_argument("--download", action="store_true",
@@ -265,9 +283,10 @@ def main():
     print(f"  подклассов PKD 2025: {len(hier)}, секций: "
           f"{len({h['section'] for h in hier.values()})}, старых кодов в ключах: {len(keys)}")
 
-    print("PDF: пояснения…")
-    expl = from_pdf(Path(args.pdf), set(hier))
-    print(f"  с пояснениями: {sum(1 for v in expl.values() if v['includes'])}")
+    print("XLS: пояснения…")
+    expl = from_explanations(Path(args.explanations))
+    subs = {k: v for k, v in expl.items() if SUBCLASS.match(k)}
+    print(f"  уровней с пояснениями: {len(expl)}, из них подклассов: {len(subs)}")
 
     validity = bir_validity()
     if validity:
@@ -278,13 +297,13 @@ def main():
     for code in sorted(hier):
         e = expl.get(code, {})
         v = validity.get(code) or {}
-        excludes = link_exclusions(merge_wrapped(e.get("excludes", [])), valid)
+        excludes = link_exclusions(e.get("excludes", []), valid)
         unresolved += sum(1 for x in excludes if not x["target_codes"])
         records.append({
             "valid_from": v.get("from"),
             "valid_to": v.get("to"),
             **hier[code],
-            "includes": merge_wrapped(e.get("includes", [])),
+            "includes": e.get("includes", []),
             "excludes": excludes,
         })
 
@@ -292,8 +311,20 @@ def main():
     print(f"  ссылок из исключений разобрано: {linked}, "
           f"без распознанного кода: {unresolved} (текст сохранён)")
 
+    # Пояснения уровней (секция, раздел, группа, класс) храним один раз рядом
+    # с кодами, а не копией в каждом подклассе: у GUS там лежит общее правило
+    # («Dział ten nie obejmuje naprawy odzieży»), и оно относится к уровню,
+    # а не к конкретному подклассу. Выдавать его за текст подкласса нельзя,
+    # терять — тоже: правила движка будут на него опираться.
+    levels = {code: {"includes": v["includes"],
+                     "excludes": link_exclusions(v["excludes"], valid)}
+              for code, v in expl.items()
+              if not SUBCLASS.match(code) and (v["includes"] or v["excludes"])}
+    print(f"  пояснений уровней (секция/раздел/группа/класс): {len(levels)}")
+
     sources = [{"filename": p.name, "sha256": sha256(p)}
-               for p in (Path(args.structure), Path(args.keys), Path(args.pdf))
+               for p in (Path(args.structure), Path(args.explanations),
+                         Path(args.keys))
                if p.is_file()]
     meta = {
         "pkd_version": "2025",
@@ -311,7 +342,7 @@ def main():
     # Метки времени в артефакте нет намеренно: сборка из одних и тех же файлов
     # обязана давать байт в байт то же самое, иначе теряется смысл хеша
     OUT.mkdir(parents=True, exist_ok=True)
-    write_artifact(OUT / "pkd.json", {**meta, "codes": records})
+    write_artifact(OUT / "pkd.json", {**meta, "levels": levels, "codes": records})
     write_artifact(OUT / "pkd_keys.json",
                    {"note": "PKD 2007 -> PKD 2025, официальные ключи GUS",
                     "schema_version": SCHEMA_VERSION, "map": keys})
