@@ -533,6 +533,7 @@ async def api_ask(req: Request):
     user = verify_init_data(body.get("initData", ""))
     if user is None:
         raise HTTPException(401, "bad initData")
+    _limit_or_429("ai", user["id"])
     res = await ai.ask(user["id"], body.get("question", ""),
                        body.get("profile") or None)
     if res.get("reason") == "no_credits":

@@ -98,7 +98,7 @@ STOP = {"как", "что", "это", "для", "или", "нужно", "мож�
         "моя", "буду", "сколько", "когда", "какой", "какая", "почему"}
 
 
-def retrieve(question: str, k: int = CONTEXT_ARTICLES):
+def retrieve(question: str, k: int = CONTEXT_ARTICLES, with_scores: bool = False):
     """Топ-k статей: TF с потолком × IDF (редкие слова весят больше) + заголовок."""
     import math
     raw = [w for w in re.findall(r"[a-zа-яё]{3,}", question.lower())
@@ -106,7 +106,7 @@ def retrieve(question: str, k: int = CONTEXT_ARTICLES):
     # грубый стемминг: длинные слова матчим по префиксу (банка/банком → банк)
     words = list({w if len(w) <= 6 else w[:6] for w in raw})
     if not words:
-        return []
+        return ([], 0.0) if with_scores else []
     idx = _load_index()
     n_docs = len(idx)
     idf = {}
@@ -121,7 +121,64 @@ def retrieve(question: str, k: int = CONTEXT_ARTICLES):
         if score > 0:
             scored.append((score, art))
     scored.sort(key=lambda x: -x[0])
-    return [a for _, a in scored[:k]]
+    top = [a for _, a in scored[:k]]
+    return (top, scored[0][0] if scored else 0.0) if with_scores else top
+
+
+# ── ворота: что вообще пускаем к модели ──────────────────────────────────────
+# Отказ должен быть бесплатным. Всё, что ниже, проверяется ДО обращения к API:
+# запрос не по теме не должен стоить ни одного токена.
+
+# Признаки нашей темы. Достаточно одного, чтобы вопрос считался профильным.
+# Короткие аббревиатуры — только целым словом: без границ «пит» находится
+# внутри «питона», и запрос «напиши код на питоне» притворяется профильным.
+DOMAIN = re.compile(
+    r"jdg|\bип\b|\bзус\b|\bzus\b|\bvat\b|\bват\b|\bpit\b|\bпит\b|ksef|ксеф|"
+    r"ceidg|цеидг|regon|регон|\bnip\b|\bнип\b|"
+    r"\bpkd\b|\bпкд\b|pkwiu|pesel|песел|ryczał|рычал|linio|линей|skala|скал|składk|складк|"
+    r"взнос|налог|деклараци|фактур|faktur|jpk|ulga|ульг|льгот|zdrowot|здровот|"
+    r"chorobow|больничн|декрет|emerytur|пенси|urząd|ужонд|skarbow|скарбов|"
+    r"biznes\.gov|ceidg|внж|побыт|pobyt|karta|карт[аы] побыт|мельдун|zameldow|"
+    r"фирм|działaln|бухгалт|księgow|infakt|инфакт|wfirma|ифирма|"
+    r"счёт|счет|rachun|банк|перевод|валют|курс nbp|инвойс|invoice|"
+    r"limit|лимит|порог|срок|termin|штраф|kara|пеня|odsetk|"
+    r"zawiesz|приостанов|likwidac|закрыт|zmień dane|регистрац|rejestrac", re.I)
+
+# Попытки переназначить роль или вытащить инструкции. Отбиваем всегда, даже
+# если рядом стоит профильное слово: «представь, что ты бухгалтер из США» —
+# это не вопрос про JDG, а просьба стать другим ассистентом.
+INJECTION = re.compile(
+    r"ignore (all )?previous|disregard (all )?(previous|instructions)|system prompt|"
+    r"твой промпт|твои инструкции|покажи инструкц|act as|представь,? что ты|"
+    r"веди себя как|ты теперь|забудь (всё|все|предыдущ)", re.I)
+
+# Просьбы, ради которых ассистента не заводили: творчество, код, переводы,
+# бытовые вопросы. Пропускаем, только если рядом есть профильное слово.
+GENERIC = re.compile(
+    r"\b(напиши|сочини|придума\w*|переведи|перепиши|сгенерируй|нарисуй|"
+    r"реши задач\w*|расскажи анекдот|стих\w*|сценарий|эссе|реферат|"
+    r"код на|программу на|скрипт на|regex|sql|python|javascript|питон\w*|"
+    r"рецепт\w*|погод\w*|биткоин\w*|акци[ияй]\w*)", re.I)
+
+# Профильные вопросы дают ≥ 20 (медиана 28), мусор ≤ 20 (медиана 13):
+# порог измерен на наборах из test_ai_gate.py, а не выдуман.
+MIN_RELEVANCE = 20.0
+
+
+def gate(question: str, top_score: float) -> str | None:
+    """Причина отказа или None. Считается локально, без обращения к API."""
+    if INJECTION.search(question):
+        return ("Я отвечаю только про JDG в Польше — налоги, ZUS, VAT, KSeF, "
+                "регистрацию и документы, и только по материалам гайда.")
+    domain = bool(DOMAIN.search(question))
+    if GENERIC.search(question) and not domain:
+        return ("Я отвечаю только про JDG в Польше — налоги, ZUS, VAT, KSeF, "
+                "регистрацию и документы. С остальным помогут другие сервисы.")
+    if not domain and top_score < MIN_RELEVANCE:
+        return ("Не нашёл в гайде ничего близкого. Спроси конкретнее про JDG "
+                "(взносы, налоги, фактуры, регистрацию) или загляни в чат @JDG_PBH — "
+                "там живые люди.")
+    return None
 
 
 SYSTEM = """Ты — ассистент «JDG HUB» для русскоязычных ИП (JDG) в Польше.
@@ -161,7 +218,9 @@ def quota_left(user_id: int) -> int:
 
 async def ask(user_id: int, question: str, profile: dict | None = None) -> dict:
     """Возвращает {answer, sources[], cached, left} или {error}."""
-    question = question.strip()[:500]
+    # 300 символов хватает на любой вопрос про JDG; всё длиннее — это или
+    # вставленный документ, или попытка залить контекст за наш счёт
+    question = question.strip()[:300]
     if len(question) < 5:
         return {"error": "Сформулируй вопрос подробнее"}
 
@@ -179,11 +238,16 @@ async def ask(user_id: int, question: str, profile: dict | None = None) -> dict:
         return {"error": f"Лимит {DAILY_USER_LIMIT} вопросов в день исчерпан — "
                          "спроси в чате @JDG_PBH или возвращайся завтра"}
 
-    arts = retrieve(question)
-    if not arts:
-        return {"answer": "В гайде я не нашёл ничего близкого к вопросу. "
-                          "Попробуй переформулировать или спроси живых людей в чате @JDG_PBH.",
-                "sources": [], "cached": False, "left": quota_left(user_id)}
+    arts, top_score = retrieve(question, with_scores=True)
+    # ворота стоят до вызова API и до списания квоты: мусорный запрос не должен
+    # ни стоить денег, ни съедать лимит того, кто спросит по делу
+    refusal = gate(question, top_score) if arts else (
+        "В гайде я не нашёл ничего близкого к вопросу. Попробуй переформулировать "
+        "или спроси живых людей в чате @JDG_PBH.")
+    if refusal:
+        log.info("ai: отказ до модели (score=%.1f) на %r", top_score, question[:60])
+        return {"answer": refusal, "sources": [], "cached": False,
+                "off_topic": True, "left": quota_left(user_id)}
 
     ctx = "\n\n".join(
         f"### Статья «{a['title']}» (id: {a['id']})\n{a['text'][:CONTEXT_CHARS]}"
