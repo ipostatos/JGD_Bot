@@ -46,6 +46,19 @@ def _load_index():
             log.info("ksef: +%d записей в индекс", len(entries))
         except Exception as e:
             log.warning("ksef не прочитан: %s", e)
+        banks = ROOT / "webapp" / "banks.json"
+        if banks.is_file():
+            try:
+                b = json.loads(banks.read_text(encoding="utf-8"))
+                _index = _index + [
+                    {"id": f"banks-{x['id']}",
+                     "title": f"Счета и расчёты: {x['title']}",
+                     "text": " ".join([x["title"], x["short"], x["text"],
+                                       *(f["text"] for f in x.get("flags", []))]).lower()}
+                    for x in b["blocks"]]
+                log.info("banks: +%d записей в индекс", len(b["blocks"]))
+            except Exception as e:
+                log.warning("banks не прочитан: %s", e)
         if ZUS_ERRORS_JSON.is_file():
             try:
                 errs = json.loads(ZUS_ERRORS_JSON.read_text(encoding="utf-8"))["errors"]
@@ -192,6 +205,14 @@ async def ask(user_id: int, question: str, profile: dict | None = None) -> dict:
                 json={"model": MODEL, "max_tokens": 1000, "system": SYSTEM,
                       "messages": [{"role": "user", "content":
                           f"{prof}Фрагменты гайда:\n\n{ctx}\n\nВопрос: {question}"}]})
+            if r.status_code == 400 and "credit balance" in r.text.lower():
+                # деньги на ключе кончились: чинится оплатой, а не повтором —
+                # честнее сказать прямо, чем гонять человека по кнопке
+                log.error("ANTHROPIC: закончились кредиты, ассистент отключён")
+                return {"error": "Ассистент временно недоступен по техническим "
+                                 "причинам. Ответ можно поискать в гайде или "
+                                 "спросить людей в чате @JDG_PBH.",
+                        "reason": "no_credits"}
             r.raise_for_status()
             answer = r.json()["content"][0]["text"].strip()
     except Exception as e:

@@ -5,6 +5,8 @@
  "note": "Фикстура для тестов: подмножество официального справочника, сгенерировано tools/pkd_fixture.py",
  "codes": [
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "60.39.Z",
    "name": "Pozostała działalność związana z dystrybucją treści",
    "section": "K",
@@ -15,6 +17,8 @@
    "excludes": []
   },
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "62.10.A",
    "name": "Działalność w zakresie programowania gier komputerowych",
    "section": "K",
@@ -27,6 +31,8 @@
    "excludes": []
   },
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "62.10.B",
    "name": "Pozostała działalność w zakresie programowania",
    "section": "K",
@@ -42,6 +48,8 @@
    ]
   },
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "62.20.B",
    "name": "Pozostała działalność związana z doradztwem w zakresie informatyki oraz zarządzaniem urządzeniami informatycznymi",
    "section": "K",
@@ -52,6 +60,8 @@
    "excludes": []
   },
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "62.90.Z",
    "name": "Pozostała działalność usługowa w zakresie technologii informatycznych i komputerowych",
    "section": "K",
@@ -70,6 +80,8 @@
    ]
   },
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "69.10.Z",
    "name": "Działalność prawnicza",
    "section": "O",
@@ -85,6 +97,8 @@
    ]
   },
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "70.20.Z",
    "name": "Doradztwo w zakresie prowadzenia działalności gospodarczej i pozostałe doradztwo w zakresie zarządzania",
    "section": "O",
@@ -103,6 +117,8 @@
    ]
   },
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "73.11.Z",
    "name": "Działalność agencji reklamowych",
    "section": "O",
@@ -117,6 +133,8 @@
    ]
   },
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "74.11.Z",
    "name": "Działalność w zakresie wzornictwa przemysłowego i projektowania mody",
    "section": "O",
@@ -131,6 +149,8 @@
    ]
   },
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "74.12.Z",
    "name": "Działalność w zakresie projektowania graficznego i komunikacji wizualnej",
    "section": "O",
@@ -145,6 +165,8 @@
    ]
   },
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "74.13.Z",
    "name": "Działalność w zakresie projektowania wnętrz",
    "section": "O",
@@ -159,6 +181,8 @@
    ]
   },
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "85.59.B",
    "name": "Kursy i szkolenia związane ze zdobywaniem wiedzy, umiejętności i kwalifikacji zawodowych w formach pozaszkolnych",
    "section": "S",
@@ -174,6 +198,8 @@
    ]
   },
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "90.11.Z",
    "name": "Działalność literacka i działalność związana z komponowaniem muzyki",
    "section": "S",
@@ -188,6 +214,8 @@
    ]
   },
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "90.20.C",
    "name": "Pozostała działalność związana z wystawianiem przedstawień artystycznych",
    "section": "S",
@@ -204,6 +232,8 @@
    ]
   },
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "96.21.Z",
    "name": "Działalność fryzjerska",
    "section": "T",
@@ -218,6 +248,8 @@
    ]
   },
   {
+   "valid_from": "2025-01-01",
+   "valid_to": null,
    "code": "96.22.Z",
    "name": "Działalność w zakresie pielęgnacji urody i pozostała działalność kosmetyczna",
    "section": "T",

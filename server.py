@@ -63,6 +63,11 @@ def verify_init_data(init_data: str) -> dict | None:
 
 
 # ── бот ──────────────────────────────────────────────────────────────────────
+# Ссылка на бота живёт в app.state, но сигналы админу отправляются и из мест,
+# где приложения под рукой нет; при DISABLE_BOT=1 остаётся None и они молчат.
+bot = None
+
+
 def build_bot():
     from aiogram import Bot, Dispatcher, F
     from aiogram.filters import CommandStart, Command
@@ -299,6 +304,30 @@ def _zus_error_reply(query: str) -> str:
             f"{e['why_ru']}\n\n<b>Что делать:</b>\n{steps}")
 
 
+ADMIN_CHAT_ID = os.environ.get("ADMIN_CHAT_ID", "")
+_alerts: dict[str, float] = {}
+ALERT_COOLDOWN = 6 * 3600
+
+
+async def _alert_admin(text: str) -> None:
+    """Сигнал владельцу о поломке, которую чинит только человек.
+
+    Без этого простой виден лишь в логах: пользователь получает вежливый отказ,
+    а мы узнаём о проблеме, когда кто-то спросит. Один сигнал в 6 часов —
+    напоминание нужно, спам нет.
+    """
+    if not ADMIN_CHAT_ID or not bot:
+        return
+    now = time.time()
+    if now - _alerts.get(text[:40], 0) < ALERT_COOLDOWN:
+        return
+    _alerts[text[:40]] = now
+    try:
+        await bot.send_message(int(ADMIN_CHAT_ID), text, disable_web_page_preview=True)
+    except Exception as e:
+        log.warning("не смог предупредить админа: %s", e)
+
+
 async def _json_or_400(req: Request) -> dict:
     """Тело запроса или честная 400.
 
@@ -418,6 +447,7 @@ async def _dra_sum_line(user_id: int) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     tasks = []
+    global bot
     if BOT_TOKEN and not DISABLE_BOT:
         bot, dp, on_start = build_bot()
         app.state.bot = bot
@@ -505,6 +535,11 @@ async def api_ask(req: Request):
         raise HTTPException(401, "bad initData")
     res = await ai.ask(user["id"], body.get("question", ""),
                        body.get("profile") or None)
+    if res.get("reason") == "no_credits":
+        await _alert_admin("🔴 Ассистент отключён: закончились кредиты Anthropic. "
+                           "Пополнить в console.anthropic.com → Plans & Billing. "
+                           "Мониторинг новостей тоже стоит.")
+        raise HTTPException(503, res["error"])
     if "error" in res:
         raise HTTPException(429 if "Лимит" in res["error"] else 400, res["error"])
     return res

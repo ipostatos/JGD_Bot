@@ -31,6 +31,7 @@ PAGES = [
     ("/cockpit.html", "body"),
     ("/nip.html", "#nip"),
     ("/pkd.html", "#q"),
+    ("/banks.html", ".card"),
     ("/zus_err.html", "body"),
     ("/ksef.html", ".tl-row"),
     ("/merge.html", "body"),

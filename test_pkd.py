@@ -97,6 +97,27 @@ def test_empty_query_is_safe():
     assert pkd.lookup("qwertyuiop")["results"] == []
 
 
+def test_hint_codes_look_like_codes():
+    """Подсказка с опечаткой молча игнорируется — профессия теряет буст."""
+    import re
+    for e in pkd.index().syn:
+        for h in e.get("hint", []):
+            assert re.fullmatch(r"\d{2}\.\d{2}\.[A-Z]", h), f"{e['ru'][0]}: {h}"
+
+
+@pytest.mark.skipif(not FULL.is_file(),
+                    reason="полный справочник собирается tools/pkd_build.py и не в git")
+def test_hints_exist_in_catalogue(monkeypatch):
+    """Пять записей словаря ссылались на коды, которых в PKD 2025 нет
+    (62.30.Z, 86.90.E, 69.20.Z, 96.02.Z, 43.39.Z) — ловим это тестом."""
+    monkeypatch.delenv("JDG_PKD_DATA", raising=False)
+    pkd.index.cache_clear()
+    idx = pkd.index()
+    broken = {e["ru"][0]: [h for h in e.get("hint", []) if h not in idx.codes]
+              for e in idx.syn}
+    assert not {k: v for k, v in broken.items() if v}
+
+
 @pytest.mark.skipif(not FULL.is_file(),
                     reason="полный справочник собирается tools/pkd_build.py и не в git")
 def test_full_catalogue_when_built(monkeypatch):

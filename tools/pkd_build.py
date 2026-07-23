@@ -110,6 +110,32 @@ def merge_wrapped(items):
 
 
 GUS = "https://klasyfikacje.stat.gov.pl/static/pkd_25/pdf/"
+# Словарь REGON (из пакета документации BIR): даёт даты действия кодов —
+# по ним видно, что код закрыт, а не просто «нет в новой классификации»
+BIR_DICT = ROOT / "GUS-Regon-UslugaBIRver1.2-dokumentacjaVer1.4" / "BIR12_SlownikPKD2025.xlsx"
+
+
+def bir_validity() -> dict:
+    """Код -> {from, to} из словаря REGON. Коды там без точек: 6210B."""
+    if not BIR_DICT.is_file():
+        return {}
+    try:
+        df = pd.read_excel(BIR_DICT, dtype=str)
+    except Exception as e:
+        print(f"  словарь REGON не прочитан: {e}")
+        return {}
+    out = {}
+    for r in df.itertuples(index=False):
+        raw = str(getattr(r, "Kod", "") or "").strip()
+        if len(raw) != 5:
+            continue
+        code = f"{raw[:2]}.{raw[2:4]}.{raw[4]}"
+        rec = {"from": str(r.DataOd)[:10] if r.DataOd else None,
+               "to": str(r.DataDo)[:10] if r.DataDo and str(r.DataDo) != "nan" else None}
+        # у кода бывает две записи (PKD 2007 и 2025) — берём более позднюю
+        if code not in out or (rec["from"] or "") > (out[code]["from"] or ""):
+            out[code] = rec
+    return out
 
 
 def download():
@@ -145,11 +171,18 @@ def main():
     expl = from_pdf(Path(args.pdf), set(names))
     print(f"  с пояснениями: {sum(1 for v in expl.values() if v['includes'])}")
 
+    validity = bir_validity()
+    if validity:
+        print(f"  даты действия из словаря REGON: {len(validity)} кодов")
+
     records = []
     for code in sorted(names):
         sec, sec_name = sections.get(code, (None, None))
         e = expl.get(code, {})
+        v = validity.get(code) or {}
         records.append({
+            "valid_from": v.get("from"),
+            "valid_to": v.get("to"),
             "code": code,
             "name": names[code],
             "section": sec,
