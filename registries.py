@@ -114,7 +114,10 @@ async def wl_check_account(cl: httpx.AsyncClient, nip: str, account: str) -> boo
 async def vies_check(cl: httpx.AsyncClient, nip: str) -> dict | None:
     r = await cl.get(f"{VIES_BASE}/ms/PL/vat/{nip}")
     if r.status_code != 200:
-        return None
+        # молчание VIES — это отказ сервиса, а не отрицательный ответ:
+        # источник должен показаться «ошибкой», иначе человек прочитает
+        # недоступность как «VAT-UE недействителен»
+        r.raise_for_status()
     d = r.json()
     return {"valid": bool(d.get("isValid")), "name": (d.get("name") or "").strip(),
             "address": (d.get("address") or "").replace("\n", ", ").strip()}
@@ -260,8 +263,12 @@ async def ceidg_lookup(cl: httpx.AsyncClient, nip: str) -> dict | None:
     if r.status_code == 204:
         return None            # 204 = записи нет (юрлицо, а не JDG) — это не ошибка
     if r.status_code != 200:
+        # реестр не ответил ≠ «записи нет»: 2026-07-23 CEIDG ушёл на przerwa
+        # serwisowa и стал редиректить весь /api на главную, а карточка при
+        # этом писала «нет записи» про живую фирму. Ошибку поднимаем наверх —
+        # там она станет источником в состоянии «ошибка».
         log.warning("CEIDG: HTTP %s", r.status_code)
-        return None
+        r.raise_for_status()   # httpx поднимает и на 3xx, а редирект — как раз наш случай
     firms = r.json().get("firmy") or []
     if not firms:
         return None

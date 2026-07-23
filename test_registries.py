@@ -77,6 +77,36 @@ def test_signals_no_accounts_warns_about_15k():
     assert any("15 000" in s["text"] for s in sig)
 
 
+def test_registry_outage_is_error_not_empty_record(monkeypatch):
+    """Реестр в дауне обязан выглядеть ошибкой, а не «записи нет».
+
+    2026-07-23 CEIDG ушёл на przerwa serwisowa и ответил 301 на весь /api.
+    Пока недоступность возвращалась как None, карточка живой фирмы честно
+    писала «CEIDG: нет записи» — то есть врала о существующем предприятии.
+    """
+    import httpx
+
+    class FakeResp:
+        status_code = 301
+        headers = {"location": "https://dane.biznes.gov.pl/"}
+
+        def raise_for_status(self):
+            raise httpx.HTTPStatusError("301", request=None, response=None)
+
+    async def fake_get(self, url, **kw):
+        return FakeResp()
+
+    monkeypatch.setenv("CEIDG_TOKEN", "test-token")
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+    monkeypatch.setattr(R, "_cache_get", lambda nip: None)
+
+    res = asyncio.run(R.check_nip(WARSAW_NIP))
+    assert res["sources"]["ceidg"] == "error"
+    assert res["sources"]["vies"] == "error"
+    assert res["activity"] is None          # статус не выдумываем
+    assert not any("CEIDG" in s["text"] for s in res["signals"])
+
+
 def test_check_nip_rejects_bad_checksum():
     res = asyncio.run(R.check_nip("1234567890"))
     assert res["valid"] is False
@@ -137,7 +167,12 @@ def test_live_ceidg_gives_data_for_zwolniony():
         async with httpx.AsyncClient(timeout=30) as cl:
             return await R.ceidg_lookup(cl, ZWOLNIONY_NIP)
 
-    data = asyncio.run(run())
+    try:
+        data = asyncio.run(run())
+    except httpx.HTTPError as e:
+        # przerwa serwisowa на стороне CEIDG — это не регрессия у нас
+        # (2026-07-23 весь /api редиректили на главную)
+        pytest.skip(f"CEIDG сейчас не отвечает: {e}")
     assert data, "CEIDG не ответил по реальному JDG"
     assert data["status"] == "AKTYWNY"
     assert data["name"] and data["owner"].strip()
