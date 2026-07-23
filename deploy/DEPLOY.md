@@ -35,6 +35,26 @@ ssh root@46.224.220.94 "cd /opt/jdg/sources/guide && git pull && cd /opt/jdg && 
 
 Рестарт не нужен: данные статические, читаются с диска.
 
+## Справочник PKD 2025 (нужен для /pkd и поиска кодов)
+
+`webapp/data/pkd.json` и `pkd_keys.json` генерируются из файлов GUS и в git
+не едут (весь `webapp/data/` в `.gitignore`), поэтому на новой машине их
+надо собрать, иначе `/api/pkd` и команда бота ответят ошибкой:
+
+Проще собрать локально и скопировать — на VPS тогда не нужны ни pandas,
+ни pymupdf (вместе ~100 МБ ради разовой операции):
+
+```bash
+python tools/pkd_build.py --download          # локально, ~9 МБ с klasyfikacje.stat.gov.pl
+scp C:/Users/user/Desktop/JDG/webapp/data/pkd*.json root@46.224.220.94:/opt/jdg/webapp/data/
+ssh root@46.224.220.94 "chown jdg:jdg /opt/jdg/webapp/data/pkd*.json"
+```
+
+Если всё же собирать на сервере: `venv/bin/pip install -r requirements-tools.txt`,
+затем `venv/bin/python tools/pkd_build.py --download`. Сборка около минуты —
+PDF на 767 страниц. Повторять только когда GUS правит классификацию.
+Словарь синонимов `webapp/pkd_synonyms.json` — ручной, лежит в git.
+
 ## Первичная установка
 
 ```bash

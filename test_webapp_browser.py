@@ -30,6 +30,7 @@ PAGES = [
     ("/ai.html", "body"),
     ("/cockpit.html", "body"),
     ("/nip.html", "#nip"),
+    ("/pkd.html", "#q"),
     ("/zus_err.html", "body"),
     ("/ksef.html", ".tl-row"),
     ("/merge.html", "body"),

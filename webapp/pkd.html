@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>JDG HUB — код PKD</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="jdg.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  .pkd-code{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-weight:800;
+    font-size:var(--fs-h2); letter-spacing:.02em }
+  .pkd-name{ font-weight:600; line-height:1.3; margin:2px 0 8px }
+  .pkd-desc{ font-size:var(--fs-sm); color:var(--hint); line-height:1.45 }
+  .pkd-flag{ display:flex; gap:8px; align-items:flex-start; margin-top:10px;
+    padding-top:9px; border-top:1px solid var(--line); font-size:var(--fs-sm); line-height:1.45 }
+  .pkd-flag .fi{ width:18px; height:18px; flex:0 0 18px; margin-top:1px }
+  .pkd-flag.warn .fi{ color:var(--warn) } .pkd-flag.note .fi{ color:var(--hint) }
+  .rate{ display:flex; gap:8px; align-items:baseline; margin-top:8px; font-size:var(--fs-sm) }
+  .rate b{ font-size:var(--fs-h2); font-weight:800 }
+  .chips{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px }
+  .ex{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px }
+  .ex button{ font-size:12px; padding:5px 10px; border-radius:999px; border:1px solid var(--line);
+    background:transparent; color:var(--hint); cursor:pointer }
+</style>
+</head>
+<body>
+<div class="hero"><span class="logo emi" data-icon="list"></span><h1>Код PKD</h1></div>
+<p class="sub">Опиши, чем занимаешься — подберу подклассы PKD 2025 по справочнику GUS</p>
+
+<div class="card" style="margin-bottom:12px">
+  <div class="field"><label>Чем занимаешься</label>
+    <input id="q" type="text" placeholder="я блогер / пишу код / маникюр на дому"
+           autocomplete="off" maxlength="120"></div>
+  <button id="go" class="btn"><span data-icon="search" class="bi"></span> Подобрать</button>
+  <div class="ex">
+    <button data-q="я блогер">блогер</button>
+    <button data-q="пишу код на питоне">разработчик</button>
+    <button data-q="дизайн интерьеров">дизайн интерьеров</button>
+    <button data-q="онлайн-курсы">курсы</button>
+    <button data-q="62.01.Z">старый код 62.01.Z</button>
+  </div>
+</div>
+
+<div id="out"></div>
+
+<div class="card" id="mycard" style="margin-bottom:12px">
+  <div class="h2" style="margin-bottom:4px">Проверить свои коды</div>
+  <p class="muted" style="font-size:13px;margin:0 0 10px">
+    По NIP посмотрю, что стоит в CEIDG прямо сейчас, и не остались ли коды старой
+    классификации: PKD 2007 действует до 31.12.2026.</p>
+  <div class="field"><label>Твой NIP</label>
+    <input id="nip" type="text" inputmode="numeric" placeholder="10 цифр"
+           autocomplete="off" maxlength="16"></div>
+  <button id="mygo" class="btn ghost">Проверить свои коды</button>
+  <div id="myout" style="margin-top:10px"></div>
+</div>
+
+<p class="foot">Источник — Polska Klasyfikacja Działalności 2025 (rozporządzenie Rady
+Ministrów от 18.12.2024, Dz. U. poz. 1936) и официальные ключи перехода GUS.
+Ставка ryczałtu определяется видом услуги по PKWiU, а не кодом PKD: цифры здесь —
+ориентир для разговора с бухгалтером, а не расчёт.</p>
+
+<script src="icons.js"></script>
+<script src="app.js"></script>
+<script>
+renderDock('home');
+setupBack('index.html');
+
+const out = document.getElementById('out');
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function rateRow(h) {
+  return `<div class="rate"><b>${esc(h.rate)}%</b>
+    <span class="pkd-desc">${esc(h.who)}</span></div>`;
+}
+
+function card(x, opts = {}) {
+  const flags = (x.flags || []).map(f => `<div class="pkd-flag ${f.level}">
+    <span class="fi" data-icon="${f.level === 'warn' ? 'alert-triangle' : 'info'}"></span>
+    <span><b>${esc(f.title)}</b> — ${esc(f.text)}</span></div>`).join('');
+  const rates = (x.rate_hints || []).map(rateRow).join('');
+  const desc = (x.includes || [])[0];
+  const old = (x.was_pkd2007 || []).length
+    ? `<span class="chip">раньше ${esc(x.was_pkd2007.join(', '))}</span>` : '';
+  return `<div class="card" style="margin-bottom:12px${opts.border ? ';border-left:3px solid ' + opts.border : ''}">
+    <div class="chips"><span class="chip">${esc(x.section || '')}</span>${old}
+      ${opts.chip || ''}</div>
+    <div class="pkd-code">${esc(x.code)}</div>
+    <div class="pkd-name">${esc(x.name)}</div>
+    ${desc ? `<div class="pkd-desc">${esc(desc.slice(0, 320))}</div>` : ''}
+    ${rates ? `<div style="margin-top:10px;padding-top:9px;border-top:1px solid var(--line)">
+      <div class="muted" style="font-size:12px;margin-bottom:2px">Вероятная ставка ryczałtu</div>
+      ${rates}</div>` : ''}
+    ${flags}
+  </div>`;
+}
+
+function render(d) {
+  if (!d.results || !d.results.length) {
+    out.innerHTML = `<div class="state">Ничего не нашлось. Опиши деятельность обычными
+      словами: «делаю сайты», «вожу такси», «шью одежду».</div>`;
+    return;
+  }
+  const head = d.migration ? `<div class="card" style="margin-bottom:12px;border-left:3px solid var(--warn)">
+      <div class="pkd-code">${esc(d.migration.old)}</div>
+      <div class="pkd-name">${esc(d.migration.old_name)}</div>
+      <div class="pkd-desc">${esc(d.note)}</div></div>` : '';
+  out.innerHTML = head + d.results.map(x => card(x)).join('')
+    + `<p class="foot" style="margin-top:0">${esc(d.note && !d.migration ? d.note : '')}</p>`;
+  Icons.hydrate();
+}
+
+async function post(url, body) {
+  const r = await fetch(url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ initData: tg ? tg.initData : '' }, body)),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || 'Ошибка запроса');
+  return data;
+}
+
+async function search(q) {
+  document.getElementById('q').value = q;
+  haptic('medium');
+  out.innerHTML = '<div class="state">Ищем по справочнику…</div>';
+  try { render(await post('/api/pkd', { q })); }
+  catch (e) { out.innerHTML = `<div class="state">${esc(e.message)}</div>`; }
+}
+
+document.getElementById('go').onclick = () => {
+  const q = document.getElementById('q').value.trim();
+  if (q) search(q);
+};
+document.getElementById('q').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('go').click();
+});
+document.querySelectorAll('.ex button').forEach(b => {
+  b.onclick = () => search(b.dataset.q);
+});
+
+document.getElementById('mygo').onclick = async () => {
+  const nip = document.getElementById('nip').value.trim();
+  const box = document.getElementById('myout');
+  if (!nip) return;
+  haptic('medium');
+  box.innerHTML = '<div class="muted">Спрашиваем CEIDG…</div>';
+  try {
+    const d = await post('/api/pkd/my', { nip });
+    if (!d.items || !d.items.length) {
+      box.innerHTML = `<div class="muted">${esc(d.note || 'Кодов не видно.')}</div>`;
+      return;
+    }
+    const tone = d.outdated ? 'var(--warn)' : 'var(--ok)';
+    box.innerHTML = `<div class="pkd-flag ${d.outdated ? 'warn' : 'note'}">
+        <span class="fi" data-icon="${d.outdated ? 'alert-triangle' : 'check-circle'}"></span>
+        <span>${esc(d.summary)}</span></div>`
+      + d.items.map(i => i.status === 'outdated'
+        ? card({ code: i.code, name: i.name, section: 'PKD 2007' },
+               { border: 'var(--warn)', chip: '<span class="chip">устарел</span>' })
+          + (i.replace_with || []).map(x => card(x,
+              { chip: '<span class="chip">замена</span>' })).join('')
+        : i.status === 'unknown'
+          ? `<div class="card" style="margin-bottom:12px"><div class="pkd-code">${esc(i.code)}</div>
+             <div class="pkd-desc">Такого кода нет ни в PKD 2025, ни в ключах перехода —
+             проверь запись в CEIDG.</div></div>`
+          : card(i, { border: tone })).join('');
+    Icons.hydrate();
+  } catch (e) { box.innerHTML = `<div class="muted">${esc(e.message)}</div>`; }
+};
+</script>
+</body>
+</html>

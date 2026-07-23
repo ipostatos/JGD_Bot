@@ -1,0 +1,282 @@
+"""Подбор кода PKD по описанию деятельности + разбор последствий.
+
+Человек пишет «я блогер» или «пишу код на питоне» — получает подклассы PKD 2025
+с официальным текстом GUS, а к ним разбор: что этот код делает с правом на
+освобождение от VAT, что PKD не определяет ставку ryczałtu, и не устарел ли
+код (PKD 2007 живёт до 31.12.2026).
+
+Поиск офлайновый: BM25 по официальным пояснениям + словарь русских синонимов.
+Никаких обращений к платному API — данные локальные, ответ детерминированный.
+
+Данные: webapp/data/{pkd.json, pkd_keys.json, pkd_synonyms.json} (tools/pkd_build.py).
+"""
+import json
+import logging
+import math
+import re
+from collections import Counter, defaultdict
+from functools import lru_cache
+from pathlib import Path
+
+log = logging.getLogger(__name__)
+ROOT = Path(__file__).resolve().parent
+DATA = ROOT / "webapp" / "data"
+
+WORD = re.compile(r"[a-zа-яёąćęłńóśźż0-9]+", re.I)
+CODE_IN_QUERY = re.compile(r"\b(\d{2})[.,](\d{2})(?:[.,\s]?([A-Za-z]))?\b")
+STEM = 6          # грубая нормализация: обе морфологии богатые, режем хвосты
+K1, B = 1.4, 0.75  # BM25
+
+# Виды деятельности, которые лишают права на zwolnienie podmiotowe z VAT
+# (art. 113 ust. 13 ustawy o VAT) — определяем по официальному тексту, не по списку кодов
+VAT_EXCLUDED = re.compile(r"doradzt|prawnicz|jubilers|inkas|ściągani[ae] długów|faktoring", re.I)
+VAT_SOFT = re.compile(r"doradztwem w zakresie informatyki|doradztwo w zakresie sprzętu", re.I)
+
+
+def _tok(text: str):
+    return [w[:STEM] for w in WORD.findall(text.lower()) if len(w) > 2]
+
+
+class Index:
+    def __init__(self):
+        raw = json.loads((DATA / "pkd.json").read_text(encoding="utf-8"))
+        self.meta = {k: v for k, v in raw.items() if k != "codes"}
+        self.codes = {c["code"]: c for c in raw["codes"]}
+        try:
+            self.keys = json.loads(
+                (DATA / "pkd_keys.json").read_text(encoding="utf-8"))["map"]
+        except Exception:
+            self.keys = {}
+        try:
+            # словарь лежит рядом с ksef.json, а не в webapp/data: тот каталог
+            # генерируемый и целиком в .gitignore, а синонимы писались руками
+            self.syn = json.loads(
+                (ROOT / "webapp" / "pkd_synonyms.json").read_text(encoding="utf-8"))["entries"]
+        except Exception:
+            self.syn = []
+        try:
+            self.rates = json.loads(
+                (ROOT / "webapp" / "pkd_rates.json").read_text(encoding="utf-8"))
+        except Exception:
+            self.rates = {"rates": [], "note": ""}
+
+        self.docs: dict[str, Counter] = {}
+        self.df: Counter = Counter()
+        for code, c in self.codes.items():
+            # название весит больше пояснений: оно и есть суть подкласса
+            toks = _tok(c["name"]) * 3 + _tok(" ".join(c["includes"]))
+            self.docs[code] = Counter(toks)
+            self.df.update(set(toks))
+        self.avg_len = sum(sum(d.values()) for d in self.docs.values()) / max(len(self.docs), 1)
+        self.n = len(self.docs)
+
+        # сопоставляем по основам слов, а не по подстроке: «интерьеров» должно
+        # находить «дизайн интерьера», «консультирую» — «консультант»
+        self.by_ru: list[tuple[list[list[str]], dict]] = []
+        for e in self.syn:
+            self.by_ru.append(([_tok(r) for r in e["ru"] if _tok(r)], e))
+        log.info("pkd: %d подклассов, %d синонимов", self.n, len(self.syn))
+
+    # ── поиск ──────────────────────────────────────────────────────────────
+    def expand(self, query: str):
+        """Русский запрос -> польские слова + коды-подсказки из словаря."""
+        qs = set(_tok(query))
+        found = []
+        for variants, e in self.by_ru:
+            # многословный синоним («дизайн интерьера») требует всех основ
+            hit = max((v for v in variants if set(v) <= qs), key=len, default=None)
+            if hit:
+                found.append((len(hit), e))
+        # специфичное совпадение важнее общего: «дизайн интерьера» перебивает «дизайнера»
+        found.sort(key=lambda x: -x[0])
+        pl, matched = [], []
+        hints: dict[str, float] = {}
+        for i, (spec, e) in enumerate(found):
+            # слова самого точного совпадения весят втрое: иначе общий «дизайнер»
+            # своим словарём перебивает узкий «дизайн интерьера»
+            if i and found[0][0] >= 2:
+                pass          # нашлось точное многословное совпадение — общие
+                              # записи в польские слова не добавляем, только в hint
+            else:
+                pl += e.get("pl", []) * (3 if i == 0 else 1)
+            # многословный синоним («дизайн интерьера») — это уже прямое указание,
+            # а не намёк, поэтому его коды получают вес, перебивающий общие слова
+            base = (20.0 if spec >= 2 else 9.0) - 2.0 * i
+            for j, h in enumerate(e.get("hint", [])):
+                hints[h] = max(hints.get(h, 0), max(base - 2.0 * j, 2.0))
+            matched.append(e["ru"][0])
+        return pl, hints, matched
+
+    def search(self, query: str, limit: int = 5):
+        pl, hints, matched = self.expand(query)
+        toks = _tok(query + " " + " ".join(pl))
+        if not toks:
+            return [], matched
+        scores: dict[str, float] = defaultdict(float)
+        for t in set(toks):
+            df = self.df.get(t, 0)
+            if not df:
+                continue
+            idf = math.log(1 + (self.n - df + 0.5) / (df + 0.5))
+            for code, doc in self.docs.items():
+                f = doc.get(t, 0)
+                if not f:
+                    continue
+                dl = sum(doc.values())
+                scores[code] += idf * f * (K1 + 1) / (f + K1 * (1 - B + B * dl / self.avg_len))
+        # подсказка словаря поднимает код, но не назначает его: официальный текст
+        # всё равно показывается, и решение остаётся за человеком
+        for h, w in hints.items():
+            if h in self.codes:
+                scores[h] += w
+        top = sorted(scores.items(), key=lambda kv: -kv[1])[:limit]
+        return [(code, round(s, 1)) for code, s in top], matched
+
+    # ── разбор последствий ────────────────────────────────────────────────
+    def analyse(self, code: str) -> dict:
+        c = self.codes[code]
+        flags = []
+        # жёсткий флаг — только если исключённый вид услуг стоит в САМОМ названии
+        # подкласса; упоминание внутри пояснений даёт лишь повод присмотреться,
+        # иначе «графический дизайн» ошибочно объявляется потерей права на VAT
+        if VAT_EXCLUDED.search(c["name"]):
+            flags.append({
+                "level": "warn",
+                "title": "Лишает права на освобождение от VAT",
+                "text": "Doradztwo, юридические и ювелирные услуги, взыскание долгов "
+                        "перечислены в art. 113 ust. 13 ustawy o VAT: при них "
+                        "плательщиком VAT нужно стать сразу, независимо от оборота "
+                        "и лимита 240 000 zł."})
+        elif VAT_EXCLUDED.search(" ".join(c["includes"])):
+            flags.append({
+                "level": "note",
+                "title": "Проверить формулировку услуг",
+                "text": "Сам подкласс под art. 113 ust. 13 не подпадает, но в его "
+                        "официальном описании упоминается doradztwo или смежные "
+                        "услуги из списка исключений. Если консультации станут "
+                        "заметной частью работы, право на освобождение от VAT "
+                        "теряется — формулировки в договоре и на фактуре стоит "
+                        "согласовать с бухгалтером."})
+        old = [o for o, v in self.keys.items() if code in v["to"]]
+        return {
+            "code": code,
+            "name": c["name"],
+            "section": c["section"],
+            "section_name": (c["section_name"] or "").capitalize(),
+            "includes": c["includes"][:6],
+            "excludes": c["excludes"][:4],
+            "was_pkd2007": old[:4],
+            "flags": flags,
+            "rate_hints": self.rate_hints(code),
+        }
+
+    def rate_hints(self, code: str) -> list[dict]:
+        """Вероятные ставки ryczałtu — подсказка, а не расчёт.
+
+        Ставку задаёт вид услуги по PKWiU (art. 12 ust. 1), поэтому даём
+        максимум два кандидата и всегда с оговоркой: код PKD ничего не решает.
+        """
+        c = self.codes.get(code)
+        if not c:
+            return []
+        blob = (c["name"] + " " + " ".join(c["includes"][:4])).lower()
+        out = []
+        for r in self.rates.get("rates", []):
+            by_code = any(code.startswith(p) for p in r.get("codes", []))
+            by_word = any(w.lower() in blob for w in r.get("words", []))
+            if by_code or by_word:
+                out.append({"rate": r["rate"], "who": r["who"],
+                            "match": "код" if by_code else "описание"})
+        if not out:                       # услуги по умолчанию идут по 8,5%
+            default = next((r for r in self.rates.get("rates", [])
+                            if r.get("default_for_services")), None)
+            if default:
+                out.append({"rate": default["rate"], "who": default["who"],
+                            "match": "по умолчанию для услуг"})
+        return out[:2]
+
+    def migrate(self, old_code: str):
+        """Старый код PKD 2007 -> актуальные подклассы PKD 2025."""
+        v = self.keys.get(old_code)
+        if not v:
+            return None
+        return {"old": old_code, "old_name": v["name"],
+                "to": [{"code": c, "name": self.codes[c]["name"]}
+                       for c in v["to"] if c in self.codes]}
+
+
+@lru_cache(maxsize=1)
+def index() -> Index:
+    return Index()
+
+
+def lookup(query: str, limit: int = 5) -> dict:
+    """Точка входа: описание деятельности или код -> подборка с разбором."""
+    idx = index()
+    query = (query or "").strip()
+    if not query:
+        return {"query": query, "results": [], "matched": []}
+
+    m = CODE_IN_QUERY.search(query)
+    if m:                                  # спросили про конкретный код
+        a, b, letter = m.groups()
+        code = f"{a}.{b}" + (f".{letter.upper()}" if letter else "")
+        if code in idx.codes:
+            return {"query": query, "kind": "code",
+                    "results": [idx.analyse(code)], "matched": [],
+                    "note": _rate_note()}
+        mig = idx.migrate(code)
+        if mig:                            # код из PKD 2007 — показываем замену
+            return {"query": query, "kind": "migration", "migration": mig,
+                    "results": [idx.analyse(c["code"]) for c in mig["to"]],
+                    "matched": [],
+                    "note": "Это код старой классификации PKD 2007. Она действует "
+                            "до 31.12.2026: после этой даты GUS перекодирует записи "
+                            "автоматически по общим ключам, без разбора того, чем вы "
+                            "занимаетесь на самом деле. Лучше обновить самому."}
+
+    hits, matched = idx.search(query, limit)
+    return {"query": query, "kind": "search", "matched": matched,
+            "results": [dict(idx.analyse(code), score=score) for code, score in hits],
+            "note": _rate_note()}
+
+
+def audit(codes: list[str]) -> dict:
+    """Разбор кодов, которые уже стоят в CEIDG: актуальны ли и чем грозят.
+
+    Главное, что ищем, — коды старой классификации: PKD 2007 действует до
+    31.12.2026, дальше GUS перекодирует записи автоматически по общим ключам.
+    """
+    idx = index()
+    items, outdated = [], 0
+    for raw in codes[:20]:
+        code = (raw or "").strip().upper().replace(",", ".")
+        if not code:
+            continue
+        if code in idx.codes:
+            items.append(dict(idx.analyse(code), status="ok"))
+            continue
+        mig = idx.migrate(code)
+        if mig:
+            outdated += 1
+            items.append({"code": code, "name": mig["old_name"], "status": "outdated",
+                          "replace_with": [dict(idx.analyse(x["code"]), status="new")
+                                           for x in mig["to"]]})
+        else:
+            items.append({"code": code, "name": "", "status": "unknown"})
+    summary = ("Все коды уже в новой классификации." if not outdated else
+               f"Кодов старой классификации: {outdated}. PKD 2007 действует "
+               f"до 31.12.2026 — после этой даты GUS перекодирует запись сам, "
+               f"по общим ключам и без разбора того, чем вы занимаетесь. "
+               f"Обновить можно самому: biznes.gov.pl → «zmień dane w CEIDG».")
+    vat = [i["code"] for i in items
+           if any(f["level"] == "warn" for f in i.get("flags", []))]
+    return {"items": items, "outdated": outdated, "summary": summary,
+            "vat_warning_codes": vat, "note": _rate_note()}
+
+
+def _rate_note() -> str:
+    return ("Код PKD не определяет ставку ryczałtu и не решает за налоговую: "
+            "ставка зависит от фактического вида услуги (классификация PKWiU), "
+            "а PKD — это запись в реестре. Совпадать они могут, но проверять "
+            "нужно именно вид деятельности.")

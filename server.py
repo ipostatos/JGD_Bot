@@ -139,6 +139,20 @@ def build_bot():
         await m.answer(_zus_error_reply(arg), parse_mode="HTML",
                        disable_web_page_preview=True)
 
+    @dp.message(Command("pkd"))
+    async def pkd_cmd(m: Message):
+        arg = (m.text or "").partition(" ")[2].strip()
+        if not arg:
+            await m.answer(
+                "Напиши, чем занимаешься — подберу коды PKD 2025 по официальному "
+                "справочнику GUS.\n\nНапример: <code>/pkd я блогер</code>, "
+                "<code>/pkd пишу код на питоне</code>, <code>/pkd маникюр на дому</code>.\n"
+                "Старый код тоже приму — покажу, во что он превратился "
+                "(<code>/pkd 62.01.Z</code>).", parse_mode="HTML")
+            return
+        await m.answer(await asyncio.to_thread(_pkd_reply, arg), parse_mode="HTML",
+                       disable_web_page_preview=True, reply_markup=app_kb())
+
     # Голые цифры в личке: 10 — это NIP контрагента, 8 — код ошибки ZUS
     @dp.message(F.chat.type == "private", F.text.regexp(r"^[\d\s\-]{8,16}$"))
     async def digits_plain(m: Message):
@@ -158,6 +172,7 @@ def build_bot():
         await bot.set_my_commands([
             BotCommand(command="app", description="Открыть JDG HUB"),
             BotCommand(command="nip", description="Проверить контрагента по NIP"),
+            BotCommand(command="pkd", description="Подобрать код PKD по деятельности"),
             BotCommand(command="ksef", description="KSeF — меня это уже касается?"),
             BotCommand(command="blad", description="Код ошибки ZUS — что делать"),
             BotCommand(command="podderzhat", description="Как поддержать авторов гайда"),
@@ -282,6 +297,32 @@ def _zus_error_reply(query: str) -> str:
             f"Документ: {', '.join(e.get('doc') or ['—'])}\n\n"
             f"<i>{e['msg_pl']}</i>\n\n"
             f"{e['why_ru']}\n\n<b>Что делать:</b>\n{steps}")
+
+
+def _pkd_reply(query: str) -> str:
+    """Ответ бота на /pkd: тот же движок, что у API, но короче — три кода."""
+    import pkd
+    r = pkd.lookup(query, limit=3)
+    if not r["results"]:
+        return ("Не нашёл подходящих кодов. Опиши деятельность обычными словами — "
+                "«делаю сайты», «маникюр на дому», «вожу такси» — или пришли сам код.")
+    out = []
+    if r.get("migration"):
+        mg = r["migration"]
+        out.append(f"<b>{esc_html(mg['old'])}</b> — код старой классификации "
+                   f"PKD 2007 ({esc_html(mg['old_name'])}).\nСейчас это:")
+    for x in r["results"]:
+        block = [f"<b>{esc_html(x['code'])}</b> — {esc_html(x['name'])}"]
+        if x["includes"]:
+            block.append(f"<i>{esc_html(x['includes'][0][:220])}</i>")
+        for f in x["flags"]:
+            mark = "⚠️" if f["level"] == "warn" else "ℹ️"
+            block.append(f"{mark} <b>{esc_html(f['title'])}</b>: {esc_html(f['text'])}")
+        if x["was_pkd2007"]:
+            block.append(f"Раньше это было {esc_html(', '.join(x['was_pkd2007']))}.")
+        out.append("\n".join(block))
+    out.append(f"<i>{esc_html(r['note'])}</i>")
+    return "\n\n".join(out)
 
 
 async def _nip_reply(raw_nip: str) -> str:
@@ -464,6 +505,45 @@ async def api_ksef(req: Request):
     sales = await _ksef_sales(user["id"]) if user else None
     return {"status": ksef.status(profile, sales=sales),
             "infakt": sales is not None}
+
+
+@app.post("/api/pkd")
+async def api_pkd(req: Request):
+    """Подбор кода PKD по описанию деятельности. Работает офлайн по данным GUS,
+    без обращений к платному API, поэтому initData здесь не требуется."""
+    import pkd
+    body = await req.json()
+    query = (body.get("q") or "").strip()[:200]
+    if not query:
+        raise HTTPException(400, "Опиши, чем занимаешься, или пришли код PKD")
+    return await asyncio.to_thread(pkd.lookup, query, int(body.get("limit", 5)))
+
+
+@app.post("/api/pkd/my")
+async def api_pkd_my(req: Request):
+    """Коды PKD, которые реально стоят в CEIDG у этого NIP, + разбор.
+    Лимиты те же, что у проверки контрагента: ходим в чужой реестр."""
+    import pkd
+    import registries
+    body = await req.json()
+    user = verify_init_data(body.get("initData", ""))
+    if user is None:
+        raise HTTPException(401, "bad initData")
+    _limit_or_429("nip", user["id"])
+    try:
+        d = await registries.check_nip((body.get("nip") or "").strip())
+    except Exception as e:
+        log.warning("pkd/my nip check failed: %s", e)
+        raise HTTPException(502, "Реестры не ответили — попробуй ещё раз")
+    if not d.get("valid"):
+        raise HTTPException(400, d.get("error", "Не похоже на NIP."))
+    codes = d.get("pkd") or []
+    if not codes:
+        return {"nip": d["nip"], "name": d.get("name"), "codes": [],
+                "note": "В CEIDG по этому NIP кодов не видно. Так бывает у юрлиц "
+                        "(они в KRS, а не в CEIDG) и при закрытой записи."}
+    return {"nip": d["nip"], "name": d.get("name"),
+            **await asyncio.to_thread(pkd.audit, codes)}
 
 
 @app.post("/api/infakt/connect")

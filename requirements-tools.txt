@@ -1,0 +1,10 @@
+# Только для офлайн-инструментов из tools/, в проде не нужны и специально
+# не попадают в requirements.txt: pandas и pymupdf весят вместе около 100 МБ,
+# а работают раз в год — когда GUS правит классификацию или обновляется экспорт чата.
+#   pip install -r requirements-tools.txt
+pymupdf>=1.24      # разбор PDF классификации PKD (tools/pkd_build.py)
+pandas>=2.0        # чтение XLS с ключами PKD 2007 -> 2025
+xlrd>=2.0          # старый формат .xls от GUS
+ijson>=3.3         # потоковый разбор экспорта чата (tools/chat_prep.py)
+scikit-learn>=1.5  # кластеризация вопросов (tools/chat_analyze.py)
+telethon>=1.40     # своя выгрузка чата (tools/export_chat.py)
