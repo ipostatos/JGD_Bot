@@ -159,6 +159,29 @@ def _load_index():
     return _index
 
 
+_fingerprint = None
+
+
+def _corpus_fingerprint() -> str:
+    """Короткая подпись корпуса и настроек поиска.
+
+    Меняется, когда меняется то, из чего строится ответ: состав индекса,
+    его содержимое и параметры ретривера. Пересчитывается один раз за
+    процесс — индекс за время жизни процесса не меняется.
+    """
+    global _fingerprint
+    if _fingerprint is None:
+        idx = _load_index()
+        h = hashlib.sha256()
+        h.update(f"{len(idx)}|{CONTEXT_ARTICLES}|{BM25_K1}|{BM25_B}|"
+                 f"{TITLE_BOOST}|{MIN_RELEVANCE}".encode())
+        for a in idx:
+            h.update(a["id"].encode())
+            h.update(str(len(a["text"])).encode())
+        _fingerprint = h.hexdigest()[:16]
+    return _fingerprint
+
+
 def _db():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""CREATE TABLE IF NOT EXISTS ai_usage(
@@ -324,7 +347,12 @@ async def ask(user_id: int, question: str, profile: dict | None = None) -> dict:
     if len(question) < 5:
         return {"error": "Сформулируй вопрос подробнее"}
 
-    qhash = hashlib.sha256(question.lower().encode()).hexdigest()
+    # Ключ кэша зависит и от корпуса: иначе после пополнения базы знаний
+    # (или правки ретривера) сутки отдавался бы ответ, построенный по старому
+    # индексу. Ровно так и вышло 2026-07-24: ассистент уже знал ставки,
+    # но на вопрос про zdrowotna повторял вчерашнее «в гайде нет информации».
+    qhash = hashlib.sha256(
+        f"{question.lower()}|{_corpus_fingerprint()}".encode()).hexdigest()
     with _db() as c:
         row = c.execute("SELECT answer, sources, ts FROM ai_cache WHERE qhash=?",
                         (qhash,)).fetchone()

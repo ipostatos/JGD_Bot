@@ -98,3 +98,28 @@ def test_current_year_is_marked_by_the_calendar_not_by_the_file():
             assert "действуют сейчас" in text, eid
         else:
             assert "сейчас не действуют" in text, eid
+
+
+def test_cache_key_follows_the_corpus(tmp_path, monkeypatch):
+    """Пополнили базу знаний — старый ответ обязан перестать выдаваться.
+
+    Иначе сутки после выкатки человек получает ответ, построенный по корпусу,
+    в котором нужных сведений ещё не было; именно так ассистент упорно
+    отвечал «в гайде нет информации» про ставки, которые уже знал.
+    """
+    monkeypatch.setattr(ai, "DB_PATH", tmp_path / "t.db")
+    monkeypatch.setattr(ai, "ANTHROPIC_KEY", "")        # до сети не дойдём
+    before = ai._corpus_fingerprint()
+
+    # через monkeypatch, а не присваиванием: иначе подложный индекс утечёт
+    # в остальные тесты файла и они начнут падать от порядка запуска
+    monkeypatch.setattr(ai, "_index", ai._load_index() + [
+        {"id": "новая-запись", "title": "Новое", "text": "новая справка"}])
+    monkeypatch.setattr(ai, "_fingerprint", None)
+    after = ai._corpus_fingerprint()
+    assert before != after, "подпись корпуса не заметила новую запись"
+
+    # параметры ретривера — тоже часть ответа
+    monkeypatch.setattr(ai, "_fingerprint", None)
+    monkeypatch.setattr(ai, "BM25_B", ai.BM25_B + 0.1)
+    assert ai._corpus_fingerprint() != after
