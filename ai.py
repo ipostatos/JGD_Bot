@@ -34,11 +34,86 @@ ZUS_ERRORS_JSON = ROOT / "webapp" / "zus_errors.json"
 _index = None
 
 
+def _rates_entries() -> list[dict]:
+    """Ставки и лимиты по годам — из calc.py, а не переписанные руками.
+
+    «Сколько платить в этом году» — самый частый вопрос, и до 2026-07-24
+    ассистент отвечал на него «в гайде нет информации»: цифры жили в
+    rates_2026.json и в калькуляторах, а в корпус не попадали.
+
+    Текст собирается тем же расчётным ядром, что считает калькуляторы, —
+    иначе появилась бы вторая копия ставок, которая разъедется с первой на
+    следующей правке. Год в каждой записи назван явно: ответ, верный для
+    2026-го, для 2025-го уже неверен.
+    """
+    import calc
+    from datetime import date
+    out = []
+    for year in sorted(calc.YEARS["years"], reverse=True):
+        # «действуют сейчас» сверяем с календарём, а не с тем, что это самый
+        # свежий файл: если ставки на новый год ещё не завезли, объявлять
+        # прошлогодние текущими — прямая дезинформация
+        now = "действуют сейчас, текущий год. " if int(year) == date.today().year \
+              else "прошлый год, для сравнения; сейчас не действуют. "
+        y = calc.year_rates(int(year))
+        z, r = y["zdrowotna"], calc.YEARS["spoleczne_rates"]
+        pref = calc.spoleczne_monthly("pref", chorobowe=True, year=int(year))
+        duzy = calc.spoleczne_monthly("duzy", chorobowe=True, year=int(year))
+        tiers = ", ".join(
+            f"до {t['max_revenue']:,} zł выручки — {t['monthly']} zł".replace(",", " ")
+            if t["max_revenue"] else f"свыше — {t['monthly']} zł"
+            for t in z["ryczalt_tiers"])
+        out.append({
+            "id": f"rates-zus-{year}",
+            "title": f"Ставки ZUS {year} год",
+            "text": (
+                f"ставки взносы zus {year} год. {now}минимальная зарплата "
+                f"{y['min_wage']} zł. база preferencyjny zus (pref, малый зус) "
+                f"{y['pref_base']} zł, база duży zus (полный) {y['duzy_base']} zł. "
+                f"składki społeczne в месяц с chorobowe: pref {pref['total']} zł, "
+                f"duży {duzy['total']} zł. ставки: emerytalna {r['emerytalna']*100:.2f}%, "
+                f"rentowa {r['rentowa']*100:.2f}%, wypadkowa {r['wypadkowa']*100:.2f}%, "
+                f"chorobowa {r['chorobowa']*100:.2f}%, fp/fs {r['fp_fs']*100:.2f}%. "
+                f"минимальная składka zdrowotna {z['min_monthly']} zł в месяц. "
+                f"ulga na start: только zdrowotna, społeczne не платятся."
+            ).lower()})
+        out.append({
+            "id": f"rates-zdrow-{year}",
+            "title": f"Składka zdrowotna {year} по формам налога",
+            "text": (
+                f"składka zdrowotna здоровотна {year} год. {now}skala {z['skala_rate']*100:.0f}% "
+                f"от dochodu, liniowy {z['liniowy_rate']*100:.1f}% "
+                f"(вычет из налога не больше {z['liniowy_deduct_limit_year']} zł за год), "
+                f"ryczałt фиксированная по порогам: {tiers}; из дохода вычитается "
+                f"{z['ryczalt_deduct_share']*100:.0f}% уплаченной składki. "
+                f"минимальная składka zdrowotna минимум {z['min_monthly']} zł в месяц."
+            ).lower()})
+    p = calc.RATES.get("pit") or {}
+    out.append({
+        "id": "rates-pit-2026",
+        "title": f"Налоги и лимиты {calc.RATES['year']} год",
+        "text": (
+            f"налоги лимиты {calc.RATES['year']} год pit skala: свободная сумма "
+            f"{p.get('free_amount')} zł, порог {p.get('skala_threshold')} zł, "
+            f"ставки {p.get('skala_rate1', 0)*100:.0f}% и {p.get('skala_rate2', 0)*100:.0f}%. "
+            f"podatek liniowy {p.get('liniowy_rate', 0)*100:.0f}%. "
+            f"лимит зволнения с vat (zwolnienie podmiotowe) "
+            f"{calc.RATES.get('vat_exemption_limit')} zł выручки за год."
+        ).lower()})
+    return out
+
+
 def _load_index():
-    """Статьи гайда + KSeF + база ошибок ZUS + (если собран faq_miner-ом) FAQ чата."""
+    """Статьи гайда + ставки + KSeF + база ошибок ZUS + (если собран) FAQ чата."""
     global _index
     if _index is None:
         _index = json.loads(SEARCH_JSON.read_text(encoding="utf-8"))
+        try:
+            rates = _rates_entries()
+            _index = _index + rates
+            log.info("rates: +%d записей в индекс", len(rates))
+        except Exception as e:
+            log.warning("ставки не прочитаны: %s", e)
         try:
             import ksef
             entries = ksef.index_entries()
@@ -98,10 +173,25 @@ STOP = {"как", "что", "это", "для", "или", "нужно", "мож�
         "моя", "буду", "сколько", "когда", "какой", "какая", "почему"}
 
 
+BM25_K1 = 1.5      # насыщение частоты: десятое вхождение слова уже мало что добавляет
+BM25_B = 0.6       # насколько сильно штрафуем длину документа
+TITLE_BOOST = 8.0
+
+
 def retrieve(question: str, k: int = CONTEXT_ARTICLES, with_scores: bool = False):
-    """Топ-k статей: TF с потолком × IDF (редкие слова весят больше) + заголовок."""
+    """Топ-k статей: BM25 (частота с насыщением, нормировка по длине) + заголовок.
+
+    Нормировка по длине здесь не украшение. С простым потолком частоты статья
+    гайда на 20 000 знаков упиралась в него по каждому слову запроса, а
+    короткая справка со ставками — нет, и длинный текст выигрывал у точного
+    ответа просто размером: вопрос «база duży ZUS в 2025» приводил к обзорной
+    статье про бухгалтерию, а не к таблице ставок 2025 года.
+    """
     import math
-    raw = [w for w in re.findall(r"[a-zа-яё]{3,}", question.lower())
+    # год — значащее слово, а не мусор: «база duży ZUS в 2025» и тот же вопрос
+    # про 2026 обязаны находить разные записи. Токенизатор резал цифры целиком,
+    # и год молча исчезал из запроса
+    raw = [w for w in re.findall(r"[a-zа-яё]{3,}|(?:19|20)\d{2}", question.lower())
            if w not in STOP]
     # грубый стемминг: длинные слова матчим по префиксу (банка/банком → банк)
     words = list({w if len(w) <= 6 else w[:6] for w in raw})
@@ -113,11 +203,17 @@ def retrieve(question: str, k: int = CONTEXT_ARTICLES, with_scores: bool = False
     for w in words:
         df = sum(1 for a in idx if w in a["text"] or w in a["title"].lower())
         idf[w] = math.log((n_docs + 1) / (df + 1)) + 0.1
+    avg_len = sum(len(a["text"]) for a in idx) / max(n_docs, 1)
     scored = []
     for art in idx:
         title = art["title"].lower()
-        score = sum(idf[w] * (min(art["text"].count(w), 8) + 8 * title.count(w))
-                    for w in words)
+        norm = BM25_K1 * (1 - BM25_B + BM25_B * len(art["text"]) / max(avg_len, 1))
+        score = 0.0
+        for w in words:
+            tf = art["text"].count(w)
+            if tf:
+                score += idf[w] * tf * (BM25_K1 + 1) / (tf + norm)
+            score += idf[w] * TITLE_BOOST * title.count(w)
         if score > 0:
             scored.append((score, art))
     scored.sort(key=lambda x: -x[0])
@@ -162,7 +258,11 @@ GENERIC = re.compile(
 
 # Профильные вопросы дают ≥ 20 (медиана 28), мусор ≤ 20 (медиана 13):
 # порог измерен на наборах из test_ai_gate.py, а не выдуман.
-MIN_RELEVANCE = 20.0
+# Порог измерен на наборах из test_ai_gate, а не выдуман. После перехода
+# ретривера на BM25 шкала изменилась (нормировка по длине убрала перекос
+# в пользу длинных статей): профильные вопросы дают 13.7…60.6, мусор — до 10.7.
+# 12.0 стоит между ними; тест сторожит и порядок, и запас с обеих сторон.
+MIN_RELEVANCE = 12.0
 
 
 def gate(question: str, top_score: float) -> str | None:

@@ -56,10 +56,17 @@ def test_injection_refused_even_with_domain_word():
 
 
 def test_threshold_separates_the_two_sets():
-    """Порог измерен, а не выдуман: профильные ≥ 20, мусор ниже."""
+    """Порог измерен, а не выдуман: он обязан лежать между наборами с запасом.
+
+    Запас проверяем отдельно от порядка: если однажды худший профильный
+    вопрос окажется вплотную к порогу, это надо увидеть до того, как живой
+    человек получит отказ на нормальный вопрос.
+    """
     on = [ai.retrieve(q, with_scores=True)[1] for q in ON_TOPIC]
     off = [ai.retrieve(q, with_scores=True)[1] for q in OFF_TOPIC]
     assert min(on) >= ai.MIN_RELEVANCE > max(off)
+    assert min(on) >= ai.MIN_RELEVANCE * 1.1, f"профильные впритык: {min(on):.1f}"
+    assert max(off) <= ai.MIN_RELEVANCE * 0.9, f"мусор впритык: {max(off):.1f}"
 
 
 def test_refusal_costs_nothing(monkeypatch):
