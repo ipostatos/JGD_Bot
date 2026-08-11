@@ -20,6 +20,7 @@ VAT». Проверено живьём на реальном NIP zwolnionego. П
 Без ключей модуль работает в урезанном режиме: см. `sources` в ответе.
 """
 import asyncio
+import html
 import json
 import logging
 import os
@@ -30,6 +31,8 @@ from datetime import date
 from pathlib import Path
 
 import httpx
+
+from pkd import normalize_code
 
 log = logging.getLogger("jdg.registries")
 
@@ -83,10 +86,23 @@ def _db():
     return conn
 
 
-# Состав полей карточки. Меняем при каждом новом поле: иначе в день выката
-# человек видит вчерашний ответ без новинок и решает, что фича не работает
-# (ровно так после выкатки ставок вёл себя кэш ассистента).
-CACHE_SCHEMA = 2
+# Схема кэша = состав полей карточки, которую строит check_nip. Кэш годен,
+# только когда состав записи совпадает с сегодняшним CARD_FIELDS: добавил поле —
+# вчерашние записи перестают находиться сами, без ручного «поднять счётчик»
+# (иначе в день выката человек видит ответ без новинок и решает, что фича
+# не работает — так вёл себя кэш ассистента до _corpus_fingerprint).
+# Забытый CARD_FIELDS ломается безопасно: кэш перестаёт попадать вовсе,
+# а рассинхрон с реальной карточкой ловит тест на равенство составов.
+CARD_FIELDS = frozenset({
+    "nip", "valid", "cached", "checked_at", "name", "vat_status", "activity",
+    "regon", "krs", "pkd", "pkd_main", "pkd_source", "pkd_version", "pkd_regon",
+    "address", "registered", "accounts", "accounts_total", "vies", "signals",
+    "score", "level", "sources",
+})
+
+
+def _cache_schema() -> str:
+    return ",".join(sorted(CARD_FIELDS))
 
 
 def _cache_get(nip: str) -> dict | None:
@@ -96,14 +112,15 @@ def _cache_get(nip: str) -> dict | None:
     if not row:
         return None
     data = json.loads(row[0])
-    return data if data.pop("_schema", None) == CACHE_SCHEMA else None
+    return data if data.pop("_schema", None) == _cache_schema() else None
 
 
 def _cache_put(nip: str, payload: dict):
     with _db() as c:
         c.execute("INSERT OR REPLACE INTO nip_cache VALUES(?,?,?)",
                   (nip, date.today().isoformat(),
-                   json.dumps(payload | {"_schema": CACHE_SCHEMA}, ensure_ascii=False)))
+                   json.dumps(payload | {"_schema": _cache_schema()},
+                              ensure_ascii=False)))
         c.execute("DELETE FROM nip_cache WHERE day < ?", (date.today().isoformat(),))
 
 
@@ -150,8 +167,16 @@ def _gus_envelope(action: str, body: str) -> bytes:
 
 
 def _tag(xml: str, name: str) -> str | None:
+    """Значение тега с одним уровнем HTML-разэкранирования.
+
+    SOAP-ответ GUS экранирован дважды: конверт прячет внутренний XML
+    (`&lt;dane&gt;`), а тот — свои значения (`&amp;` в названии фирмы).
+    Разэкранируем на каждом уровне извлечения по разу, и «STAL &amp; BETON»
+    доходит до карточки как «STAL & BETON», а не как «STAL &amp;amp; BETON» —
+    ручной replace только для &lt;/&gt; терял все остальные сущности.
+    """
     m = re.search(rf"<{name}>(.*?)</{name}>", xml, re.S)
-    return m.group(1).strip() if m else None
+    return html.unescape(m.group(1)).strip() if m else None
 
 
 # Лимиты GUS на один ключ (официальные, по часам суток): секунда, минута, час.
@@ -188,13 +213,34 @@ def _gus_allow() -> bool:
     return True
 
 
+async def _gus_slot(max_wait: float = 2.5) -> bool:
+    """Ждём окно в лимите вместо мгновенного отказа.
+
+    Одна проверка NIP — это 3–5 SOAP-вызовов при потолке «3 в секунду»:
+    жёсткий отказ срезал запасной отчёт PKD на холодной сессии и целиком
+    ронял источник GUS у второго одновременного пользователя. Секундное
+    окно лечится ожиданием меньше секунды; минутный и часовой лимиты
+    ожиданием не лечатся — по истечении max_wait честно сдаёмся.
+    """
+    deadline = time.monotonic() + max_wait
+    while not _gus_allow():
+        if time.monotonic() >= deadline:
+            return False
+        await asyncio.sleep(0.3)
+    return True
+
+
+class GusBusy(Exception):
+    """Лимит ключа или нет сессии: PKD не «отсутствуют», а не спрошены."""
+
+
 async def _gus_sid(cl: httpx.AsyncClient, key: str, headers: dict) -> str | None:
     """Сессия GUS переиспользуется: логиниться на каждый запрос — прямой путь
     в «слишком много обращений», которые инструкция запрещает отдельным пунктом."""
     now = time.time()
     if _gus_session["sid"] and now - _gus_session["born"] < _GUS_SESSION_TTL:
         return _gus_session["sid"]
-    if not _gus_allow():
+    if not await _gus_slot():
         return None
     r = await cl.post(GUS_BASE, headers=headers, content=_gus_envelope(
         "Zaloguj", f"<ns:Zaloguj><ns:pKluczUzytkownika>{key}</ns:pKluczUzytkownika></ns:Zaloguj>"))
@@ -215,7 +261,7 @@ async def gus_lookup(cl: httpx.AsyncClient, nip: str) -> dict | None:
     if not sid:
         log.warning("GUS: нет сессии (логин не дал sid либо упёрлись в лимит ключа)")
         return None
-    if not _gus_allow():
+    if not await _gus_slot():
         log.warning("GUS: свой лимит запросов исчерпан, пропускаем реестр")
         return None
     r = await cl.post(GUS_BASE, headers=dict(headers, sid=sid), content=_gus_envelope(
@@ -223,19 +269,18 @@ async def gus_lookup(cl: httpx.AsyncClient, nip: str) -> dict | None:
         f"<ns:DaneSzukajPodmioty><ns:pParametryWyszukiwania>"
         f"<dat:Nip>{nip}</dat:Nip></ns:pParametryWyszukiwania></ns:DaneSzukajPodmioty>"))
     r.raise_for_status()
-    payload = (_tag(r.text, "DaneSzukajPodmiotyResult") or "").replace("&lt;", "<").replace("&gt;", ">")
+    payload = _tag(r.text, "DaneSzukajPodmiotyResult") or ""
     if not _tag(payload, "Regon") and _gus_session["sid"]:
         # пустой ответ бывает и когда сессия протухла раньше нашего TTL —
         # один раз перелогиниваемся, прежде чем считать, что записи нет
         _gus_session.update(sid=None, born=0.0)
         sid = await _gus_sid(cl, key, headers)
-        if sid and _gus_allow():
+        if sid and await _gus_slot():
             r = await cl.post(GUS_BASE, headers=dict(headers, sid=sid), content=_gus_envelope(
                 "DaneSzukajPodmioty",
                 f"<ns:DaneSzukajPodmioty><ns:pParametryWyszukiwania>"
                 f"<dat:Nip>{nip}</dat:Nip></ns:pParametryWyszukiwania></ns:DaneSzukajPodmioty>"))
-            payload = (_tag(r.text, "DaneSzukajPodmiotyResult") or "").replace(
-                "&lt;", "<").replace("&gt;", ">")
+            payload = _tag(r.text, "DaneSzukajPodmiotyResult") or ""
     if not _tag(payload, "Regon"):
         return None
     street = " ".join(x for x in (_tag(payload, "Ulica"), _tag(payload, "NrNieruchomosci")) if x)
@@ -248,12 +293,13 @@ async def gus_lookup(cl: httpx.AsyncClient, nip: str) -> dict | None:
            "address": addr, "type": _tag(payload, "Typ"),
            "closed": _tag(payload, "DataZakonczeniaDzialalnosci") or None}
     # PKD — отдельный отчёт, ещё один вызов. Не отвечает или упёрлись в лимит —
-    # отдаём базовую карточку: коды тут приятное дополнение, а не суть ответа
+    # отдаём базовую карточку, но помечаем её неполной: «не спросили» и «кодов
+    # нет» — разные ответы, и неполную карточку нельзя класть в суточный кэш
     try:
         codes = await gus_pkd(cl, out["regon"], out["type"])
-    except httpx.HTTPError as e:
+    except (httpx.HTTPError, GusBusy) as e:
         log.warning("GUS PKD: %s", e)
-        codes = None
+        codes, out["pkd_incomplete"] = None, True
     if codes:
         main = next((c for c in codes["codes"] if c["main"]), None)
         out |= {"pkd": [c["code"] for c in codes["codes"]],
@@ -276,13 +322,6 @@ _GUS_PKD_FALLBACK = {"F": "BIR12OsPrawnaPkd", "P": "BIR12OsFizycznaPkd"}
 _GUS_ROWS = re.compile(r"<dane>(.*?)</dane>", re.S)
 
 
-def pkd_dots(code: str) -> str:
-    """GUS отдаёт коды без точек (`6210B`), справочник хранит с точками (`62.10.B`).
-    Формат кодов — забота справочника, поэтому правило одно на весь проект."""
-    import pkd
-    return pkd.normalize_code(code)
-
-
 def _pl_name(name: str) -> str:
     """Названия в REGON набраны капсом — для UI это крик, а не текст."""
     name = (name or "").strip()
@@ -291,7 +330,7 @@ def _pl_name(name: str) -> str:
 
 def _gus_field(row: str, field: str) -> str | None:
     m = re.search(rf"<[A-Za-z]+_{field}>(.*?)</[A-Za-z]+_{field}>", row, re.S)
-    return m.group(1).strip() if m else None
+    return html.unescape(m.group(1)).strip() if m else None
 
 
 def gus_pkd_parse(payload: str) -> dict | None:
@@ -305,7 +344,8 @@ def gus_pkd_parse(payload: str) -> dict | None:
     by_code: dict[str, dict] = {}
     versions: set[str] = set()
     for row in _GUS_ROWS.findall(payload):
-        code = pkd_dots(_gus_field(row, "pkdKod") or "")
+        # коды в отчётах без точек (`6210B`) — к виду справочника (`62.10.B`)
+        code = normalize_code(_gus_field(row, "pkdKod") or "")
         if not code:
             continue
         version = _gus_field(row, "pkdWersja")
@@ -326,25 +366,31 @@ def gus_pkd_parse(payload: str) -> dict | None:
 
 
 async def gus_pkd(cl: httpx.AsyncClient, regon: str | None, typ: str | None) -> dict | None:
-    """Коды PKD субъекта из REGON вместе с версией классификации (2007/2025)."""
+    """Коды PKD субъекта из REGON вместе с версией классификации (2007/2025).
+
+    Возвращает None, только когда GUS ответил «данных нет». Лимит ключа или
+    отсутствие сессии — это `GusBusy`: коды не «отсутствуют», а не спрошены,
+    и вызывающий не должен путать эти два исхода (второй нельзя кэшировать).
+    """
     key = os.environ.get("GUS_BIR_KEY")
     if not key or not regon:
         return None
     headers = {"Content-Type": "application/soap+xml; charset=utf-8"}
     sid = await _gus_sid(cl, key, headers)
     if not sid:
-        return None
+        raise GusBusy("нет сессии GUS")
     typ = (typ or "").upper()
     for report in (_GUS_PKD_REPORTS.get(typ, "BIR12OsPrawnaPkd"), _GUS_PKD_FALLBACK.get(typ)):
-        if not report or not _gus_allow():
+        if not report:
             break
+        if not await _gus_slot():
+            raise GusBusy(f"лимит ключа, отчёт {report} не спрошен")
         r = await cl.post(GUS_BASE, headers=dict(headers, sid=sid), content=_gus_envelope(
             "DanePobierzPelnyRaport",
             f"<ns:DanePobierzPelnyRaport><ns:pRegon>{regon}</ns:pRegon>"
             f"<ns:pNazwaRaportu>{report}</ns:pNazwaRaportu></ns:DanePobierzPelnyRaport>"))
         r.raise_for_status()
-        payload = (_tag(r.text, "DanePobierzPelnyRaportResult") or "").replace(
-            "&lt;", "<").replace("&gt;", ">")
+        payload = _tag(r.text, "DanePobierzPelnyRaportResult") or ""
         data = gus_pkd_parse(payload)
         if data:
             return dict(data, report=report)
@@ -401,18 +447,19 @@ async def ceidg_lookup(cl: httpx.AsyncClient, nip: str) -> dict | None:
             log.warning("CEIDG detail: %s", e)
     src = {**f, **detail}
 
-    # CEIDG пишет коды одной строкой (`9311Z`) — приводим к виду справочника,
-    # иначе они не совпадут ни с кодами из REGON, ни с самой классификацией
-    pkd = [pkd_dots(p.get("kod") if isinstance(p, dict) else p)
+    # CEIDG пишет коды одной строкой (`9311Z`) — к виду справочника; список
+    # НЕ режем: обрезка на 10 кодах заставляла сверку с REGON «находить»
+    # расхождение у любой записи, где кодов больше десяти
+    pkd = [normalize_code(p.get("kod") if isinstance(p, dict) else p)
            for p in (src.get("pkd") or [])]
     main = src.get("pkdGlowny") or {}
-    main_code = pkd_dots(main.get("kod") if isinstance(main, dict) else main)
+    main_code = normalize_code(main.get("kod") if isinstance(main, dict) else main)
     if main_code:                                    # основной PKD — первым
         pkd = [main_code] + [p for p in pkd if p != main_code]
     return {"status": src.get("status"), "name": src.get("nazwa"),
             "started": src.get("dataRozpoczecia"), "resumed": src.get("dataWznowienia"),
             "suspended": src.get("dataZawieszenia"), "ended": src.get("dataZakonczenia"),
-            "pkd": [p for p in pkd if p][:10],
+            "pkd": [p for p in pkd if p],
             "pkd_main": f"{main_code} · {main.get('nazwa')}" if main_code and main.get("nazwa")
                         else (main_code or ""),
             "address": _ceidg_address(src.get("adresDzialalnosci")),
@@ -542,8 +589,11 @@ async def check_nip(raw_nip: str) -> dict:
         "sources": sources,
     }
     # кэшируем на сутки только полный результат: иначе разовый таймаут источника
-    # застрянет в кэше на день и будет выглядеть как факт о контрагенте
-    if any(v == "ok" for v in sources.values()) and "error" not in sources.values():
+    # застрянет в кэше на день и будет выглядеть как факт о контрагенте.
+    # pkd_incomplete — отчёт PKD не спросили (лимит ключа): карточка живая,
+    # но класть её в кэш нельзя, иначе REGON-блок пропадает для NIP до завтра
+    if (any(v == "ok" for v in sources.values()) and "error" not in sources.values()
+            and not (gus or {}).get("pkd_incomplete")):
         _cache_put(nip, out)
     return out
 

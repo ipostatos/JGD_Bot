@@ -393,13 +393,11 @@ def audit(codes: list[str], regon: dict | None = None, source: str = "ceidg") ->
     большинство номеров в PKD 2007 и PKD 2025 совпадает.
     """
     idx = index()
+    # 🔴 коды из CEIDG приходят без точек (`9311Z`), и без нормализации
+    # аудит объявлял «такого кода нет» про каждый реальный код записи
+    normalized = [c for c in (normalize_code(raw) for raw in codes) if c]
     items, outdated = [], 0
-    for raw in codes[:20]:
-        # 🔴 коды из CEIDG приходят без точек (`9311Z`), и без нормализации
-        # аудит объявлял «такого кода нет» про каждый реальный код записи
-        code = normalize_code(raw)
-        if not code:
-            continue
+    for code in normalized[:20]:      # карточек в разборе не больше 20
         if code in idx.codes:
             items.append(dict(idx.analyse(code), status="ok"))
             continue
@@ -412,47 +410,59 @@ def audit(codes: list[str], regon: dict | None = None, source: str = "ceidg") ->
         else:
             items.append({"code": code, "name": "", "status": "unknown"})
     summary = ("Все коды уже в новой классификации." if not outdated else
-               f"Кодов старой классификации: {outdated}. PKD 2007 действует "
-               f"до 31.12.2026 — после этой даты GUS перекодирует запись сам, "
-               f"по общим ключам и без разбора того, чем вы занимаетесь. "
-               f"Обновить можно самому: biznes.gov.pl → «zmień dane w CEIDG».")
+               f"Кодов старой классификации: {outdated}. {_OLD_TAIL} {_FIX_ADVICE}")
     vat = [i["code"] for i in items
            if any(f["level"] == "warn" for f in i.get("flags", []))]
     out = {"items": items, "outdated": outdated, "summary": summary,
            "vat_warning_codes": vat, "note": _rate_note(), "source": source}
     if regon:
-        out["regon"] = _regon_block(items, outdated, regon, source)
+        # в сверку с REGON идёт ПОЛНЫЙ список, а не 20 карточек разбора
+        out["regon"] = _regon_block(normalized, outdated, regon, source)
     return out
 
 
+_OLD_TAIL = ("PKD 2007 действует до 31.12.2026 — после этой даты GUS "
+             "перекодирует запись сам, по общим ключам и без разбора того, "
+             "чем вы занимаетесь.")
+# Совет обязан быть верен и для JDG, и для юрлиц: коды в аудит приходят
+# и из REGON (юрлица, которых в CEIDG нет), и из CEIDG при его аварии —
+# отправлять spółkę в CEIDG или гадать о типе субъекта здесь нельзя
+_FIX_ADVICE = ("Обновить можно самому, пока это не случилось: JDG — на "
+               "biznes.gov.pl («zmień dane w CEIDG»), юрлица — заявлением "
+               "об изменении данных в KRS.")
+
 REGON_NOTE = {
     "2025": "REGON: запись уже переведена на новую классификацию PKD 2025.",
-    "2007": "REGON: запись всё ещё в классификации PKD 2007. Она действует "
-            "до 31.12.2026 — потом GUS перекодирует запись сам, по общим ключам "
-            "и без разбора того, чем вы занимаетесь. Выбрать коды осознанно "
-            "можно только пока это не случилось: biznes.gov.pl → «zmień dane w CEIDG».",
+    "2007": f"REGON: запись всё ещё в классификации PKD 2007. {_OLD_TAIL} {_FIX_ADVICE}",
+    # перекодировка на полпути: часть кодов уже 2025, часть ещё 2007 —
+    # это тоже «в записи остались старые коды», а не нейтральная справка
+    "2007+2025": ("REGON: перекодировка записи не завершена — в ней коды сразу "
+                  f"двух классификаций, и часть ещё в PKD 2007. {_OLD_TAIL} {_FIX_ADVICE}"),
 }
 
 
-def _regon_block(items: list[dict], outdated: int, regon: dict, source: str) -> dict:
+def _regon_block(my_codes: list[str], outdated: int, regon: dict, source: str) -> dict:
     """Что о записи говорит REGON и совпадает ли она с CEIDG.
 
     Сравнивать списки кодов имеет смысл только внутри одной классификации:
     иначе «реестры разошлись» покажет разницу между PKD 2007 и PKD 2025,
     то есть нормальный ход перекодировки, а не ошибку в записи.
+    `my_codes` — ПОЛНЫЙ список кодов записи: diff на усечённом списке
+    объявлял «реестры разошлись» любой записи, где кодов больше среза.
     """
     version = regon.get("version")
     block = {"version": version,
+             # предупреждать надо про любую версию с «2007» внутри, а не только
+             # про чистую: у смешанной записи старые коды так же сгорят 31.12.2026
+             "outdated_version": bool(version and "2007" in version),
              "codes": [c for c in (regon.get("codes") or [])],
-             "note": REGON_NOTE.get(version or "") or (
-                 f"REGON: у записи коды сразу двух классификаций "
-                 f"({(version or '').replace('+', ' и ')})." if version else
-                 "REGON не сказал, в какой классификации записаны коды.")}
+             "note": REGON_NOTE.get(version or "")
+                     or "REGON не сказал, в какой классификации записаны коды."}
     if source != "ceidg" or version != "2025" or outdated:
         # сравнивать нечего: либо коды и так пришли из REGON, либо классификации
         # у реестров разные — расхождение в этом случае ничего не значит
         return block
-    mine = {i["code"] for i in items}
+    mine = set(my_codes)
     theirs = {c["code"] for c in block["codes"]}
     block["only_in_ceidg"] = sorted(mine - theirs)
     block["only_in_regon"] = sorted(theirs - mine)

@@ -85,12 +85,20 @@ document.querySelectorAll('.ex button').forEach(b => {
  * ли списки кодов у двух реестров. */
 function regonBlock(d) {
   const r = d.regon;
+  // «коды пришли из REGON» само по себе НЕ значит «в CEIDG записи нет»:
+  // так же выглядит авария CEIDG или неподключённый токен — за факт
+  // это можно выдавать только при честном «нет записи» от самого реестра
+  const FROM_GUS = {
+    empty: 'Коды взяты из REGON: в CEIDG этого NIP нет — так и должно быть у юрлиц, они сидят в KRS.',
+    error: 'Коды взяты из REGON: CEIDG сейчас не отвечает, его список проверить не вышло.',
+    off: 'Коды взяты из REGON: источник CEIDG не подключён.',
+  };
   const from = d.source === 'gus'
     ? `<div class="pkd-flag note"><span class="fi" data-icon="info"></span>
-       <span>Коды взяты из REGON: в CEIDG этого NIP нет — так и должно быть
-       у юрлиц, они сидят в KRS.</span></div>` : '';
+       <span>${esc(FROM_GUS[d.ceidg_state] || 'Коды взяты из REGON.')}</span></div>` : '';
   if (!r) return from;
-  const old = r.version === '2007';
+  // «2007+2025» (перекодировка на полпути) — то же предупреждение, что чистый 2007
+  const old = r.outdated_version || (r.version || '').includes('2007');
   const only = (list, where) => (list && list.length)
     ? ` Только в ${where}: ${list.join(', ')}.` : '';
   const diff = r.diff_note

@@ -267,6 +267,19 @@ def test_my_codes_show_what_regon_says(browser, base_url):
         assert "31.12.2026" in text and "разошлись" not in text
         assert page.locator("#myout .pkd-flag.warn").count() >= 1
 
+        # коды из REGON при аварии CEIDG: сбой не выдаётся за «вы юрлицо из KRS»
+        page.unroute("**/api/pkd/my")
+        text = answer(_my_codes(version="2025", diff=False,
+                                source="gus", ceidg_state="error"))
+        assert "CEIDG сейчас не отвечает" in text
+        assert "юрлиц" not in text
+
+        # а честное «записи нет» от самого реестра — выдаётся
+        page.unroute("**/api/pkd/my")
+        text = answer(_my_codes(version="2025", diff=False,
+                                source="gus", ceidg_state="empty"))
+        assert "юрлиц" in text and "KRS" in text
+
         icons = page.eval_on_selector_all(
             "#myout .fi", "els => els.map(e => e.innerHTML.length)")
         assert icons and all(n > 0 for n in icons), "иконка не отрисовалась"
@@ -275,12 +288,13 @@ def test_my_codes_show_what_regon_says(browser, base_url):
         ctx.close()
 
 
-def _my_codes(version, diff):
-    """Ответ ручки в двух состояниях, которые бывают на самом деле: расхождение
-    реестров считается только внутри одной классификации."""
+def _my_codes(version, diff, source="ceidg", ceidg_state="ok"):
+    """Ответ ручки в состояниях, которые бывают на самом деле: расхождение
+    реестров считается только внутри одной классификации, а «коды из REGON»
+    случается и у юрлиц (в CEIDG записи нет), и при аварии CEIDG."""
     import json
 
-    regon = {"version": version, "codes": [],
+    regon = {"version": version, "outdated_version": "2007" in version, "codes": [],
              "note": ("REGON: запись уже переведена на новую классификацию PKD 2025."
                       if version == "2025" else
                       "REGON: запись всё ещё в классификации PKD 2007. Она действует "
@@ -289,7 +303,8 @@ def _my_codes(version, diff):
         regon |= {"only_in_ceidg": ["96.21.Z"], "only_in_regon": ["70.20.Z"],
                   "diff_note": "Списки кодов в CEIDG и REGON разошлись."}
     return json.dumps({
-        "nip": "1133117581", "name": "Test", "outdated": 0, "source": "ceidg",
+        "nip": "1133117581", "name": "Test", "outdated": 0, "source": source,
+        "ceidg_state": ceidg_state,
         "summary": "Все коды уже в новой классификации.", "note": "",
         "vat_warning_codes": [], "regon": regon,
         "items": [{"code": "62.10.B", "name": "Programowanie", "status": "ok",

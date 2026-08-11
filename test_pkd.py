@@ -144,6 +144,42 @@ def test_audit_reports_divergence_between_registers():
     assert same["regon"]["only_in_ceidg"] == [] and "diff_note" not in same["regon"]
 
 
+def test_audit_diff_uses_full_code_list_not_the_display_cap():
+    """Разбор показывает не больше 20 карточек, но сверка с REGON обязана идти
+    по полному списку: diff на срезе объявлял «реестры разошлись» любой записи,
+    где кодов больше среза (в проде это делал кап CEIDG на 10)."""
+    many = [f"{i:02d}.99.Z" for i in range(1, 26)]      # 25 кодов, статус не важен
+    r = pkd.audit(many, _regon("2025", *many))
+    assert len(r["items"]) == 20                        # карточек — по капу
+    assert r["regon"]["only_in_ceidg"] == []            # а сверка — честная
+    assert r["regon"]["only_in_regon"] == []
+    assert "diff_note" not in r["regon"]
+
+
+def test_audit_mixed_classification_is_still_a_warning():
+    """«2007+2025» — перекодировка на полпути: старые коды в записи так же
+    сгорят 31.12.2026, нейтральной справкой это подавать нельзя."""
+    r = pkd.audit(["62.10.B"], _regon("2007+2025", "62.10.B"))
+    block = r["regon"]
+    assert block["outdated_version"] is True
+    assert "31.12.2026" in block["note"] and "не завершена" in block["note"]
+    assert "only_in_ceidg" not in block    # классификации разные — diff молчит
+
+    new = pkd.audit(["62.10.B"], _regon("2025", "62.10.B"))
+    assert new["regon"]["outdated_version"] is False
+
+
+def test_audit_advice_fits_every_subject_type():
+    """Коды в разбор приходят и из CEIDG (JDG), и из REGON (юрлица, которых
+    в CEIDG нет) — совет «поменяй в CEIDG» без пути для KRS отправлял юрлицо
+    в реестр, которым оно не может пользоваться."""
+    for source in ("ceidg", "gus"):
+        r = pkd.audit(["62.10.B"], _regon("2007", "62.10.B"), source=source)
+        assert "KRS" in r["regon"]["note"] and "CEIDG" in r["regon"]["note"]
+    old = pkd.audit(["62.01.Z"])            # и в summary про устаревшие коды
+    assert "KRS" in old["summary"]
+
+
 def test_audit_does_not_compare_across_classifications():
     """Разные классификации в реестрах — это ход перекодировки, а не ошибка:
     сравнение кодов 2007 с кодами 2025 показало бы разницу самих справочников."""

@@ -716,13 +716,26 @@ async def api_pkd_my(req: Request):
     if not d.get("valid"):
         raise HTTPException(400, d.get("error", "Не похоже на NIP."))
     codes = d.get("pkd") or []
+    src = d.get("sources") or {}
     if not codes:
-        return {"nip": d["nip"], "name": d.get("name"), "codes": [],
-                "note": "Ни в CEIDG, ни в REGON кодов по этому NIP не видно. "
-                        "Так бывает при закрытой записи и когда реестры "
-                        "не подключены ключами."}
+        # авария реестра — не факт о записи: «кодов не видно» писать можно
+        # только когда источники реально ответили пусто (та же грабля, что
+        # CEIDG-przerwa 2026-07-23 в карточке контрагента)
+        if "error" in (src.get("ceidg"), src.get("gus")):
+            note = ("Реестры сейчас не отвечают, коды получить не вышло — "
+                    "это сбой источника, а не факт о записи. Попробуй позже.")
+        elif src.get("ceidg") == "off" and src.get("gus") == "off":
+            note = "Источники кодов (CEIDG, REGON) не подключены ключами."
+        else:
+            note = ("В CEIDG и REGON кодов по этому NIP не видно. "
+                    "Так бывает при закрытой записи.")
+        return {"nip": d["nip"], "name": d.get("name"), "codes": [], "note": note}
     regon = {"version": d.get("pkd_version"), "codes": d.get("pkd_regon") or []}
     return {"nip": d["nip"], "name": d.get("name"),
+            # состояние CEIDG отдаём отдельно: «коды пришли из REGON» бывает
+            # и потому, что записи нет (юрлицо), и потому, что CEIDG упал —
+            # UI не должен выдавать сбой за факт «вы юрлицо из KRS»
+            "ceidg_state": src.get("ceidg"),
             **await asyncio.to_thread(pkd.audit, codes,
                                       regon if regon["codes"] else None,
                                       d.get("pkd_source") or "ceidg")}

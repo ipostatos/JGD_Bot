@@ -5,6 +5,7 @@ Live-тесты ходят в интернет; отключаются пере�
 import asyncio
 import os
 import re
+import time
 from pathlib import Path
 
 import httpx
@@ -206,13 +207,18 @@ def test_live_ceidg_gives_data_for_zwolniony():
 GUS_FIXTURE = Path(__file__).resolve().parent / "tests" / "fixtures" / "gus"
 
 
-def test_pkd_dots():
-    """GUS отдаёт код одной строкой, справочник — с точками."""
-    assert R.pkd_dots("6210B") == "62.10.B"
-    assert R.pkd_dots("9311Z") == "93.11.Z"
-    assert R.pkd_dots("62.10.B") == "62.10.B"
-    assert R.pkd_dots("1920") == "19.20"
-    assert R.pkd_dots("") == "" and R.pkd_dots(None) == ""
+def test_tag_unescapes_entities_per_level():
+    """SOAP GUS экранирован дважды: конверт прячет XML, XML — свои значения.
+    Ручной replace только для &lt;/&gt; оставлял «STAL &amp;amp; BETON» в карточке."""
+    envelope = ("<s><DaneSzukajPodmiotyResult>"
+                "&lt;dane&gt;&lt;Nazwa&gt;STAL &amp;amp; BETON &amp;quot;X&amp;quot;"
+                "&lt;/Nazwa&gt;&lt;/dane&gt;"
+                "</DaneSzukajPodmiotyResult></s>")
+    payload = R._tag(envelope, "DaneSzukajPodmiotyResult")
+    assert "<Nazwa>" in payload                      # первый уровень: теги ожили
+    assert R._tag(payload, "Nazwa") == 'STAL & BETON "X"'   # второй: значение чистое
+    row = "<dane><praw_pkdNazwa>PRODUKCJA &amp; HANDEL</praw_pkdNazwa></dane>"
+    assert R._gus_field(row, "pkdNazwa") == "PRODUKCJA & HANDEL"
 
 
 def test_gus_pkd_parse_legal_entity():
@@ -283,13 +289,30 @@ def test_gus_pkd_report_chosen_by_subject_type(monkeypatch):
 
 def test_cache_of_previous_shape_is_ignored(tmp_path, monkeypatch):
     """Карточка старого состава в суточном кэше не должна пережить выкатку:
-    иначе в день релиза человек видит ответ без новых полей."""
+    иначе в день релиза человек видит ответ без новых полей. Схема выводится
+    из CARD_FIELDS, а не из ручного счётчика, который легко забыть поднять."""
     monkeypatch.setattr(R, "DB_PATH", tmp_path / "cache.db")
     R._cache_put("7740001454", {"nip": "7740001454", "pkd_version": "2007"})
     assert R._cache_get("7740001454")["pkd_version"] == "2007"
     assert "_schema" not in R._cache_get("7740001454")   # служебное поле наружу не течёт
-    monkeypatch.setattr(R, "CACHE_SCHEMA", R.CACHE_SCHEMA + 1)
+    # выкатили поле → CARD_FIELDS вырос → вчерашняя запись перестала находиться
+    monkeypatch.setattr(R, "CARD_FIELDS", R.CARD_FIELDS | {"new_field"})
     assert R._cache_get("7740001454") is None
+
+
+def test_card_fields_match_real_card(monkeypatch):
+    """CARD_FIELDS обязан совпадать с настоящей карточкой check_nip: это он
+    инвалидирует кэш при новом поле, и забытое обновление должно падать здесь,
+    а не жить сутками пустой строкой у людей."""
+    async def none_src(cl, nip): return None
+
+    for name in ("wl_subject", "vies_check", "ceidg_lookup", "gus_lookup"):
+        monkeypatch.setattr(R, name, none_src)
+    monkeypatch.setattr(R, "_cache_get", lambda nip: None)
+    monkeypatch.setattr(R, "_cache_put", lambda nip, payload: None)
+
+    res = asyncio.run(R.check_nip("7740001454"))
+    assert set(res) == set(R.CARD_FIELDS)
 
 
 def test_check_nip_falls_back_to_regon_codes(monkeypatch):
@@ -345,6 +368,57 @@ def test_check_nip_prefers_ceidg_codes(monkeypatch):
     assert res["pkd"] == ["62.10.B"] and res["pkd_source"] == "ceidg"
     assert res["pkd_version"] == "2025"
     assert [c["code"] for c in res["pkd_regon"]] == ["62.10.B", "93.11.Z"]
+
+
+def test_gus_slot_waits_out_the_second_window():
+    """Секундное окно лимита лечится ожиданием, а не отказом: одна проверка NIP
+    стоит 3–5 вызовов при потолке «3 в секунду», и мгновенный отказ срезал
+    запасной отчёт и второго одновременного пользователя."""
+    now = time.time()
+    R._gus_calls.extend([now, now, now])            # секундный бюджет выбран
+    assert asyncio.run(R._gus_slot(max_wait=2.0)) is True   # дождались окна
+
+    R._gus_calls.clear()
+    R._gus_calls.extend([now - 30] * 20000)         # часовой бюджет: ждать нечем
+    assert asyncio.run(R._gus_slot(max_wait=0.4)) is False
+
+
+def test_busy_gus_pkd_is_not_cached_as_a_card_without_codes(monkeypatch):
+    """«Не спросили» и «кодов нет» — разные ответы: карточка без PKD из-за
+    лимита ключа не должна оседать в суточном кэше на весь день."""
+    async def none_src(cl, nip): return None
+    async def busy_gus(cl, nip):
+        return {"name": "X", "regon": "1", "address": "", "type": "P",
+                "closed": None, "pkd_incomplete": True}
+
+    stored = []
+    for name in ("wl_subject", "ceidg_lookup"):
+        monkeypatch.setattr(R, name, none_src)
+
+    async def vies_ok(cl, nip):
+        return {"valid": True, "name": "X", "address": ""}
+    monkeypatch.setattr(R, "vies_check", vies_ok)   # есть «ok»-источник для кэша
+    monkeypatch.setattr(R, "gus_lookup", busy_gus)
+    monkeypatch.setattr(R, "_cache_get", lambda nip: None)
+    monkeypatch.setattr(R, "_cache_put", lambda nip, payload: stored.append(nip))
+
+    res = asyncio.run(R.check_nip("7740001454"))
+    assert res["sources"]["gus"] == "ok" and not stored, \
+        "неполная карточка легла в кэш — REGON-блок пропал бы до завтра"
+
+
+def test_gus_pkd_raises_busy_instead_of_pretending_no_codes(monkeypatch):
+    async def no_slot(max_wait=2.5): return False
+    monkeypatch.setattr(R, "_gus_slot", no_slot)
+    monkeypatch.setattr(R, "_gus_sid", _sid_stub)
+    monkeypatch.setenv("GUS_BIR_KEY", "x" * 20)
+
+    async def run():
+        async with httpx.AsyncClient() as cl:
+            return await R.gus_pkd(cl, "610188201", "P")
+
+    with pytest.raises(R.GusBusy):
+        asyncio.run(run())
 
 
 def test_gus_pkd_needs_key_and_regon(monkeypatch):
