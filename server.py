@@ -386,6 +386,7 @@ async def _nip_reply(raw_nip: str) -> str:
     facts = [f"{k}: {esc_html(v)}" for k, v in (
         ("REGON", d.get("regon")), ("KRS", d.get("krs")),
         ("Адрес", d.get("address")), ("PKD", ", ".join(d.get("pkd") or [])),
+        ("Классификация в REGON", f"PKD {d['pkd_version']}" if d.get("pkd_version") else ""),
     ) if v]
     signals = "\n".join(f"{SIG_EMOJI[s['level']]} {esc_html(s['text'])}"
                         for s in d["signals"])
@@ -717,10 +718,14 @@ async def api_pkd_my(req: Request):
     codes = d.get("pkd") or []
     if not codes:
         return {"nip": d["nip"], "name": d.get("name"), "codes": [],
-                "note": "В CEIDG по этому NIP кодов не видно. Так бывает у юрлиц "
-                        "(они в KRS, а не в CEIDG) и при закрытой записи."}
+                "note": "Ни в CEIDG, ни в REGON кодов по этому NIP не видно. "
+                        "Так бывает при закрытой записи и когда реестры "
+                        "не подключены ключами."}
+    regon = {"version": d.get("pkd_version"), "codes": d.get("pkd_regon") or []}
     return {"nip": d["nip"], "name": d.get("name"),
-            **await asyncio.to_thread(pkd.audit, codes)}
+            **await asyncio.to_thread(pkd.audit, codes,
+                                      regon if regon["codes"] else None,
+                                      d.get("pkd_source") or "ceidg")}
 
 
 @app.post("/api/infakt/connect")

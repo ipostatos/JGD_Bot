@@ -28,6 +28,18 @@ DATA = Path(os.environ.get("JDG_PKD_DATA") or ROOT / "data" / "pkd")
 
 WORD = re.compile(r"[a-zа-яёąćęłńóśźż0-9]+", re.I)
 CODE_IN_QUERY = re.compile(r"\b(\d{2})[.,](\d{2})(?:[.,\s]?([A-Za-z]))?\b")
+
+
+def normalize_code(code: str) -> str:
+    """Код к виду справочника (`62.10.B`).
+
+    Реестры пишут коды по-разному: CEIDG отдаёт `9311Z`, GUS в отчётах REGON —
+    тоже без точек, человек в поле ввода пишет `62.10.b` или через запятую.
+    """
+    c = re.sub(r"[^0-9A-Z]", "", (code or "").upper())
+    if len(c) < 4:
+        return c
+    return ".".join(x for x in (c[:2], c[2:4], c[4:]) if x)
 STEM = 6          # грубая нормализация: обе морфологии богатые, режем хвосты
 K1, B = 1.4, 0.75  # BM25
 
@@ -370,16 +382,22 @@ def lookup(query: str, limit: int = 5) -> dict:
             "results": results, "note": _rate_note()}
 
 
-def audit(codes: list[str]) -> dict:
-    """Разбор кодов, которые уже стоят в CEIDG: актуальны ли и чем грозят.
+def audit(codes: list[str], regon: dict | None = None, source: str = "ceidg") -> dict:
+    """Разбор кодов, которые уже стоят в реестре: актуальны ли и чем грозят.
 
     Главное, что ищем, — коды старой классификации: PKD 2007 действует до
     31.12.2026, дальше GUS перекодирует записи автоматически по общим ключам.
+
+    `regon` — ответ GUS BIR (`{"version", "codes"}`). Только он знает, в какой
+    классификации лежит сама запись: по одним кодам это не определить, потому что
+    большинство номеров в PKD 2007 и PKD 2025 совпадает.
     """
     idx = index()
     items, outdated = [], 0
     for raw in codes[:20]:
-        code = (raw or "").strip().upper().replace(",", ".")
+        # 🔴 коды из CEIDG приходят без точек (`9311Z`), и без нормализации
+        # аудит объявлял «такого кода нет» про каждый реальный код записи
+        code = normalize_code(raw)
         if not code:
             continue
         if code in idx.codes:
@@ -400,8 +418,50 @@ def audit(codes: list[str]) -> dict:
                f"Обновить можно самому: biznes.gov.pl → «zmień dane w CEIDG».")
     vat = [i["code"] for i in items
            if any(f["level"] == "warn" for f in i.get("flags", []))]
-    return {"items": items, "outdated": outdated, "summary": summary,
-            "vat_warning_codes": vat, "note": _rate_note()}
+    out = {"items": items, "outdated": outdated, "summary": summary,
+           "vat_warning_codes": vat, "note": _rate_note(), "source": source}
+    if regon:
+        out["regon"] = _regon_block(items, outdated, regon, source)
+    return out
+
+
+REGON_NOTE = {
+    "2025": "REGON: запись уже переведена на новую классификацию PKD 2025.",
+    "2007": "REGON: запись всё ещё в классификации PKD 2007. Она действует "
+            "до 31.12.2026 — потом GUS перекодирует запись сам, по общим ключам "
+            "и без разбора того, чем вы занимаетесь. Выбрать коды осознанно "
+            "можно только пока это не случилось: biznes.gov.pl → «zmień dane w CEIDG».",
+}
+
+
+def _regon_block(items: list[dict], outdated: int, regon: dict, source: str) -> dict:
+    """Что о записи говорит REGON и совпадает ли она с CEIDG.
+
+    Сравнивать списки кодов имеет смысл только внутри одной классификации:
+    иначе «реестры разошлись» покажет разницу между PKD 2007 и PKD 2025,
+    то есть нормальный ход перекодировки, а не ошибку в записи.
+    """
+    version = regon.get("version")
+    block = {"version": version,
+             "codes": [c for c in (regon.get("codes") or [])],
+             "note": REGON_NOTE.get(version or "") or (
+                 f"REGON: у записи коды сразу двух классификаций "
+                 f"({(version or '').replace('+', ' и ')})." if version else
+                 "REGON не сказал, в какой классификации записаны коды.")}
+    if source != "ceidg" or version != "2025" or outdated:
+        # сравнивать нечего: либо коды и так пришли из REGON, либо классификации
+        # у реестров разные — расхождение в этом случае ничего не значит
+        return block
+    mine = {i["code"] for i in items}
+    theirs = {c["code"] for c in block["codes"]}
+    block["only_in_ceidg"] = sorted(mine - theirs)
+    block["only_in_regon"] = sorted(theirs - mine)
+    if block["only_in_ceidg"] or block["only_in_regon"]:
+        block["diff_note"] = (
+            "Списки кодов в CEIDG и REGON разошлись. Обычно это значит, что "
+            "правка в CEIDG ещё не доехала до REGON (пара дней) — если прошло "
+            "больше недели, стоит проверить запись.")
+    return block
 
 
 def _rate_note() -> str:

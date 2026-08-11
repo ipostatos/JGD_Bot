@@ -4,8 +4,11 @@
 - **White List MF** (`wl-api.mf.gov.pl`, БЕЗ ключа) — статус VAT, REGON, KRS,
   адрес, дата регистрации, номера счетов, отказ/удаление из реестра.
 - **VIES** (`ec.europa.eu`, БЕЗ ключа) — действителен ли VAT-UE для сделок с ЕС.
-- **GUS BIR 1.1** (SOAP, нужен ключ `GUS_BIR_KEY`) — название, REGON, адрес,
-  тип субъекта; работает и для тех, кого нет в реестре VAT.
+- **GUS BIR** (SOAP, нужен ключ `GUS_BIR_KEY`) — название, REGON, адрес,
+  тип субъекта; работает и для тех, кого нет в реестре VAT. Отчётом версии 1.2
+  (`DanePobierzPelnyRaport` + `BIR12…Pkd`) добираем коды PKD **вместе с версией
+  классификации**: только REGON говорит, переведена запись на PKD 2025 или ещё
+  в PKD 2007. CEIDG отдаёт коды, но про классификацию молчит.
 - **CEIDG v3** (нужен токен `CEIDG_TOKEN`) — статус деятельности JDG
   (активна/приостановлена/вычеркнута) и PKD.
 
@@ -80,17 +83,27 @@ def _db():
     return conn
 
 
+# Состав полей карточки. Меняем при каждом новом поле: иначе в день выката
+# человек видит вчерашний ответ без новинок и решает, что фича не работает
+# (ровно так после выкатки ставок вёл себя кэш ассистента).
+CACHE_SCHEMA = 2
+
+
 def _cache_get(nip: str) -> dict | None:
     with _db() as c:
         row = c.execute("SELECT payload FROM nip_cache WHERE nip=? AND day=?",
                         (nip, date.today().isoformat())).fetchone()
-    return json.loads(row[0]) if row else None
+    if not row:
+        return None
+    data = json.loads(row[0])
+    return data if data.pop("_schema", None) == CACHE_SCHEMA else None
 
 
 def _cache_put(nip: str, payload: dict):
     with _db() as c:
         c.execute("INSERT OR REPLACE INTO nip_cache VALUES(?,?,?)",
-                  (nip, date.today().isoformat(), json.dumps(payload, ensure_ascii=False)))
+                  (nip, date.today().isoformat(),
+                   json.dumps(payload | {"_schema": CACHE_SCHEMA}, ensure_ascii=False)))
         c.execute("DELETE FROM nip_cache WHERE day < ?", (date.today().isoformat(),))
 
 
@@ -231,9 +244,111 @@ async def gus_lookup(cl: httpx.AsyncClient, nip: str) -> dict | None:
         f"{street}/{lokal}" if lokal else street,
         " ".join(x for x in (_tag(payload, "KodPocztowy"), _tag(payload, "Miejscowosc")) if x),
     ) if x)
-    return {"name": _tag(payload, "Nazwa"), "regon": _tag(payload, "Regon"),
-            "address": addr, "type": _tag(payload, "Typ"),
-            "closed": _tag(payload, "DataZakonczeniaDzialalnosci") or None}
+    out = {"name": _tag(payload, "Nazwa"), "regon": _tag(payload, "Regon"),
+           "address": addr, "type": _tag(payload, "Typ"),
+           "closed": _tag(payload, "DataZakonczeniaDzialalnosci") or None}
+    # PKD — отдельный отчёт, ещё один вызов. Не отвечает или упёрлись в лимит —
+    # отдаём базовую карточку: коды тут приятное дополнение, а не суть ответа
+    try:
+        codes = await gus_pkd(cl, out["regon"], out["type"])
+    except httpx.HTTPError as e:
+        log.warning("GUS PKD: %s", e)
+        codes = None
+    if codes:
+        main = next((c for c in codes["codes"] if c["main"]), None)
+        out |= {"pkd": [c["code"] for c in codes["codes"]],
+                "pkd_items": codes["codes"],
+                "pkd_version": codes["version"],
+                "pkd_main": f"{main['code']} · {_pl_name(main['name'])}" if main else "",
+                "pkd_report": codes["report"]}
+    return out
+
+
+# ── PKD из REGON (отчёты BIR1.2) ─────────────────────────────────────────────
+# Отчёт выбирается по типу субъекта из поиска; префикс полей внутри отчёта
+# тоже свой (fiz_/praw_/lokfiz_/lokpraw_), поэтому поля ищем по суффиксу.
+_GUS_PKD_REPORTS = {"F": "BIR12OsFizycznaPkd", "P": "BIR12OsPrawnaPkd",
+                    "LF": "BIR12JednLokalnaOsFizycznejPkd",
+                    "LP": "BIR12JednLokalnaOsPrawnejPkd"}
+# Тип субъекта и «силос», в котором лежат его коды, совпадают не всегда —
+# один запасной заход дешевле, чем молча отдать «кодов нет»
+_GUS_PKD_FALLBACK = {"F": "BIR12OsPrawnaPkd", "P": "BIR12OsFizycznaPkd"}
+_GUS_ROWS = re.compile(r"<dane>(.*?)</dane>", re.S)
+
+
+def pkd_dots(code: str) -> str:
+    """GUS отдаёт коды без точек (`6210B`), справочник хранит с точками (`62.10.B`).
+    Формат кодов — забота справочника, поэтому правило одно на весь проект."""
+    import pkd
+    return pkd.normalize_code(code)
+
+
+def _pl_name(name: str) -> str:
+    """Названия в REGON набраны капсом — для UI это крик, а не текст."""
+    name = (name or "").strip()
+    return name[:1].upper() + name[1:].lower() if name.isupper() else name
+
+
+def _gus_field(row: str, field: str) -> str | None:
+    m = re.search(rf"<[A-Za-z]+_{field}>(.*?)</[A-Za-z]+_{field}>", row, re.S)
+    return m.group(1).strip() if m else None
+
+
+def gus_pkd_parse(payload: str) -> dict | None:
+    """Разбор отчёта `BIR12…Pkd`: коды, главный код и версия классификации.
+
+    Пустого ответа у отчётов не бывает: когда данных нет, GUS кладёт в тот же
+    `<dane>` блок `ErrorCode` — принимать его за субъект без кодов нельзя.
+    """
+    if "<ErrorCode>" in payload:
+        return None
+    by_code: dict[str, dict] = {}
+    versions: set[str] = set()
+    for row in _GUS_ROWS.findall(payload):
+        code = pkd_dots(_gus_field(row, "pkdKod") or "")
+        if not code:
+            continue
+        version = _gus_field(row, "pkdWersja")
+        if version:
+            versions.add(version)
+        main = _gus_field(row, "pkdPrzewazajace") == "1"
+        item = by_code.setdefault(code, {"code": code, "main": False,
+                                         "name": _pl_name(_gus_field(row, "pkdNazwa") or ""),
+                                         "silos": _gus_field(row, "SilosSymbol")})
+        # один и тот же код приходит по разу на «силос»; главным он считается,
+        # если главный хотя бы в одном из них
+        item["main"] = item["main"] or main
+    if not by_code:
+        return None
+    codes = sorted(by_code.values(), key=lambda c: (not c["main"], c["code"]))
+    return {"codes": codes, "version": "+".join(sorted(versions)) or None,
+            "versions": sorted(versions)}
+
+
+async def gus_pkd(cl: httpx.AsyncClient, regon: str | None, typ: str | None) -> dict | None:
+    """Коды PKD субъекта из REGON вместе с версией классификации (2007/2025)."""
+    key = os.environ.get("GUS_BIR_KEY")
+    if not key or not regon:
+        return None
+    headers = {"Content-Type": "application/soap+xml; charset=utf-8"}
+    sid = await _gus_sid(cl, key, headers)
+    if not sid:
+        return None
+    typ = (typ or "").upper()
+    for report in (_GUS_PKD_REPORTS.get(typ, "BIR12OsPrawnaPkd"), _GUS_PKD_FALLBACK.get(typ)):
+        if not report or not _gus_allow():
+            break
+        r = await cl.post(GUS_BASE, headers=dict(headers, sid=sid), content=_gus_envelope(
+            "DanePobierzPelnyRaport",
+            f"<ns:DanePobierzPelnyRaport><ns:pRegon>{regon}</ns:pRegon>"
+            f"<ns:pNazwaRaportu>{report}</ns:pNazwaRaportu></ns:DanePobierzPelnyRaport>"))
+        r.raise_for_status()
+        payload = (_tag(r.text, "DanePobierzPelnyRaportResult") or "").replace(
+            "&lt;", "<").replace("&gt;", ">")
+        data = gus_pkd_parse(payload)
+        if data:
+            return dict(data, report=report)
+    return None
 
 
 def _ceidg_address(adr: dict | None) -> str:
@@ -286,9 +401,12 @@ async def ceidg_lookup(cl: httpx.AsyncClient, nip: str) -> dict | None:
             log.warning("CEIDG detail: %s", e)
     src = {**f, **detail}
 
-    pkd = [p.get("kod") if isinstance(p, dict) else p for p in (src.get("pkd") or [])]
+    # CEIDG пишет коды одной строкой (`9311Z`) — приводим к виду справочника,
+    # иначе они не совпадут ни с кодами из REGON, ни с самой классификацией
+    pkd = [pkd_dots(p.get("kod") if isinstance(p, dict) else p)
+           for p in (src.get("pkd") or [])]
     main = src.get("pkdGlowny") or {}
-    main_code = main.get("kod") if isinstance(main, dict) else main
+    main_code = pkd_dots(main.get("kod") if isinstance(main, dict) else main)
     if main_code:                                    # основной PKD — первым
         pkd = [main_code] + [p for p in pkd if p != main_code]
     return {"status": src.get("status"), "name": src.get("nazwa"),
@@ -402,8 +520,15 @@ async def check_nip(raw_nip: str) -> dict:
         "activity": (ceidg or {}).get("status"),
         "regon": (wl or {}).get("regon") or (gus or {}).get("regon"),
         "krs": (wl or {}).get("krs"),
-        "pkd": (ceidg or {}).get("pkd") or [],
-        "pkd_main": (ceidg or {}).get("pkd_main") or "",
+        # коды из CEIDG — первоисточник для JDG; у юрлиц CEIDG пуст, и раньше
+        # карточка оставалась без PKD вовсе — теперь их закрывает REGON
+        "pkd": (ceidg or {}).get("pkd") or (gus or {}).get("pkd") or [],
+        "pkd_main": (ceidg or {}).get("pkd_main") or (gus or {}).get("pkd_main") or "",
+        "pkd_source": "ceidg" if (ceidg or {}).get("pkd") else (
+            "gus" if (gus or {}).get("pkd") else None),
+        # в какой классификации запись лежит в REGON: этого не знает больше никто
+        "pkd_version": (gus or {}).get("pkd_version"),
+        "pkd_regon": (gus or {}).get("pkd_items") or [],
         "address": (wl or {}).get("workingAddress") or (wl or {}).get("residenceAddress")
                    or (gus or {}).get("address") or (ceidg or {}).get("address")
                    or (vies or {}).get("address") or "",

@@ -1,0 +1,29 @@
+<root>
+  <dane>
+    <fiz_pkdWersja>2025</fiz_pkdWersja>
+    <fiz_pkdKod>6210B</fiz_pkdKod>
+    <fiz_pkdNazwa>POZOSTAŁA DZIAŁALNOŚĆ W ZAKRESIE PROGRAMOWANIA</fiz_pkdNazwa>
+    <fiz_pkdPrzewazajace>0</fiz_pkdPrzewazajace>
+    <fiz_SilosID>6</fiz_SilosID>
+    <fiz_SilosSymbol>Prawna</fiz_SilosSymbol>
+    <fiz_dataSkresleniaDzialalnosciZRegon />
+  </dane>
+  <dane>
+    <fiz_pkdWersja>2025</fiz_pkdWersja>
+    <fiz_pkdKod>6310D</fiz_pkdKod>
+    <fiz_pkdNazwa>POZOSTAŁA DZIAŁALNOŚĆ USŁUGOWA W ZAKRESIE INFRASTRUKTURY OBLICZENIOWEJ, PRZETWARZANIA DANYCH, ZARZĄDZANIA STRONAMI INTERNETOWYMI (HOSTING) I DZIAŁALNOŚCI POWIĄZANE</fiz_pkdNazwa>
+    <fiz_pkdPrzewazajace>1</fiz_pkdPrzewazajace>
+    <fiz_SilosID>6</fiz_SilosID>
+    <fiz_SilosSymbol>Prawna</fiz_SilosSymbol>
+    <fiz_dataSkresleniaDzialalnosciZRegon />
+  </dane>
+  <dane>
+    <fiz_pkdWersja>2025</fiz_pkdWersja>
+    <fiz_pkdKod>6220A</fiz_pkdKod>
+    <fiz_pkdNazwa>DZIAŁALNOŚĆ W ZAKRESIE CYBERBEZPIECZEŃSTWA</fiz_pkdNazwa>
+    <fiz_pkdPrzewazajace>0</fiz_pkdPrzewazajace>
+    <fiz_SilosID>6</fiz_SilosID>
+    <fiz_SilosSymbol>Prawna</fiz_SilosSymbol>
+    <fiz_dataSkresleniaDzialalnosciZRegon />
+  </dane>
+</root>

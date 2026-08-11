@@ -95,6 +95,70 @@ def test_audit_marks_outdated_codes():
     assert r["vat_warning_codes"] == ["70.20.Z"]
 
 
+def test_audit_understands_codes_without_dots():
+    """🔴 Регрессия из прода: CEIDG отдаёт коды строкой без точек (`6210B`),
+    и аудит писал «такого кода нет ни в PKD 2025, ни в ключах перехода» про
+    каждый настоящий код записи."""
+    r = pkd.audit(["6210B", "6201Z", "96.21.z"])
+    by_code = {i["code"]: i["status"] for i in r["items"]}
+    assert by_code == {"62.10.B": "ok", "62.01.Z": "outdated", "96.21.Z": "ok"}
+    assert r["outdated"] == 1
+
+
+def test_normalize_code():
+    assert pkd.normalize_code("6210B") == "62.10.B"
+    assert pkd.normalize_code("62.10.b") == "62.10.B"
+    assert pkd.normalize_code("62,10,B") == "62.10.B"
+    assert pkd.normalize_code(" 9311Z ") == "93.11.Z"
+    assert pkd.normalize_code("1920") == "19.20"
+    assert pkd.normalize_code("") == "" and pkd.normalize_code(None) == ""
+
+
+def _regon(version, *codes):
+    return {"version": version,
+            "codes": [{"code": c, "name": "", "main": i == 0}
+                      for i, c in enumerate(codes)]}
+
+
+def test_audit_reads_classification_version_from_regon():
+    """Версию классификации знает только REGON: по самим кодам её не вывести —
+    большинство номеров в PKD 2007 и PKD 2025 совпадает."""
+    new = pkd.audit(["62.10.B"], _regon("2025", "62.10.B"))
+    assert new["regon"]["version"] == "2025"
+    assert "уже переведена" in new["regon"]["note"]
+
+    old = pkd.audit(["62.10.B"], _regon("2007", "62.10.B"))
+    assert "31.12.2026" in old["regon"]["note"] and "CEIDG" in old["regon"]["note"]
+    # код прошёл как «ok» по справочнику 2025, но запись при этом старая —
+    # ровно та ситуация, ради которой мы и спрашиваем REGON
+    assert old["items"][0]["status"] == "ok" and old["outdated"] == 0
+
+
+def test_audit_reports_divergence_between_registers():
+    r = pkd.audit(["62.10.B", "96.21.Z"], _regon("2025", "62.10.B", "70.20.Z"))
+    assert r["regon"]["only_in_ceidg"] == ["96.21.Z"]
+    assert r["regon"]["only_in_regon"] == ["70.20.Z"]
+    assert "разошлись" in r["regon"]["diff_note"]
+
+    same = pkd.audit(["62.10.B"], _regon("2025", "62.10.B"))
+    assert same["regon"]["only_in_ceidg"] == [] and "diff_note" not in same["regon"]
+
+
+def test_audit_does_not_compare_across_classifications():
+    """Разные классификации в реестрах — это ход перекодировки, а не ошибка:
+    сравнение кодов 2007 с кодами 2025 показало бы разницу самих справочников."""
+    r = pkd.audit(["62.01.Z"], _regon("2007", "62.10.B"))
+    assert "only_in_ceidg" not in r["regon"]
+    # и наоборот: коды пришли из самого REGON — сравнивать их не с чем
+    own = pkd.audit(["62.10.B"], _regon("2025", "62.10.B"), source="gus")
+    assert "only_in_ceidg" not in own["regon"] and own["source"] == "gus"
+
+
+def test_audit_without_regon_keeps_old_shape():
+    r = pkd.audit(["62.10.B"])
+    assert "regon" not in r and r["source"] == "ceidg"
+
+
 def test_empty_query_is_safe():
     assert pkd.lookup("")["results"] == []
     assert pkd.lookup("qwertyuiop")["results"] == []

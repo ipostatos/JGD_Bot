@@ -1,0 +1,134 @@
+<root>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>3521Z</praw_pkdKod>
+    <praw_pkdNazwa>WYTWARZANIE PALIW GAZOWYCH</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>1920Z</praw_pkdKod>
+    <praw_pkdNazwa>WYTWARZANIE I PRZETWARZANIE PRODUKTÓW RAFINACJI ROPY NAFTOWEJ</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>1</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>3511Z</praw_pkdKod>
+    <praw_pkdNazwa>WYTWARZANIE ENERGII ELEKTRYCZNEJ</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>4671Z</praw_pkdKod>
+    <praw_pkdNazwa>SPRZEDAŻ HURTOWA PALIW I PRODUKTÓW POCHODNYCH</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>4730Z</praw_pkdKod>
+    <praw_pkdNazwa>SPRZEDAŻ DETALICZNA PALIW DO POJAZDÓW SILNIKOWYCH NA STACJACH PALIW</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>4725Z</praw_pkdKod>
+    <praw_pkdNazwa>SPRZEDAŻ DETALICZNA NAPOJÓW ALKOHOLOWYCH I BEZALKOHOLOWYCH PROWADZONA W WYSPECJALIZOWANYCH SKLEPACH</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>3512Z</praw_pkdKod>
+    <praw_pkdNazwa>PRZESYŁANIE ENERGII ELEKTRYCZNEJ</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>2016Z</praw_pkdKod>
+    <praw_pkdNazwa>PRODUKCJA TWORZYW SZTUCZNYCH W FORMACH PODSTAWOWYCH</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>2014Z</praw_pkdKod>
+    <praw_pkdNazwa>PRODUKCJA POZOSTAŁYCH PODSTAWOWYCH CHEMIKALIÓW ORGANICZNYCH</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>2013Z</praw_pkdKod>
+    <praw_pkdNazwa>PRODUKCJA POZOSTAŁYCH PODSTAWOWYCH CHEMIKALIÓW NIEORGANICZNYCH</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>2015Z</praw_pkdKod>
+    <praw_pkdNazwa>PRODUKCJA NAWOZÓW I ZWIĄZKÓW AZOTOWYCH</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>2017Z</praw_pkdKod>
+    <praw_pkdNazwa>PRODUKCJA KAUCZUKU SYNTETYCZNEGO W FORMACH PODSTAWOWYCH</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>2011Z</praw_pkdKod>
+    <praw_pkdNazwa>PRODUKCJA GAZÓW TECHNICZNYCH</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>2012Z</praw_pkdKod>
+    <praw_pkdNazwa>PRODUKCJA BARWNIKÓW I PIGMENTÓW</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>5210B</praw_pkdKod>
+    <praw_pkdNazwa>MAGAZYNOWANIE I PRZECHOWYWANIE POZOSTAŁYCH TOWARÓW</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>5210A</praw_pkdKod>
+    <praw_pkdNazwa>MAGAZYNOWANIE I PRZECHOWYWANIE PALIW GAZOWYCH</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>3523Z</praw_pkdKod>
+    <praw_pkdNazwa>HANDEL PALIWAMI GAZOWYMI W SYSTEMIE SIECIOWYM</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>3514Z</praw_pkdKod>
+    <praw_pkdNazwa>HANDEL ENERGIĄ ELEKTRYCZNĄ</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>0610Z</praw_pkdKod>
+    <praw_pkdNazwa>GÓRNICTWO ROPY NAFTOWEJ</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>0620Z</praw_pkdKod>
+    <praw_pkdNazwa>GÓRNICTWO GAZU ZIEMNEGO</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>3522Z</praw_pkdKod>
+    <praw_pkdNazwa>DYSTRYBUCJA PALIW GAZOWYCH W SYSTEMIE SIECIOWYM</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+  <dane>
+    <praw_pkdWersja>2007</praw_pkdWersja>
+    <praw_pkdKod>3513Z</praw_pkdKod>
+    <praw_pkdNazwa>DYSTRYBUCJA ENERGII ELEKTRYCZNEJ</praw_pkdNazwa>
+    <praw_pkdPrzewazajace>0</praw_pkdPrzewazajace>
+  </dane>
+</root>

@@ -239,6 +239,63 @@ def test_pkd_card_shows_only_its_own_exclusions(browser, base_url):
         ctx.close()
 
 
+def test_my_codes_show_what_regon_says(browser, base_url):
+    """Блок «что говорит REGON» на экране «Мои коды».
+
+    Ручка требует initData Telegram, поэтому подменяем сам ответ: проверяем
+    отрисовку — версию классификации, расхождение реестров и то, что имена
+    иконок настоящие (несуществующее имя оставляет пустой квадрат молча).
+    """
+    ctx, page, errors, _ = _open(browser, base_url + "/pkd.html")
+    try:
+        def answer(body):
+            page.route("**/api/pkd/my", lambda route: route.fulfill(
+                status=200, content_type="application/json", body=body))
+            page.fill("#nip", "1133117581")
+            tap(page, "#mygo")
+            page.wait_for_selector("#myout .pkd-flag", timeout=15000)
+            return page.inner_text("#myout")
+
+        # запись переведена, но списки кодов у реестров разошлись
+        text = answer(_my_codes(version="2025", diff=True))
+        assert "переведена" in text
+        assert "разошлись" in text and "96.21.Z" in text and "70.20.Z" in text
+
+        # старая классификация: предупреждение со сроком
+        page.unroute("**/api/pkd/my")
+        text = answer(_my_codes(version="2007", diff=False))
+        assert "31.12.2026" in text and "разошлись" not in text
+        assert page.locator("#myout .pkd-flag.warn").count() >= 1
+
+        icons = page.eval_on_selector_all(
+            "#myout .fi", "els => els.map(e => e.innerHTML.length)")
+        assert icons and all(n > 0 for n in icons), "иконка не отрисовалась"
+        assert not errors, errors
+    finally:
+        ctx.close()
+
+
+def _my_codes(version, diff):
+    """Ответ ручки в двух состояниях, которые бывают на самом деле: расхождение
+    реестров считается только внутри одной классификации."""
+    import json
+
+    regon = {"version": version, "codes": [],
+             "note": ("REGON: запись уже переведена на новую классификацию PKD 2025."
+                      if version == "2025" else
+                      "REGON: запись всё ещё в классификации PKD 2007. Она действует "
+                      "до 31.12.2026.")}
+    if diff:
+        regon |= {"only_in_ceidg": ["96.21.Z"], "only_in_regon": ["70.20.Z"],
+                  "diff_note": "Списки кодов в CEIDG и REGON разошлись."}
+    return json.dumps({
+        "nip": "1133117581", "name": "Test", "outdated": 0, "source": "ceidg",
+        "summary": "Все коды уже в новой классификации.", "note": "",
+        "vat_warning_codes": [], "regon": regon,
+        "items": [{"code": "62.10.B", "name": "Programowanie", "status": "ok",
+                   "section": "K", "flags": []}]}, ensure_ascii=False)
+
+
 # ── точный подбор: живёт только за включённым флагом ──────────────────────
 
 @pytest.fixture(scope="module")

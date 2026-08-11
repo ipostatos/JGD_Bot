@@ -80,12 +80,34 @@ document.querySelectorAll('.ex button').forEach(b => {
   b.onclick = () => search(b.dataset.q);
 });
 
+/* Что говорит REGON: в какой классификации лежит сама запись (этого не знает
+ * ни CEIDG, ни справочник — по одним кодам версию не определить) и не разошлись
+ * ли списки кодов у двух реестров. */
+function regonBlock(d) {
+  const r = d.regon;
+  const from = d.source === 'gus'
+    ? `<div class="pkd-flag note"><span class="fi" data-icon="info"></span>
+       <span>Коды взяты из REGON: в CEIDG этого NIP нет — так и должно быть
+       у юрлиц, они сидят в KRS.</span></div>` : '';
+  if (!r) return from;
+  const old = r.version === '2007';
+  const only = (list, where) => (list && list.length)
+    ? ` Только в ${where}: ${list.join(', ')}.` : '';
+  const diff = r.diff_note
+    ? `<div class="pkd-flag warn"><span class="fi" data-icon="shuffle"></span>
+       <span>${esc(r.diff_note)}${esc(only(r.only_in_ceidg, 'CEIDG'))}${
+         esc(only(r.only_in_regon, 'REGON'))}</span></div>` : '';
+  return from + `<div class="pkd-flag ${old ? 'warn' : 'note'}">
+      <span class="fi" data-icon="${old ? 'alert-triangle' : 'id-card'}"></span>
+      <span>${esc(r.note)}</span></div>` + diff;
+}
+
 document.getElementById('mygo').onclick = async () => {
   const nip = document.getElementById('nip').value.trim();
   const box = document.getElementById('myout');
   if (!nip) return;
   haptic('medium');
-  box.innerHTML = '<div class="muted">Спрашиваем CEIDG…</div>';
+  box.innerHTML = '<div class="muted">Спрашиваем CEIDG и REGON…</div>';
   try {
     const d = await post('/api/pkd/my', { nip });
     if (!d.items || !d.items.length) {
@@ -96,6 +118,7 @@ document.getElementById('mygo').onclick = async () => {
     box.innerHTML = `<div class="pkd-flag ${d.outdated ? 'warn' : 'note'}">
         <span class="fi" data-icon="${d.outdated ? 'alert-triangle' : 'check-circle'}"></span>
         <span>${esc(d.summary)}</span></div>`
+      + regonBlock(d)
       + d.items.map(i => i.status === 'outdated'
         ? card({ code: i.code, name: i.name, section: 'PKD 2007' },
                { border: 'var(--warn)', chip: '<span class="chip">устарел</span>' })

@@ -21,6 +21,8 @@ function render(d) {
     ['NIP', d.nip], ['REGON', d.regon], ['KRS', d.krs],
     ['Адрес', d.address], ['В реестре с', d.registered],
     ['Основной PKD', d.pkd_main], ['PKD', (d.pkd || []).join(', ')],
+    ['Коды взяты из', { ceidg: 'CEIDG', gus: 'REGON (GUS)' }[d.pkd_source] || ''],
+    ['Классификация в REGON', d.pkd_version ? `PKD ${d.pkd_version}` : ''],
   ].filter(([, v]) => v).map(([k, v]) =>
     `<div class="kv"><span>${k}</span><b>${esc(v)}</b></div>`).join('');
 

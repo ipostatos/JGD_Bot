@@ -4,7 +4,10 @@ Live-тесты ходят в интернет; отключаются пере�
 """
 import asyncio
 import os
+import re
+from pathlib import Path
 
+import httpx
 import pytest
 from dotenv import load_dotenv
 
@@ -16,10 +19,28 @@ LIVE = pytest.mark.skipif(os.environ.get("NO_NET") == "1", reason="сеть от
 CEIDG_LIVE = pytest.mark.skipif(
     os.environ.get("NO_NET") == "1" or not os.environ.get("CEIDG_TOKEN"),
     reason="нет CEIDG_TOKEN или сеть отключена")
+GUS_LIVE = pytest.mark.skipif(
+    os.environ.get("NO_NET") == "1" or not os.environ.get("GUS_BIR_KEY"),
+    reason="нет боевого GUS_BIR_KEY или сеть отключена")
 
 WARSAW_NIP = "5252248481"          # m.st. Warszawa — VAT czynny, много счетов
 WARSAW_ACC = "04103015080000000551183000"
 ZWOLNIONY_NIP = "1133117581"       # реальный JDG на zwolnieniu: в White List пусто
+
+
+async def _sid_stub(cl, key, headers):
+    """Сессия GUS в тестах без сети: логин отдельно проверяется live-тестом."""
+    return "sid-stub"
+
+
+@pytest.fixture(autouse=True)
+def _fresh_gus_counters():
+    """Счётчик вызовов GUS живёт в модуле: без сброса соседний тест съедает
+    лимит «3 в секунду», и следующий видит отказ вместо запроса."""
+    R._gus_calls.clear()
+    R._gus_session.update(sid=None, born=0.0)
+    yield
+    R._gus_calls.clear()
 
 
 def test_nip_checksum():
@@ -182,13 +203,171 @@ def test_live_ceidg_gives_data_for_zwolniony():
     assert data["pkd"][0] == data["pkd_main"].split(" · ")[0]
 
 
+GUS_FIXTURE = Path(__file__).resolve().parent / "tests" / "fixtures" / "gus"
+
+
+def test_pkd_dots():
+    """GUS отдаёт код одной строкой, справочник — с точками."""
+    assert R.pkd_dots("6210B") == "62.10.B"
+    assert R.pkd_dots("9311Z") == "93.11.Z"
+    assert R.pkd_dots("62.10.B") == "62.10.B"
+    assert R.pkd_dots("1920") == "19.20"
+    assert R.pkd_dots("") == "" and R.pkd_dots(None) == ""
+
+
+def test_gus_pkd_parse_legal_entity():
+    """Живой отчёт BIR12OsPrawnaPkd (ORLEN, боевая среда 2026-08-11)."""
+    data = R.gus_pkd_parse((GUS_FIXTURE / "pkd_osprawna.xml").read_text(encoding="utf-8"))
+    assert data["version"] == "2007"          # ORLEN в REGON ещё в старой классификации
+    assert data["codes"][0] == {"code": "19.20.Z", "main": True, "silos": None,
+                                "name": "Wytwarzanie i przetwarzanie produktów "
+                                        "rafinacji ropy naftowej"}
+    assert len(data["codes"]) == 22
+    assert [c["main"] for c in data["codes"][1:]] == [False] * 21
+
+
+def test_gus_pkd_parse_natural_person_dedupes_silos():
+    """У особы физичной один код приходит по разу на «силос» — в ответе он один,
+    и главным считается, если главный хотя бы в одном из них."""
+    data = R.gus_pkd_parse((GUS_FIXTURE / "pkd_osfizyczna.xml").read_text(encoding="utf-8"))
+    assert data["version"] == "2025"
+    codes = [c["code"] for c in data["codes"]]
+    assert len(codes) == len(set(codes))
+    assert data["codes"][0]["code"] == "63.10.D" and data["codes"][0]["main"] is True
+    assert data["codes"][0]["silos"] == "Prawna"
+
+
+def test_gus_pkd_parse_error_payload_is_not_a_subject_without_codes():
+    """Когда данных нет, GUS кладёт ErrorCode в тот же <dane> — принять это
+    за «субъект без кодов» значит соврать про запись."""
+    data = R.gus_pkd_parse((GUS_FIXTURE / "pkd_error.xml").read_text(encoding="utf-8"))
+    assert data is None
+
+
+def test_gus_pkd_report_chosen_by_subject_type(monkeypatch):
+    """Отчёт зависит от типа субъекта, а на несовпадение есть один запасной заход."""
+    asked: list[str] = []
+
+    class Resp:
+        def __init__(self, body): self.text = body
+        def raise_for_status(self): pass
+
+    def payload(inner):
+        return ("<s><DanePobierzPelnyRaportResult>"
+                + inner.replace("<", "&lt;").replace(">", "&gt;")
+                + "</DanePobierzPelnyRaportResult></s>")
+
+    async def fake_post(self, url, headers=None, content=None):
+        report = re.search(rb"<ns:pNazwaRaportu>(.*?)</ns:pNazwaRaportu>", content).group(1).decode()
+        asked.append(report)
+        if report == "BIR12OsFizycznaPkd":       # «нет данных» в первом отчёте
+            return Resp(payload("<root><dane><ErrorCode>4</ErrorCode></dane></root>"))
+        return Resp(payload("<root><dane><praw_pkdWersja>2025</praw_pkdWersja>"
+                            "<praw_pkdKod>6210B</praw_pkdKod>"
+                            "<praw_pkdNazwa>PROGRAMOWANIE</praw_pkdNazwa>"
+                            "<praw_pkdPrzewazajace>1</praw_pkdPrzewazajace></dane></root>"))
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+    monkeypatch.setattr(R, "_gus_sid", _sid_stub)
+    monkeypatch.setenv("GUS_BIR_KEY", "x" * 20)
+
+    async def run():
+        async with httpx.AsyncClient() as cl:
+            return await R.gus_pkd(cl, "527131300", "F")
+
+    data = asyncio.run(run())
+    assert asked == ["BIR12OsFizycznaPkd", "BIR12OsPrawnaPkd"]
+    assert data["report"] == "BIR12OsPrawnaPkd" and data["version"] == "2025"
+    assert data["codes"][0]["code"] == "62.10.B"
+
+
+def test_cache_of_previous_shape_is_ignored(tmp_path, monkeypatch):
+    """Карточка старого состава в суточном кэше не должна пережить выкатку:
+    иначе в день релиза человек видит ответ без новых полей."""
+    monkeypatch.setattr(R, "DB_PATH", tmp_path / "cache.db")
+    R._cache_put("7740001454", {"nip": "7740001454", "pkd_version": "2007"})
+    assert R._cache_get("7740001454")["pkd_version"] == "2007"
+    assert "_schema" not in R._cache_get("7740001454")   # служебное поле наружу не течёт
+    monkeypatch.setattr(R, "CACHE_SCHEMA", R.CACHE_SCHEMA + 1)
+    assert R._cache_get("7740001454") is None
+
+
+def test_check_nip_falls_back_to_regon_codes(monkeypatch):
+    """У юрлица в CEIDG записи нет, и раньше карточка оставалась вовсе без PKD.
+    Коды берём из REGON, но не выдаём их за CEIDG: источник назван в ответе."""
+    async def no_wl(cl, nip): return None
+    async def no_vies(cl, nip): return None
+    async def no_ceidg(cl, nip): return None
+    async def gus(cl, nip):
+        return {"name": "ORLEN", "regon": "610188201", "address": "Płock",
+                "type": "P", "closed": None, "pkd": ["19.20.Z", "06.10.Z"],
+                "pkd_items": [{"code": "19.20.Z", "name": "Rafinacja", "main": True},
+                              {"code": "06.10.Z", "name": "Ropa", "main": False}],
+                "pkd_version": "2007", "pkd_main": "19.20.Z · Rafinacja"}
+
+    monkeypatch.setattr(R, "wl_subject", no_wl)
+    monkeypatch.setattr(R, "vies_check", no_vies)
+    monkeypatch.setattr(R, "ceidg_lookup", no_ceidg)
+    monkeypatch.setattr(R, "gus_lookup", gus)
+    monkeypatch.setattr(R, "_cache_get", lambda nip: None)
+    monkeypatch.setattr(R, "_cache_put", lambda nip, payload: None)
+
+    res = asyncio.run(R.check_nip("7740001454"))
+    assert res["pkd"] == ["19.20.Z", "06.10.Z"]
+    assert res["pkd_source"] == "gus"
+    assert res["pkd_version"] == "2007"
+    assert res["pkd_main"].startswith("19.20.Z")
+    assert len(res["pkd_regon"]) == 2
+
+
+def test_check_nip_prefers_ceidg_codes(monkeypatch):
+    """Для JDG первоисточник — CEIDG: там коды меняет сам предприниматель,
+    в REGON они доезжают позже. Версию классификации всё равно берём у REGON."""
+    async def none_src(cl, nip): return None
+    async def ceidg(cl, nip):
+        return {"status": "AKTYWNY", "pkd": ["62.10.B"], "pkd_main": "62.10.B · …",
+                "name": "JDG", "started": "2023-11-21"}
+    async def gus(cl, nip):
+        return {"name": "JDG", "regon": "527131300", "address": "", "type": "F",
+                "closed": None, "pkd": ["62.10.B", "93.11.Z"],
+                "pkd_items": [{"code": "62.10.B", "name": "", "main": False},
+                              {"code": "93.11.Z", "name": "", "main": True}],
+                "pkd_version": "2025", "pkd_main": "93.11.Z · …"}
+
+    monkeypatch.setattr(R, "wl_subject", none_src)
+    monkeypatch.setattr(R, "vies_check", none_src)
+    monkeypatch.setattr(R, "ceidg_lookup", ceidg)
+    monkeypatch.setattr(R, "gus_lookup", gus)
+    monkeypatch.setattr(R, "_cache_get", lambda nip: None)
+    monkeypatch.setattr(R, "_cache_put", lambda nip, payload: None)
+
+    res = asyncio.run(R.check_nip("1133117581"))
+    assert res["pkd"] == ["62.10.B"] and res["pkd_source"] == "ceidg"
+    assert res["pkd_version"] == "2025"
+    assert [c["code"] for c in res["pkd_regon"]] == ["62.10.B", "93.11.Z"]
+
+
+def test_gus_pkd_needs_key_and_regon(monkeypatch):
+    monkeypatch.delenv("GUS_BIR_KEY", raising=False)
+
+    async def run(regon):
+        async with httpx.AsyncClient() as cl:
+            return await R.gus_pkd(cl, regon, "P")
+
+    assert asyncio.run(run("610188201")) is None
+    monkeypatch.setenv("GUS_BIR_KEY", "x" * 20)
+    assert asyncio.run(run(None)) is None      # без REGON спрашивать нечего
+
+
 @LIVE
 def test_live_gus_test_environment():
     """GUS BIR-адаптер против тестовой среды с публичным тестовым ключом.
     Боевой ключ отличается только значением GUS_BIR_KEY и URL."""
     import httpx
+    # ключ возвращаем как был: с приходом боевого ключа «просто удалить» значит
+    # оставить следующие тесты без него
+    old_key, old_base = os.environ.get("GUS_BIR_KEY"), R.GUS_BASE
     os.environ["GUS_BIR_KEY"] = "abcde12345abcde12345"
-    old_base = R.GUS_BASE
     R.GUS_BASE = "https://wyszukiwarkaregontest.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc"
     try:
         async def run():
@@ -200,4 +379,32 @@ def test_live_gus_test_environment():
         assert "Płock" in data["address"]
     finally:
         R.GUS_BASE = old_base
-        os.environ.pop("GUS_BIR_KEY", None)
+        if old_key is None:
+            os.environ.pop("GUS_BIR_KEY", None)
+        else:
+            os.environ["GUS_BIR_KEY"] = old_key
+
+
+@GUS_LIVE
+def test_live_gus_pkd_gives_classification_version():
+    """Боевой ключ: REGON отдаёт коды вместе с версией классификации.
+
+    Версию не фиксируем числом — GUS переводит субъектов на PKD 2025 по мере
+    перекодировки, и тест не должен падать в день, когда очередь дойдёт до ORLEN.
+    """
+    async def run():
+        async with httpx.AsyncClient(timeout=30) as cl:
+            base = await R.gus_lookup(cl, "7740001454")
+            # логин + поиск + отчёт — это уже три вызова, а больше трёх в секунду
+            # ключу нельзя: без паузы следующий запрос честно отсекает наш же лимит
+            await asyncio.sleep(1.1)
+            return base, await R.gus_pkd(cl, "610188201", "P")
+
+    base, data = asyncio.run(run())
+    assert data and data["version"] in ("2007", "2025", "2007+2025")
+    assert data["report"] == "BIR12OsPrawnaPkd"
+    main = [c for c in data["codes"] if c["main"]]
+    assert len(main) == 1 and re.fullmatch(r"\d\d\.\d\d\.[A-Z]", main[0]["code"])
+    assert not main[0]["name"].isupper(), "капс из REGON должен быть приведён к тексту"
+    # gus_lookup складывает то же самое в карточку — иначе UI покажет пустоту
+    assert base["pkd_version"] == data["version"] and base["pkd"]
