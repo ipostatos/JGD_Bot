@@ -215,6 +215,24 @@ def test_codes_carry_official_name_and_human_reason():
         assert code["why"] and all(isinstance(w, str) for w in code["why"])
 
 
+def test_each_code_gets_its_own_reason():
+    """При двух подходящих кодах карточка каждого показывает СВОЁ обоснование,
+    а не общий кортеж всего юнита (иначе код A показывал бы обоснование B)."""
+    import pkd
+    from pkd_dialog.api import _unit
+    from pkd_dialog.code_rules import CandidateDecision, CandidateState
+    from pkd_dialog.resolution import UnitResolution
+
+    d1 = CandidateDecision("62.10.B", CandidateState.ELIGIBLE, "u", "r1", "потому что A")
+    d2 = CandidateDecision("93.11.Z", CandidateState.ELIGIBLE, "u", "r2", "потому что B")
+    unit = UnitResolution("u", "kind", "Деятельность", "resolved", (d1, d2), None,
+                          (d1.explanation, d2.explanation))
+    out = _unit(unit, pkd.index())
+    why = {c["code"]: c["why"] for c in out["codes"]}
+    assert why["62.10.B"] == ["потому что A"]
+    assert why["93.11.Z"] == ["потому что B"]
+
+
 # ── ошибки клиента ────────────────────────────────────────────────────────
 
 def test_malformed_json_is_400():

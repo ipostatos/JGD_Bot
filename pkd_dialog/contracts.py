@@ -79,8 +79,16 @@ def features_from_answers(answers: list[Answer]) -> list[Feature]:
     Ошибки не глотаем: молча проигнорированный ответ выглядит для человека
     как «меня не услышали», и диалог зацикливается на том же вопросе.
     """
-    out: list[Feature] = []
+    # один вопрос — один ответ: если клиент прислал два (человек передумал и
+    # ответ дописан к прежнему), берём последний. Иначе два ответа дают
+    # CONFLICTED на уровне USER_ANSWER, который нечем снять — вопрос уже
+    # «отвечен», и диалог глохнет вместо того, чтобы принять новый выбор.
+    latest: dict[str, Answer] = {}
     for a in answers:
+        latest[a.question_id] = a
+
+    out: list[Feature] = []
+    for a in latest.values():
         q = question(a.question_id)
         if q is None:
             raise UnknownAnswerError(f"неизвестный вопрос: {a.question_id}")
@@ -90,6 +98,10 @@ def features_from_answers(answers: list[Answer]) -> list[Feature]:
                 f"сейчас {q.version}")
         if q.type == "single_select" and len(a.option_ids) != 1:
             raise UnknownAnswerError(f"{a.question_id}: ожидается ровно один вариант")
+        # пустой multi_select раньше проходил, помечал вопрос отвечённым и не
+        # давал ни одного признака — диалог упирался в тупик без пути назад
+        if q.type == "multi_select" and not a.option_ids:
+            raise UnknownAnswerError(f"{a.question_id}: не выбрано ни одного варианта")
         for oid in a.option_ids:
             opt = q.option(oid)
             if opt is None:

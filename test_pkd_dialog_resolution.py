@@ -14,7 +14,12 @@ from pkd_dialog import Answer, DialogIntent, PrimaryStatus, Status
 from pkd_dialog.code_rules import (CandidateState, ReasonType, apply_rules,
                                    rules)
 from pkd_dialog.contracts import ContractError
-from pkd_dialog.resolution import (OUTSIDE, RESOLVED, resolve_furniture_dialog)
+from pkd_dialog.models import Feature, FeatureSource
+from pkd_dialog.resolved import resolve_features, FeatureState
+from pkd_dialog.resolution import (OUTSIDE, RESOLVED, _with_derived,
+                                   resolve_furniture_dialog)
+from pkd_dialog.activity_units import build_units
+from pkd_dialog import features as feat
 
 ROOT = Path(__file__).resolve().parent
 SCENARIOS = json.loads(
@@ -338,3 +343,26 @@ def test_rule_coverage_report():
         fired |= {d.rule_id for u in r.units for d in u.candidate_decisions}
     declared = {r["id"] for r in rules()["rules"]}
     assert not declared - fired, f"правила без единого срабатывания: {declared - fired}"
+
+
+# ── регрессии по аудиту (PR3) ─────────────────────────────────────────────
+def test_conflicted_feature_survives_derivation():
+    """CONFLICTED-признак (value=None) не должен схлопываться в UNKNOWN при
+    выводе диалоговых признаков: иначе вопрос-развязка конфликта не задаётся."""
+    fs = resolve_features([
+        Feature(feat.ACTIVITY_MANUFACTURE, True, FeatureSource.EXPLICIT_QUERY),
+        Feature(feat.ACTIVITY_MANUFACTURE, False, FeatureSource.EXPLICIT_QUERY),
+    ], [])
+    assert fs.conflicted() == (feat.ACTIVITY_MANUFACTURE,)
+    after = _with_derived(fs, build_units(fs))
+    assert after.state(feat.ACTIVITY_MANUFACTURE) is FeatureState.CONFLICTED
+
+
+def test_not_outsourcing_is_not_manufacturing():
+    """«не отдаю на фабрику» ≠ «произвожу сам»: отрицание value=false-правила
+    (импликации аутсорса) не должно давать ACTIVITY_MANUFACTURE=True."""
+    from pkd_dialog.extraction import RuleBasedFeatureExtractor
+    ex = RuleBasedFeatureExtractor().extract("не отдаю на фабрику, только продаю")
+    manuf = [f for f in ex.features if f.key == feat.ACTIVITY_MANUFACTURE]
+    assert not any(f.value is True for f in manuf), \
+        "отрицание аутсорса ошибочно записало в производители"

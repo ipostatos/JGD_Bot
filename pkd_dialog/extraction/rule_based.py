@@ -243,10 +243,16 @@ class RuleBasedFeatureExtractor:
                     negated = self._negated(text, toks, i)
                     value = rule["value"]
                     if negated:
-                        if not isinstance(value, bool):
-                            continue      # «не из дерева» — материал не задан,
-                                          # но и отрицать конкретный нечего
-                        value = not value
+                        # отрицание применимо только к прямому «делаю X» → «не делаю X».
+                        # value=false у правил — это импликация («отдаю на фабрику» ⇒
+                        # сам не произвожу), и отрицание триггера обратного факта не
+                        # даёт: «не отдаю на фабрику» ≠ «произвожу сам» (может и
+                        # перепродавать). Такое правило под отрицанием не срабатывает.
+                        # Небулевы (материал: «не из дерева») — тоже: конкретный
+                        # материал этим не задан и отрицать нечего.
+                        if value is not True:
+                            continue
+                        value = False
                     if rule["feature"] in blocked and not negated:
                         trace.append({"rule": rule["id"], "skipped": "ambiguity_marker",
                                       "evidence": span.text})

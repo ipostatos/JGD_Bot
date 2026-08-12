@@ -192,6 +192,10 @@ def _question(q) -> dict | None:
 
 
 def _unit(unit, idx) -> dict:
+    # обоснование у каждого кода своё: раньше на каждый код вешался общий кортеж
+    # объяснений всего юнита, и при двух подходящих кодах карточка кода A
+    # показывала обоснование, написанное для кода B
+    why_by_code = {d.code: d.explanation for d in unit.candidate_decisions}
     return {
         "id": unit.kind,
         # имя для человека приходит с сервера намеренно: иначе интерфейс начнёт
@@ -200,7 +204,8 @@ def _unit(unit, idx) -> dict:
         "state": unit.state,
         "codes": [{"code": code,
                    "name": idx.codes[code]["name"],
-                   "why": list(unit.explanation)}
+                   "why": [why_by_code[code]] if code in why_by_code
+                          else list(unit.explanation)}
                   for code in unit.codes],
         "suggested_pack": unit.suggested_pack,
     }

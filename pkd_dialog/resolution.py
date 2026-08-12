@@ -27,7 +27,8 @@ from .code_rules import (CandidateDecision, CandidateState, apply_rules,
 from .extraction import RuleBasedFeatureExtractor
 from .models import (Answer, DialogIntent, Feature, FeatureSource, PrimaryStatus,
                      Question, Status, fingerprint)
-from .resolved import ResolvedFeatureSet, resolve_features
+from .resolved import (FeatureState, ResolvedFeature, ResolvedFeatureSet,
+                      resolve_features)
 from .selection import select_next_question
 
 EXTRACTOR = RuleBasedFeatureExtractor()
@@ -123,10 +124,21 @@ def resolve_furniture_dialog(*, query: str, answers: tuple[Answer, ...] = (),
 
 
 def _with_derived(fs: ResolvedFeatureSet, units) -> ResolvedFeatureSet:
-    """Признаки о самом диалоге выводятся из состава деятельностей."""
-    derived = [Feature(k, v, FeatureSource.INFERRED)
-               for k, v in derived_features(units).items()]
-    return resolve_features([f for f in _as_features(fs)], derived)
+    """Признаки о самом диалоге выводятся из состава деятельностей.
+
+    Добавляем выведенные ключи прямо к уже разрешённому набору, а НЕ гоняем
+    его через _as_features + resolve_features: тот путь терял CONFLICTED-признаки
+    (у них value=None), они схлопывались в UNKNOWN, и вопрос-развязка конфликта
+    (any_conflicted) не задавался никогда. INFERRED — самый низкий уровень
+    доверия, поэтому существующий признак любого источника остаётся.
+    """
+    merged = dict(fs.features)
+    for key, value in derived_features(units).items():
+        if key in merged:
+            continue
+        state = FeatureState.TRUE if value is not False else FeatureState.FALSE
+        merged[key] = ResolvedFeature(key, state, value, FeatureSource.INFERRED)
+    return ResolvedFeatureSet(merged)
 
 
 def _as_features(fs: ResolvedFeatureSet) -> list[Feature]:
