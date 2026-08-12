@@ -1,5 +1,6 @@
 renderDock('home');
-setupBack(() => location.replace(qs.get('from') || 'tools.html'));
+// ?from приходит из ссылки — через safeNav, иначе from=javascript:… исполнялся бы
+setupBack(() => safeNav(qs.get('from') || 'tools.html'));
 
 const SEV_NAME = { K: 'критическая', Z: 'обычная', I: 'инфо' };
 let DATA = [], sevFilter = '', docFilter = '';
@@ -9,10 +10,13 @@ function esc(s) {
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 function hl(text, q) {
-  const s = esc(text);
-  if (!q) return s;
-  return s.replace(new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi'),
-    '<mark>$1</mark>');
+  if (!q) return esc(text);
+  // подсвечиваем по СЫРОМУ тексту и экранируем каждый кусок отдельно: подсветка
+  // поверх уже экранированного HTML попадала внутрь &amp;/&quot; и рвала сущность
+  const re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+  return String(text == null ? '' : text).split(re)
+    .map((seg, i) => (i % 2 ? '<mark>' + esc(seg) + '</mark>' : esc(seg)))
+    .join('');
 }
 
 function card(e, q, i) {

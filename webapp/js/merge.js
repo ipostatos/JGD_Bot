@@ -23,16 +23,37 @@ $('pick').addEventListener('change', async (e) => {
 $('undo').onclick = () => { files.pop(); refresh(); };
 $('clear').onclick = () => { files.length = 0; refresh(); };
 
+// Тип по «магическим байтам», а не по f.type: Android и часть вебвью отдают
+// пустой или неверный MIME, из-за чего PDF уходил в картиночную ветку, а
+// WebP/HEIC — в embedJpg, роняя всю склейку без указания виновного файла.
+function sniff(data) {
+  const b = new Uint8Array(data.slice(0, 12));
+  const s = String.fromCharCode.apply(null, b);
+  if (s.startsWith('%PDF')) return 'pdf';
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) return 'png';
+  if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return 'jpg';
+  if (s.startsWith('RIFF') && s.slice(8, 12) === 'WEBP') return 'webp';
+  if (s.slice(4, 8) === 'ftyp') return 'heic';   // HEIC/HEIF контейнер
+  return 'unknown';
+}
+
 async function build() {
   const out = await PDFDocument.create();
   const autorot = $('autorot').checked, odd = $('oddstart').checked;
   for (const f of files) {
+    const kind = sniff(f.data);
+    if (kind === 'webp' || kind === 'heic' || kind === 'unknown') {
+      const e = new Error();
+      e.userMessage = `Файл «${f.name}» в формате ${kind === 'unknown' ? 'непонятном' : kind.toUpperCase()} — `
+        + 'PDF умеет вкладывать только JPG, PNG и PDF. Конвертируй его в JPG и добавь снова.';
+      throw e;
+    }
     if (odd && out.getPageCount() % 2 === 1) out.addPage(A4); // добить до нечётного старта
-    if (f.type === 'application/pdf') {
+    if (kind === 'pdf') {
       const src = await PDFDocument.load(f.data, { ignoreEncryption: true });
       (await out.copyPages(src, src.getPageIndices())).forEach(p => out.addPage(p));
     } else {
-      const img = f.type === 'image/png'
+      const img = kind === 'png'
         ? await out.embedPng(f.data) : await out.embedJpg(f.data);
       const landscape = autorot && img.width > img.height;
       const [pw, ph] = landscape ? [A4[1], A4[0]] : A4;
@@ -65,7 +86,11 @@ $('make').onclick = async () => {
       a.href = URL.createObjectURL(blob); a.download = 'sklejka.pdf'; a.click();
       $('msg').textContent = 'Готово! Файл скачан.';
     }
-  } catch { $('msg').textContent = 'Не получилось собрать — проверь файлы и попробуй снова.'; }
+  } catch (e) {
+    // если знаем, какой файл виноват — говорим прямо, а не общим «проверь файлы»
+    $('msg').textContent = (e && e.userMessage)
+      || 'Не получилось собрать — проверь файлы и попробуй снова.';
+  }
 };
 
 refresh();

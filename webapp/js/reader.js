@@ -61,6 +61,7 @@ function startReader(){
   let scale = 1;
   const rendered = new Set();
   const canvases = [];
+  const tasks = {};      // активные RenderTask по странице — чтобы отменять при зуме
 
   fetch(fileUrl, { method: "GET", headers: { Range: "bytes=0-0" } })
     .then(r => {
@@ -117,9 +118,16 @@ function startReader(){
       c.width = vp.width; c.height = vp.height;
       c.style.width  = (vp.width / dpr()) + "px";
       c.style.height = (vp.height / dpr()) + "px";
-      return page.render({ canvasContext: c.getContext("2d", { alpha:false }),
-        viewport: vp }).promise;
-    }).catch(()=>{ rendered.delete(i); });
+      const task = page.render({ canvasContext: c.getContext("2d", { alpha:false }),
+        viewport: vp });
+      tasks[i] = task;
+      return task.promise.then(() => { if (tasks[i] === task) delete tasks[i]; });
+    }).catch((e) => {
+      // отмена при зуме — не ошибка: страницу перерисует новый проход, флаг
+      // rendered не трогаем, иначе снимем метку уже начатого нового рендера
+      if (e && e.name === "RenderingCancelledException") return;
+      rendered.delete(i);
+    });
   }
 
   function renderVisible(){
@@ -137,6 +145,10 @@ function startReader(){
     const box = $("pages");
     const ratio = box.scrollHeight ? box.scrollTop / box.scrollHeight : 0;
     const was = [...rendered];
+    // отменяем ещё идущие рендеры до перерисовки: новый render() на том же
+    // canvas, пока жив старый, падает «multiple render operations» и оставляет
+    // страницу пустой до следующего скролла
+    Object.values(tasks).forEach(t => { try { t.cancel(); } catch (e) {} });
     rendered.clear();
     was.forEach(renderPage);
     requestAnimationFrame(() => {

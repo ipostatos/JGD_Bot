@@ -55,6 +55,16 @@
   // (и наоборот), отсюда «иногда не срабатывает». Подписываемся на оба, гардом
   // схлопываем двойной вызов. target: URL-строка или функция. Перед переходом
   // даём шанс window.__navBack() (лайтбокс/внутренняя навигация страницы).
+  // Безопасная навигация внутри Mini App: только относительный путь к своей
+  // странице. Отсекаем схему (javascript:/data:/http:), протокол-относительный
+  // //host, абсолютный /path и уход вверх — иначе ?from=javascript:… из ссылки
+  // исполнялся бы в origin приложения и утекал initData/профиль.
+  window.safeNavTarget = function (target) {
+    const t = typeof target === 'string' ? target.trim() : '';
+    return /^[\w.-]+\.html([?#][^\s]*)?$/.test(t) ? t : 'index.html';
+  };
+  window.safeNav = function (target) { location.replace(window.safeNavTarget(target)); };
+
   window.setupBack = function (target) {
     if (!tg || !tg.BackButton) return;
     const bb = tg.BackButton;
@@ -66,7 +76,7 @@
         try { if (window.__navBack() === true) return; } catch (e) {}
       }
       if (typeof target === 'function') { target(); return; }
-      location.replace(target || 'index.html');  // href/history.back в webview ненадёжны
+      window.safeNav(target || 'index.html');  // href/history.back в webview ненадёжны
     }
     bb.show();
     try { bb.offClick && bb.offClick(goBack); } catch (e) {}

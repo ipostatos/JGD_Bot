@@ -239,6 +239,55 @@ def test_pkd_card_shows_only_its_own_exclusions(browser, base_url):
         ctx.close()
 
 
+def test_safe_nav_rejects_dangerous_targets(browser, base_url):
+    """?from= из ссылки идёт в навигацию — safeNav обязан пропускать только
+    относительный путь к своей странице, иначе from=javascript:… исполнялся бы."""
+    ctx, page, _, _ = _open(browser, base_url + "/index.html")
+    try:
+        cases = page.evaluate("""() => ({
+            js: window.safeNavTarget("javascript:alert(1)"),
+            data: window.safeNavTarget("data:text/html,x"),
+            abs: window.safeNavTarget("https://evil.com/x"),
+            proto: window.safeNavTarget("//evil.com"),
+            slash: window.safeNavTarget("/etc/passwd"),
+            good: window.safeNavTarget("tools.html"),
+            query: window.safeNavTarget("zus_err.html?from=tools.html"),
+        })""")
+        assert cases["js"] == "index.html"      # схема отсечена
+        assert cases["data"] == "index.html"
+        assert cases["abs"] == "index.html"
+        assert cases["proto"] == "index.html"
+        assert cases["slash"] == "index.html"
+        assert cases["good"] == "tools.html"    # свои страницы проходят
+        assert cases["query"] == "zus_err.html?from=tools.html"
+    finally:
+        ctx.close()
+
+
+def test_nip_card_renders_without_accounts_field(browser, base_url):
+    """Ответ без поля accounts (фирма только в CEIDG/GUS) не должен ронять
+    рендер карточки TypeError'ом."""
+    ctx, page, errors, _ = _open(browser, base_url + "/nip.html")
+    try:
+        import json
+        body = json.dumps({
+            "nip": "1133117581", "valid": True, "name": "Тест Sp. z o.o.",
+            "vat_status": "brak", "score": 60, "level": "warn", "cached": False,
+            "signals": [], "sources": {"whitelist": "empty", "vies": "empty",
+                                       "gus": "ok", "ceidg": "ok"},
+            "pkd": [], "vies": None,
+        }, ensure_ascii=False)   # без accounts / accounts_total
+        page.route("**/api/nip", lambda route: route.fulfill(
+            status=200, content_type="application/json", body=body))
+        page.fill("#nip", "1133117581")
+        tap(page, "#go")
+        page.wait_for_selector("#out .card", timeout=15000)
+        assert "Тест Sp. z o.o." in page.inner_text("#out")
+        assert not errors, errors        # ни одной ошибки в консоли
+    finally:
+        ctx.close()
+
+
 def test_my_codes_show_what_regon_says(browser, base_url):
     """Блок «что говорит REGON» на экране «Мои коды».
 

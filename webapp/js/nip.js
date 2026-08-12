@@ -26,9 +26,12 @@ function render(d) {
   ].filter(([, v]) => v).map(([k, v]) =>
     `<div class="kv"><span>${k}</span><b>${esc(v)}</b></div>`).join('');
 
-  const accs = (d.accounts || []).slice(0, 8).map(a =>
-    a.replace(/(.{4})/g, '$1 ').trim()).join('<br>');
-  const total = d.accounts_total || d.accounts.length;
+  // счета из чужого реестра — экранируем (defense-in-depth: единственное
+  // поле карточки, шедшее в innerHTML без esc); accounts может отсутствовать
+  const accounts = d.accounts || [];
+  const accs = accounts.slice(0, 8).map(a =>
+    esc(String(a).replace(/(.{4})/g, '$1 ').trim())).join('<br>');
+  const total = d.accounts_total || accounts.length;
   const more = total > 8 ? `<div class="muted" style="font-size:12px;margin-top:4px">
     …и ещё ${total - 8}</div>` : '';
 
@@ -50,7 +53,7 @@ function render(d) {
     </div>
     ${rows ? `<div class="card" style="margin-bottom:12px">
       <div class="h2" style="margin-bottom:4px">Данные фирмы</div>${rows}</div>` : ''}
-    ${d.accounts.length ? `<div class="card" style="margin-bottom:12px">
+    ${accounts.length ? `<div class="card" style="margin-bottom:12px">
       <div class="h2" style="margin-bottom:6px">Счета в белом списке</div>
       <div class="acc-list">${accs}</div>${more}</div>` : ''}
     <div class="card" style="margin-bottom:12px">
