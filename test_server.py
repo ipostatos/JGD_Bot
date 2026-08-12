@@ -181,6 +181,19 @@ def test_verify_init_data_roundtrip():
     assert server.verify_init_data("garbage") is None
 
 
+def test_valid_signature_without_user_is_rejected():
+    """Подпись бывает валидной без поля user — это не авторизованный юзер.
+    Раньше возвращался {}, проходил «if user is None», и user['id'] падал 500."""
+    import time
+    token = os.environ["BOT_TOKEN"]
+    pairs = {"auth_date": str(int(time.time())), "query_id": "AAA"}   # без user
+    check = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
+    secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
+    pairs["hash"] = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
+    from urllib.parse import urlencode
+    assert server.verify_init_data(urlencode(pairs)) is None
+
+
 def test_init_data_expires():
     """Подпись Telegram бессрочна — перехваченную строку нельзя переигрывать."""
     token = os.environ["BOT_TOKEN"]
@@ -190,6 +203,25 @@ def test_init_data_expires():
     assert server.verify_init_data(fresh)
     assert server.verify_init_data(stale) is None
     assert server.verify_init_data(future) is None
+
+
+def test_client_key_uses_real_ip_behind_proxy():
+    """За Caddy req.client.host = 127.0.0.1 — ключ должен браться из последнего
+    элемента X-Forwarded-For, иначе лимит один на всех."""
+    class _Req:
+        def __init__(self, xff, peer):
+            self.headers = {"x-forwarded-for": xff} if xff else {}
+            self.client = type("C", (), {"host": peer})()
+
+    a = server._client_key(_Req("1.2.3.4", "127.0.0.1"))
+    b = server._client_key(_Req("9.9.9.9", "127.0.0.1"))
+    assert a != b                                   # разные клиенты — разные ключи
+    # клиент мог подставить левый первый элемент — берём тот, что дописал Caddy
+    spoof = server._client_key(_Req("9.9.9.9, 1.2.3.4", "127.0.0.1"))
+    assert spoof == a
+    # без заголовка падаем на peer
+    assert server._client_key(_Req("", "5.6.7.8")) == \
+        server._client_key(_Req("", "5.6.7.8"))
 
 
 def test_no_bot_token_means_no_trust(monkeypatch):

@@ -57,7 +57,13 @@ def verify_init_data(init_data: str) -> dict | None:
         if not 0 <= age <= INIT_DATA_TTL:
             log.info("initData отклонён по возрасту: %.0f с", age)
             return None
-        return json.loads(pairs.get("user", "{}"))
+        user = json.loads(pairs.get("user", "{}"))
+        # подпись бывает валидной и без поля user (часть контекстов запуска):
+        # тогда это НЕ авторизованный пользователь. Раньше возвращался {},
+        # проходил «if user is None», и user["id"] дальше падал 500 на ~12 ручках
+        if not isinstance(user, dict) or "id" not in user:
+            return None
+        return user
     except Exception:
         return None
 
@@ -124,6 +130,9 @@ def build_bot():
             await m.answer("Пришли NIP контрагента — 10 цифр, можно с дефисами. "
                            "Проверю статус VAT, данные фирмы и счета в белом списке.")
             return
+        if (why := await _bot_nip_limit(m.from_user.id)):
+            await m.answer(why)
+            return
         await m.answer(await _nip_reply(arg), parse_mode="HTML",
                        disable_web_page_preview=True)
 
@@ -163,6 +172,9 @@ def build_bot():
     async def digits_plain(m: Message):
         digits = "".join(ch for ch in m.text if ch.isdigit())
         if len(digits) == 10:
+            if (why := await _bot_nip_limit(m.from_user.id)):
+                await m.answer(why)
+                return
             await m.answer(await _nip_reply(digits), parse_mode="HTML",
                            disable_web_page_preview=True)
         elif len(digits) == 8:
@@ -367,6 +379,14 @@ def _pkd_reply(query: str) -> str:
         out.append("\n".join(block))
     out.append(f"<i>{esc_html(r['note'])}</i>")
     return "\n\n".join(out)
+
+
+async def _bot_nip_limit(user_id: int) -> str | None:
+    """Тот же лимит, что у API-проверки NIP: /nip и голые 10 цифр в боте
+    ходят в те же четыре чужих реестра, и оставлять их немерянными — прямой
+    обход квот CEIDG/GUS от имени сервера."""
+    import ratelimit
+    return await asyncio.to_thread(ratelimit.check, "nip", user_id)
 
 
 async def _nip_reply(raw_nip: str) -> str:
@@ -581,7 +601,14 @@ async def api_pkd(req: Request):
     query = (body.get("q") or "").strip()[:200]
     if not query:
         raise HTTPException(400, "Опиши, чем занимаешься, или пришли код PKD")
-    return await asyncio.to_thread(pkd.lookup, query, int(body.get("limit", 5)))
+    # limit из тела: нечисловой/null роняли ручку 500, огромный/отрицательный —
+    # грузили весь справочник или резали срезом. Приводим к [1..50] с дефолтом 5
+    try:
+        limit = int(body.get("limit", 5))
+    except (TypeError, ValueError):
+        limit = 5
+    limit = max(1, min(50, limit))
+    return await asyncio.to_thread(pkd.lookup, query, limit)
 
 
 def _client_key(req: Request) -> int:
@@ -590,8 +617,16 @@ def _client_key(req: Request) -> int:
     Берём адрес клиента и сворачиваем в число: сам адрес в базу лимитов
     не пишем, полный текст запроса — тем более. Лимитеру нужен только
     стабильный ключ, а не досье.
+
+    За Caddy `req.client.host` всегда 127.0.0.1 — «пер-клиентский» лимит
+    схлопывался в одно ведро на всех, и любой поток выключал диалог всему
+    сайту. Настоящий адрес — последний элемент X-Forwarded-For: Caddy (единственный
+    прокси перед приложением) дописывает реального пира в конец, а всё, что левее,
+    мог подставить сам клиент.
     """
-    host = (req.client.host if req.client else "") or "unknown"
+    xff = req.headers.get("x-forwarded-for", "")
+    host = xff.split(",")[-1].strip() if xff else ""
+    host = host or (req.client.host if req.client else "") or "unknown"
     return int(hashlib.sha256(host.encode()).hexdigest()[:12], 16)
 
 
@@ -691,6 +726,10 @@ async def api_pkd_dialog_event(req: Request):
         raise HTTPException(400, "Тело запроса должно быть валидным JSON.")
     if not isinstance(body, dict) or set(body) - {"event"}:
         raise HTTPException(400, "Неизвестное поле в запросе.")
+    # «ask» ставит сервер сам при запросе к движку — принять его от клиента
+    # значит пустить подделку в статистику; клиенту доступны только UI-события
+    if body.get("event") not in dialog_telemetry.CLIENT_EVENTS:
+        raise HTTPException(400, "Неизвестное событие.")
     dialog_telemetry.record(event=body.get("event"),
                             session=req.headers.get("X-Dialog-Session"),
                             schema_version=1)

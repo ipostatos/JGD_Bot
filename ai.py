@@ -177,7 +177,11 @@ def _corpus_fingerprint() -> str:
                  f"{TITLE_BOOST}|{MIN_RELEVANCE}".encode())
         for a in idx:
             h.update(a["id"].encode())
-            h.update(str(len(a["text"])).encode())
+            # хешируем содержимое, а не только длину: правка суммы той же длины
+            # («1 646 zł» → «1 746 zł») и правка заголовка (он влияет на
+            # TITLE_BOOST и на шапку контекста) иначе не сбрасывали кэш ответа
+            h.update(a["text"].encode())
+            h.update((a.get("title") or "").encode())
         _fingerprint = h.hexdigest()[:16]
     return _fingerprint
 
@@ -351,8 +355,12 @@ async def ask(user_id: int, question: str, profile: dict | None = None) -> dict:
     # (или правки ретривера) сутки отдавался бы ответ, построенный по старому
     # индексу. Ровно так и вышло 2026-07-24: ассистент уже знал ставки,
     # но на вопрос про zdrowotna повторял вчерашнее «в гайде нет информации».
+    # И от профиля: ответ строится под форму налога и статус VAT (в промпте),
+    # поэтому liniowy+VAT-ответ нельзя отдавать ryczałt-пользователю из кэша.
+    prof_sig = (f"{profile.get('form', '')}|{bool(profile.get('vat'))}"
+                if profile else "")
     qhash = hashlib.sha256(
-        f"{question.lower()}|{_corpus_fingerprint()}".encode()).hexdigest()
+        f"{question.lower()}|{_corpus_fingerprint()}|{prof_sig}".encode()).hexdigest()
     with _db() as c:
         row = c.execute("SELECT answer, sources, ts FROM ai_cache WHERE qhash=?",
                         (qhash,)).fetchone()

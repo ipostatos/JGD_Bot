@@ -38,6 +38,10 @@ EVENTS = {
     "reset",            # «Начать заново»
     "legacy",           # ушёл в обычный поиск
 }
+# что может прислать клиент через /event: «ask» ставит только сервер, иначе
+# любой мог бы фабриковать статистику начатых диалогов, по которой принимается
+# решение о следующем rules pack
+CLIENT_EVENTS = EVENTS - {"ask"}
 STATUSES = {
     "needs_clarification", "resolved_candidates", "resolved_package",
     "outside_current_pack", "unrecognized_activity",

@@ -49,7 +49,13 @@ def parse_podatki(html: str):
 
 def parse_govpl_mf(html: str):
     """gov.pl/web/finanse/wiadomosci: блок art-prev, <a href="/web/finanse/slug">"""
-    seg = html[html.find("art-prev"):]
+    start = html.find("art-prev")
+    if start < 0:
+        # класс переименовали в редизайне — раньше find(-1) давал seg=html[-1:]
+        # (один символ), парсер молча отдавал пусто и «0 новых» = тихий день.
+        # Явно поднимаем: run_once поймает и залогирует «fetch mf failed»
+        raise ValueError("gov.pl: блок 'art-prev' не найден — вёрстка изменилась")
+    seg = html[start:]
     end = seg.find("</article>")
     if end > 0:
         seg = seg[:end]
@@ -154,10 +160,12 @@ def run_once():
     fresh = []
     with db() as c:
         known = {r[0] for r in c.execute("SELECT url FROM news")}
-    for src in SOURCES:
+    seen = set(known)                       # дедуп и против БД, и внутри прохода:
+    for src in SOURCES:                     # один URL бывает на двух страницах ZUS
         try:
             for url, title in src["parse"](_get(src["url"]))[:25]:
-                if url not in known:
+                if url not in seen:
+                    seen.add(url)           # иначе классифицируется и пушится дважды
                     fresh.append((url, src["label"], title))
         except Exception as e:
             log.warning("fetch %s failed: %s", src["id"], e)
@@ -165,22 +173,44 @@ def run_once():
         return []
 
     verdicts = classify(fresh)
+    if verdicts is None:
+        # весь батч не расклассифицирован (API упал/ответ не распарсился).
+        # НЕ сохраняем как relevant=0: URL попал бы в known и новость пропала
+        # бы навсегда. Не сохраняем вовсе — следующий проход попробует снова.
+        log.warning("monitor: классификация не удалась, %d новостей отложены до "
+                    "следующего прохода", len(fresh))
+        return []
+
     now = int(time.time())
     to_push = []
+    _VAT = {"any", "vat_only", "nonvat_only"}
     with db() as c:
         for i, (url, src_label, title) in enumerate(fresh):
-            v = verdicts[i] if verdicts else {}
+            v = verdicts[i]
+            if not isinstance(v, dict):
+                # кривой элемент не должен ронять весь батч (rollback + повторный
+                # биллинг): пропускаем эту новость, она отложится на ретрай
+                log.warning("monitor: вердикт %d не объект (%r) — новость отложена", i, v)
+                continue
             relevant = bool(v.get("relevant", False))
-            row = (url, src_label, title, now, int(relevant),
-                   int(v.get("importance", 1)),
-                   json.dumps(v.get("topics", []), ensure_ascii=False),
-                   v.get("summary", ""), v.get("who_vat", "any"), 0)
+            try:
+                importance = int(v.get("importance", 1))
+            except (TypeError, ValueError):
+                importance = 1
+            topics = v.get("topics")
+            if not isinstance(topics, list):    # строка ломала бы .map() в ленте
+                topics = []
+            who_vat = v.get("who_vat", "any")
+            if who_vat not in _VAT:
+                who_vat = "any"
+            row = (url, src_label, title, now, int(relevant), importance,
+                   json.dumps(topics, ensure_ascii=False),
+                   str(v.get("summary") or ""), who_vat, 0)
             c.execute("INSERT OR IGNORE INTO news VALUES(?,?,?,?,?,?,?,?,?,?)", row)
-            if relevant and int(v.get("importance", 1)) >= 2:
+            if relevant and importance >= 2:
                 to_push.append({"url": url, "source": src_label, "title": title,
-                                "summary": v.get("summary", ""),
-                                "importance": int(v.get("importance", 1)),
-                                "who_vat": v.get("who_vat", "any")})
+                                "summary": str(v.get("summary") or ""),
+                                "importance": importance, "who_vat": who_vat})
     log.info("monitor: %d new, %d push-worthy", len(fresh), len(to_push))
     return to_push
 

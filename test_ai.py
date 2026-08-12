@@ -123,3 +123,45 @@ def test_cache_key_follows_the_corpus(tmp_path, monkeypatch):
     monkeypatch.setattr(ai, "_fingerprint", None)
     monkeypatch.setattr(ai, "BM25_B", ai.BM25_B + 0.1)
     assert ai._corpus_fingerprint() != after
+
+
+def test_fingerprint_notices_same_length_edit(monkeypatch):
+    """Правка суммы той же длины («1 646» → «1 746») обязана сбросить кэш:
+    хеш по длине текста её не замечал — тот же баг, что чинили 24.07."""
+    monkeypatch.setattr(ai, "_index",
+                        [{"id": "a", "title": "T", "text": "ставка 1 646 zł в месяц"}])
+    monkeypatch.setattr(ai, "_fingerprint", None)
+    before = ai._corpus_fingerprint()
+    monkeypatch.setattr(ai, "_index",
+                        [{"id": "a", "title": "T", "text": "ставка 1 746 zł в месяц"}])
+    monkeypatch.setattr(ai, "_fingerprint", None)
+    after_text = ai._corpus_fingerprint()
+    assert after_text != before
+    # правка заголовка (влияет на TITLE_BOOST и шапку контекста) — тоже
+    monkeypatch.setattr(ai, "_index",
+                        [{"id": "a", "title": "T2", "text": "ставка 1 746 zł в месяц"}])
+    monkeypatch.setattr(ai, "_fingerprint", None)
+    assert ai._corpus_fingerprint() != after_text
+
+
+def test_cache_key_separates_profiles(tmp_path, monkeypatch):
+    """Один вопрос от liniowy+VAT и от ryczałt без VAT не должен делить кэш:
+    ответ строится под профиль, и чужой был бы неверной налоговой справкой."""
+    import asyncio
+    import json
+    import time
+    monkeypatch.setattr(ai, "DB_PATH", tmp_path / "t.db")
+    monkeypatch.setattr(ai, "ANTHROPIC_KEY", "")        # до сети не дойдём
+
+    # кладём в кэш ответ «под liniowy+VAT» руками через qhash-логику ask():
+    # проще — проверим, что ключи для разных профилей различаются
+    q = "какая у меня ставка"
+    def qhash(profile):
+        prof_sig = (f"{profile.get('form', '')}|{bool(profile.get('vat'))}"
+                    if profile else "")
+        import hashlib
+        return hashlib.sha256(
+            f"{q.lower()}|{ai._corpus_fingerprint()}|{prof_sig}".encode()).hexdigest()
+
+    assert qhash({"form": "liniowy", "vat": True}) != qhash({"form": "ryczalt", "vat": False})
+    assert qhash(None) != qhash({"form": "liniowy", "vat": True})

@@ -60,3 +60,65 @@ def test_feed_empty(tmp_path, monkeypatch):
 def test_classify_without_key(monkeypatch):
     monkeypatch.setattr(monitor, "ANTHROPIC_KEY", "")
     assert monitor.classify([("u", "s", "t")]) is None
+
+
+def test_parse_govpl_mf_raises_on_layout_change():
+    """Пропавший 'art-prev' — не тихий день, а изменение вёрстки: раньше
+    find(-1) давал seg=html[-1:] и парсер молча отдавал пусто."""
+    import pytest
+    with pytest.raises(ValueError, match="art-prev"):
+        monitor.parse_govpl_mf("<html>совсем другая разметка без блока</html>")
+
+
+def _run_once_env(tmp_path, monkeypatch, verdicts):
+    """run_once с одним источником-заглушкой и подменённой классификацией."""
+    monkeypatch.setattr(monitor, "DB_PATH", tmp_path / "t.db")
+    monkeypatch.setattr(monitor, "SOURCES", [
+        {"id": "a", "label": "ZUS", "url": "u1", "parse": lambda h: h},
+        {"id": "b", "label": "ZUS", "url": "u2", "parse": lambda h: h},
+    ])
+    # обе «страницы» отдают один и тот же URL — проверяем дедуп внутри прохода
+    monkeypatch.setattr(monitor, "_get", lambda url: [("/news/x", "Заголовок новости")])
+    monkeypatch.setattr(monitor, "classify", lambda items: verdicts(items))
+
+
+def test_run_once_failed_classification_is_not_saved(tmp_path, monkeypatch):
+    """classify→None (API упал): новость НЕ сохраняется как relevant=0, иначе
+    ушла бы в known и пропала навсегда. Следующий проход попробует снова."""
+    _run_once_env(tmp_path, monkeypatch, lambda items: None)
+    assert monitor.run_once() == []
+    with monitor.db() as c:
+        assert c.execute("SELECT COUNT(*) FROM news").fetchone()[0] == 0
+
+
+def test_run_once_dedupes_same_url_across_pages(tmp_path, monkeypatch):
+    """Один URL с двух страниц классифицируется и пушится один раз."""
+    seen_counts = []
+    def verdicts(items):
+        seen_counts.append(len(items))
+        return [{"relevant": True, "importance": 3, "topics": ["vat"],
+                 "summary": "s", "who_vat": "any"}] * len(items)
+    _run_once_env(tmp_path, monkeypatch, verdicts)
+    push = monitor.run_once()
+    assert seen_counts == [1]           # в классификацию ушёл один элемент
+    assert len(push) == 1
+    with monitor.db() as c:
+        assert c.execute("SELECT COUNT(*) FROM news").fetchone()[0] == 1
+
+
+def test_run_once_tolerates_malformed_verdict(tmp_path, monkeypatch):
+    """Не-объект и строковые topics не роняют батч и не ломают ленту."""
+    # topics строкой — в БД должен уйти список, иначе .map() в ленте падает
+    _run_once_env(tmp_path, monkeypatch, lambda items: [
+        {"relevant": True, "importance": 2, "topics": "VAT", "summary": "s"}])
+    monitor.run_once()
+    feed = monitor.get_feed()
+    assert feed and feed[0]["topics"] == []      # строка приведена к []
+
+
+def test_run_once_skips_non_dict_verdict(tmp_path, monkeypatch):
+    """Элемент-строка вместо объекта не роняет весь проход (rollback+ребиллинг)."""
+    _run_once_env(tmp_path, monkeypatch, lambda items: ["не объект"])
+    assert monitor.run_once() == []
+    with monitor.db() as c:
+        assert c.execute("SELECT COUNT(*) FROM news").fetchone()[0] == 0

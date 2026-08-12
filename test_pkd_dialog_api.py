@@ -73,6 +73,15 @@ def test_old_endpoint_is_untouched():
         assert [x["code"] for x in r.json()["results"]][0] == "31.00.Z"
 
 
+@pytest.mark.parametrize("limit", ["abc", None, [], 999999, -3])
+def test_pkd_limit_is_validated_not_500(limit):
+    """Нечисловой/огромный/отрицательный limit не должен ронять ручку 500."""
+    with client(enabled=False) as c:
+        r = c.post("/api/pkd", json={"q": "мебель", "limit": limit})
+        assert r.status_code == 200
+        assert len(r.json()["results"]) <= 50
+
+
 # ── полный цикл без состояния ─────────────────────────────────────────────
 
 def test_stateless_cycle():
@@ -389,13 +398,16 @@ def test_client_errors_are_measured_too():
     assert codes == [400, 400]
 
 
-def test_ui_event_endpoint_accepts_only_whitelisted_names():
+def test_ui_event_endpoint_accepts_only_client_events():
     with client() as c:
         assert c.post(URL + "/event", json={"event": "start"},
                       headers={"X-Dialog-Session": SID}).status_code == 204
-        # неизвестное имя не ломает ответ, но и не пишется
+        # серверное «ask» от клиента — подделка статистики, отклоняем
+        assert c.post(URL + "/event", json={"event": "ask"},
+                      headers={"X-Dialog-Session": SID}).status_code == 400
+        # неизвестное имя — тоже 400, а не тихий приём
         assert c.post(URL + "/event", json={"event": "собираю кухни"},
-                      headers={"X-Dialog-Session": SID}).status_code == 204
+                      headers={"X-Dialog-Session": SID}).status_code == 400
         # лишнее поле — ошибка контракта, а не тихий приём текста
         assert c.post(URL + "/event", json={"event": "start", "query": "кухни"},
                       headers={"X-Dialog-Session": SID}).status_code == 400
