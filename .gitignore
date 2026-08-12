@@ -23,3 +23,6 @@ GUS-Regon-Usluga*/
 audit/
 zus_dra_*.xml
 assets/*.local.*
+
+# Залётные картинки из ChatGPT в корне (наброски/макеты) — не часть проекта
+/ChatGPT Image *.png
