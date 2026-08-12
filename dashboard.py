@@ -14,6 +14,7 @@ from datetime import date
 
 from calc import RATES
 from hermes.infakt import Infakt, invoice_paid
+from ksef import ALL_SINCE     # дата обязанности выставлять в KSeF (01.04.2026)
 
 log = logging.getLogger("jdg.dashboard")
 
@@ -53,13 +54,15 @@ def _health(invoices: list[dict], costs: list[dict], fees: list[dict],
         items.append({"level": "bad", "cut": cut,
                       "text": f"Просроченных неоплаченных фактур: {len(overdue)}"})
 
-    year = str(today.year)
-    this_year = [i for i in invoices if (i.get("invoice_date") or "").startswith(year)]
-    no_ksef = [i for i in this_year if not i.get("ksef_number")]
+    # KSeF-номер требуется только с даты обязанности (01.04.2026): фактуры
+    # января–марта 2026 законно без него, и штрафовать за них комплаенс нельзя
+    since = ALL_SINCE.isoformat()
+    no_ksef = [i for i in invoices
+               if (i.get("invoice_date") or "") >= since and not i.get("ksef_number")]
     if no_ksef:
         score -= 5
         items.append({"level": "warn", "cut": 5,
-                      "text": f"Фактур без номера KSeF в этом году: {len(no_ksef)}"})
+                      "text": f"Фактур без номера KSeF (с {ALL_SINCE.strftime('%d.%m.%Y')}): {len(no_ksef)}"})
 
     # ⚠️ Проверено на живых данных: статус «printed» значит «распечатано», а не
     # «не оплачено», а «not_applicable» и нулевые суммы — вовсе не обязательства.

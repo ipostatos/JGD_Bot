@@ -157,13 +157,16 @@ def sales_from_invoices(invoices: list[dict], today: date | None = None) -> dict
     today = today or date.today()
     months: dict[str, float] = {}
     year = str(today.year)
+    since = ALL_SINCE.isoformat()
     no_ksef = with_ksef = 0
     for inv in invoices:
         d = inv.get("invoice_date") or ""
         gross = (inv.get("gross_price") or 0) / 100
         if len(d) >= 7:
             months[d[:7]] = round(months.get(d[:7], 0.0) + gross, 2)
-        if d.startswith(year):
+        # считаем комплаенс только с даты обязанности: фактуры до 01.04.2026
+        # законно без номера KSeF, в «без номера» их записывать нельзя
+        if d.startswith(year) and d >= since:
             if inv.get("ksef_number"):
                 with_ksef += 1
             else:

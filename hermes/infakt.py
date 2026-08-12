@@ -53,16 +53,28 @@ class Infakt:
             return r.json()
         raise InfaktError(f"GET {path}: rate limit не отпустил")
 
-    def _list_all(self, path: str, limit: int = 100, max_pages: int = 10) -> list[dict]:
-        """Собрать все entities с пагинацией (фильтруем на клиенте — надёжнее q[])."""
+    def _list_all(self, path: str, limit: int = 100, max_pages: int = 50) -> list[dict]:
+        """Собрать все entities с пагинацией (фильтруем на клиенте — надёжнее q[]).
+
+        Признак последней страницы — неполная страница (`len < limit`), а не
+        `len(out) >= total_count`: при отсутствии metainfo total_count=0 делал
+        `>= 0` истинным и возвращал ПЕРВУЮ страницу как весь список, занижая
+        оборот и использование лимита VAT. Если страницы кончились раньше данных
+        (упёрлись в max_pages) — поднимаем ошибку, а не отдаём обрезанный список
+        молча: неверная тревога о лимите хуже честного отказа.
+        """
         out: list[dict] = []
+        total = None
         for page in range(max_pages):
             data = self._get(path, limit=limit, offset=page * limit)
             entities = data.get("entities", [])
             out.extend(entities)
-            if len(out) >= data.get("metainfo", {}).get("total_count", 0) or not entities:
-                break
-        return out
+            total = data.get("metainfo", {}).get("total_count")
+            if not entities or len(entities) < limit or (total is not None and len(out) >= total):
+                return out
+        raise InfaktError(
+            f"{path}: выгружено {len(out)} записей за {max_pages} страниц, "
+            f"список не кончился (total={total}) — поднимите max_pages")
 
     def _send(self, method: str, path: str, json: dict | None = None) -> dict:
         """Запись (POST/PUT/DELETE) с ретраем ТОЛЬКО на 429 (не на таймаут:

@@ -775,7 +775,11 @@ async def infakt_summary(req: Request):
     user = verify_init_data(body.get("initData", ""))
     if user is None:
         raise HTTPException(401, "bad initData")
-    return await infakt.summary(user["id"])
+    try:
+        return await infakt.summary(user["id"])
+    except Exception as e:                       # как overview/close/pay: чистый 502
+        log.warning("infakt.summary failed for %s: %s", user["id"], e)
+        raise HTTPException(502, "inFakt не ответил — попробуй ещё раз")
 
 
 def _month_arg(body: dict) -> str:
@@ -810,8 +814,9 @@ async def infakt_close(req: Request):
     user = verify_init_data(body.get("initData", ""))
     if user is None:
         raise HTTPException(401, "bad initData")
+    month = _month_arg(body)          # вне try: его 400 не должен стать 502
     try:
-        return await cockpit.close(user["id"], _month_arg(body))
+        return await cockpit.close(user["id"], month)
     except Exception as e:
         log.warning("cockpit.close failed for %s: %s", user["id"], e)
         raise HTTPException(502, "inFakt не ответил — попробуй ещё раз")
@@ -825,8 +830,9 @@ async def infakt_pay(req: Request):
     user = verify_init_data(body.get("initData", ""))
     if user is None:
         raise HTTPException(401, "bad initData")
+    month = _month_arg(body)          # вне try: его 400 не должен стать 502
     try:
-        return await cockpit.pay(user["id"], _month_arg(body))
+        return await cockpit.pay(user["id"], month)
     except Exception as e:
         log.warning("cockpit.pay failed for %s: %s", user["id"], e)
         raise HTTPException(502, "inFakt не ответил — попробуй ещё раз")

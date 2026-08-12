@@ -18,7 +18,7 @@ from datetime import date
 from pathlib import Path
 
 import httpx
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
 log = logging.getLogger("jdg.infakt")
 
@@ -92,7 +92,16 @@ def load_key(user_id: int) -> str | None:
     with _db() as c:
         row = c.execute("SELECT enc FROM infakt_keys WHERE user_id=?",
                         (user_id,)).fetchone()
-    return fernet().decrypt(row[0]).decode() if row else None
+    if not row:
+        return None
+    try:
+        return fernet().decrypt(row[0]).decode()
+    except InvalidToken:
+        # FERNET_KEY сменился после сохранения ключа: расшифровать старый
+        # шифротекст нечем. Возвращаем None (для вызывающих = «не подключён»),
+        # чтобы человек прошёл подключение заново, а не упирался в вечный 500.
+        log.warning("infakt: ключ user=%s не расшифровался (ротация FERNET_KEY?)", user_id)
+        return None
 
 
 def delete_key(user_id: int):

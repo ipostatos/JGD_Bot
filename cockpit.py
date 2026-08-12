@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 import infakt as keystore
 from hermes.audit import Audit
@@ -38,10 +38,23 @@ def _derive_profile(client: Infakt, month: str) -> tuple[Profile, list[str]]:
     if tax_form != "ryczalt":
         notes.append("налоговый режим не ryczałt — проверка налога недоступна (пока)")
 
+    # ставка из фактур: символ inFakt может прийти как «8,5» или лейбл —
+    # нормализуем и проверяем, что это положительное число, иначе Decimal(rate)
+    # в rules_tax уронит всё закрытие в 502. Смотрим ВСЕ фактуры года, а не
+    # первые 10: _list_all не обещает порядок, и срез мог не застать смену ставки
+    def _norm_rate(sym: str | None) -> str | None:
+        s = (sym or "").strip().replace(",", ".").rstrip("%").strip()
+        try:
+            return s if Decimal(s) > 0 else None
+        except (InvalidOperation, ValueError):
+            return None
+
     rate = "8.5"
-    rates_seen = {s.get("flat_rate_tax_symbol")
-                  for i in client.invoices()[:10] for s in i.get("services", [])}
-    rates_seen.discard(None)
+    year_str = str(int(month[:4]))
+    rates_seen = {r for i in client.invoices()
+                  if (i.get("invoice_date") or "").startswith(year_str)
+                  for s in i.get("services", [])
+                  if (r := _norm_rate(s.get("flat_rate_tax_symbol")))}
     if len(rates_seen) == 1:
         rate = rates_seen.pop()
     elif len(rates_seen) > 1:

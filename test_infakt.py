@@ -31,6 +31,20 @@ def test_key_roundtrip(tmp_path, monkeypatch):
     assert infakt.load_key(7) is None
 
 
+def test_load_key_survives_fernet_rotation(tmp_path, monkeypatch):
+    """Ротация FERNET_KEY: старый шифртекст не расшифровать — load_key отдаёт
+    None (для вызывающих «не подключён»), а не роняет всё в 500."""
+    from cryptography.fernet import Fernet
+    monkeypatch.setattr(infakt, "DB_PATH", tmp_path / "t.db")
+    monkeypatch.setenv("FERNET_KEY", Fernet.generate_key().decode())
+    infakt._fernet = None
+    infakt.save_key(5, "key-under-old-fernet")
+    # сменили серверный ключ (как при ротации) — прежний шифртекст чужой
+    monkeypatch.setenv("FERNET_KEY", Fernet.generate_key().decode())
+    infakt._fernet = None
+    assert infakt.load_key(5) is None       # не исключение, а «переподключись»
+
+
 def test_cache_ttl_and_clear(tmp_path, monkeypatch):
     """Кэш сводок: отдаёт свежее, молчит про протухшее, чистится по юзеру."""
     monkeypatch.setattr(infakt, "DB_PATH", tmp_path / "t.db")
