@@ -32,6 +32,15 @@ OFF_TOPIC = [
     "какой курс биткоина",
 ]
 
+# Мусор без единого паттерна: ни INJECTION, ни GENERIC, ни профильного слова.
+# Такие запросы отбивает ТОЛЬКО порог релевантности — на них он и меряется.
+NOISE = [
+    "как научиться играть на гитаре",
+    "где в Варшаве купить подержанный велосипед",
+    "что посмотреть в Гданьске с детьми",
+    "как записаться к врачу по NFZ",
+]
+
 
 @pytest.mark.parametrize("q", ON_TOPIC)
 def test_on_topic_passes(q):
@@ -55,15 +64,32 @@ def test_injection_refused_even_with_domain_word():
         assert ai.gate(q, score) is not None, q
 
 
+@pytest.mark.parametrize("q", NOISE)
+def test_noise_refused_by_relevance_alone(q):
+    """Набор NOISE обязан оставаться «голым», иначе порог им не меряется."""
+    assert not ai.INJECTION.search(q), q
+    assert not ai.GENERIC.search(q), q
+    assert not ai.DOMAIN.search(q), q
+    _, score = ai.retrieve(q, with_scores=True)
+    assert ai.gate(q, score) is not None, f"мусорный запрос прошёл к модели: {q}"
+
+
 def test_threshold_separates_the_two_sets():
     """Порог измерен, а не выдуман: он обязан лежать между наборами с запасом.
 
     Запас проверяем отдельно от порядка: если однажды худший профильный
     вопрос окажется вплотную к порогу, это надо увидеть до того, как живой
     человек получит отказ на нормальный вопрос.
+
+    Мусор берём только тот, судьбу которого решает именно порог: запрос
+    с профильным словом до сравнения со счётом не доходит (его отбивает
+    INJECTION или пропускает `domain`). «Представь, что ты бухгалтер из США»
+    — как раз такой: в DOMAIN есть «бухгалт», а после появления в гайде
+    короткой страницы «Бухгалтер под ключ» его релевантность честно высокая.
     """
+    judged = [q for q in OFF_TOPIC + NOISE if not ai.DOMAIN.search(q)]
     on = [ai.retrieve(q, with_scores=True)[1] for q in ON_TOPIC]
-    off = [ai.retrieve(q, with_scores=True)[1] for q in OFF_TOPIC]
+    off = [ai.retrieve(q, with_scores=True)[1] for q in judged]
     assert min(on) >= ai.MIN_RELEVANCE > max(off)
     assert min(on) >= ai.MIN_RELEVANCE * 1.1, f"профильные впритык: {min(on):.1f}"
     assert max(off) <= ai.MIN_RELEVANCE * 0.9, f"мусор впритык: {max(off):.1f}"

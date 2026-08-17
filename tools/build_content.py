@@ -85,6 +85,7 @@ SECTION_META = {
     "Декларации": ("file-check", "cyan", False),
     "Легализация": ("flag", "violet", False),
     "Рабочий процесс": ("refresh-cw", "green", False),
+    "Бухгалтер под ключ": ("users", "cyan", False),
     "Как отправить письмо в налоговую": ("send", "blue", False),
     "inFakt": ("file-text", "cyan", False),
     "wFirma": ("file-text", "violet", False),
