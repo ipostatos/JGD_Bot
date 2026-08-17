@@ -85,7 +85,6 @@ SECTION_META = {
     "Декларации": ("file-check", "cyan", False),
     "Легализация": ("flag", "violet", False),
     "Рабочий процесс": ("refresh-cw", "green", False),
-    "Бухгалтер под ключ": ("users", "cyan", False),
     "Как отправить письмо в налоговую": ("send", "blue", False),
     "inFakt": ("file-text", "cyan", False),
     "wFirma": ("file-text", "violet", False),
@@ -196,6 +195,62 @@ ARTICLE_BANNERS = {
 }
 
 
+# --- реклама партнёров гайда: в приложение не берём ------------------------
+# Решение user 2026-08-17: приложение не зарабатывает и чужую рекламу не носит.
+# Вырезаем на сборке, а не в .md: правки исходников затрёт git pull из upstream.
+EXCLUDE_ARTICLES = {"accounting"}          # «Бухгалтер под ключ» — рекламная
+PARTNER_HOSTS = ("legaltaxlevel.com",)     # реферальные ссылки гайда
+
+
+def _is_promo(chunk: str) -> bool:
+    return (any(h in chunk for h in PARTNER_HOSTS)
+            or any(f"id={a}" in chunk for a in EXCLUDE_ARTICLES))
+
+
+def _drop_blocks(html: str, open_re: re.Pattern, tag: str) -> str:
+    """Убирает блоки <tag …>…</tag>, внутри которых есть реклама.
+
+    Границу ищем счётчиком вложенности, а не «до первого </tag>»: в callout'ах
+    гайда попадаются вложенные блоки, и жадная/ленивая регулярка режет не там.
+    """
+    out, pos = [], 0
+    opener, closer = re.compile(rf"<{tag}\b", re.I), re.compile(rf"</{tag}>", re.I)
+    while (m := open_re.search(html, pos)):
+        out.append(html[pos:m.start()])
+        depth, i = 1, m.end()
+        while depth and i < len(html):
+            nxt_o, nxt_c = opener.search(html, i), closer.search(html, i)
+            if not nxt_c:
+                i = len(html)
+                break
+            if nxt_o and nxt_o.start() < nxt_c.start():
+                depth, i = depth + 1, nxt_o.end()
+            else:
+                depth, i = depth - 1, nxt_c.end()
+        block = html[m.start():i]
+        if not _is_promo(block):
+            out.append(block)
+        pos = i
+    out.append(html[pos:])
+    return "".join(out)
+
+
+def strip_promo(html: str) -> str:
+    """Рекламные врезки и ссылки на партнёра — вон из статьи.
+
+    Три уровня, чтобы не остались ни битые ссылки, ни осиротевший текст:
+    callout целиком, пункт списка целиком, а одиночная ссылка разворачивается
+    в свой же текст (utm и адрес партнёра при этом исчезают).
+    """
+    html = _drop_blocks(html, re.compile(r'<div class="admonition\b[^"]*">'), "div")
+    html = _drop_blocks(html, re.compile(r'<details\b[^>]*>'), "details")
+    html = _drop_blocks(html, re.compile(r"<li\b[^>]*>"), "li")
+    html = re.sub(r"<a\s+href=\"[^\"]*\"[^>]*>(.*?)</a>",
+                  lambda m: m.group(1) if _is_promo(m.group(0)) else m.group(0),
+                  html, flags=re.S)
+    return html
+
+
 def postprocess(html: str) -> str:
     # ссылки между статьями: foo.md / foo.md#anchor -> article.html?id=foo
     html = re.sub(
@@ -209,6 +264,7 @@ def postprocess(html: str) -> str:
     # внешние ссылки — в новой вкладке (в TG WebView откроется браузером)
     html = re.sub(r'(<a href="https?://[^"]*")', r'\1 target="_blank" rel="noopener"', html)
     html = localize_callouts(html)
+    html = strip_promo(html)
     return html
 
 
@@ -255,6 +311,9 @@ def main():
     def render(entry):
         nonlocal n_articles
         aid = entry["file"][:-3]
+        if aid in EXCLUDE_ARTICLES:      # рекламная страница — не берём совсем
+            print(f"~ пропуск (реклама партнёра): {entry['file']}")
+            return None
         src = DOCS / entry["file"]
         if not src.is_file():
             print(f"! пропуск (нет файла): {entry['file']}")
@@ -291,6 +350,15 @@ def main():
         sys.exit(f"СБОРКА ОТМЕНЕНА: {len(sections)} секций и {n_articles} статей "
                  f"(ожидалось минимум {MIN_SECTIONS}/{MIN_ARTICLES}). "
                  "Похоже, изменилась структура гайда — проверь sources/guide.")
+
+    # Реклама партнёра могла приехать в новой вёрстке, которую фильтр не знает.
+    # Молча выложить её в прод нельзя — падаем до записи content.json, так что
+    # незаконченная сборка в приложение не попадёт.
+    leaks = sorted({f.name for f in articles_dir.glob("*.html")
+                    if _is_promo(f.read_text(encoding="utf-8"))})
+    if leaks:
+        sys.exit(f"СБОРКА ОТМЕНЕНА: реклама партнёра просочилась в {leaks}. "
+                 "Проверь strip_promo в этом файле — у upstream новая вёрстка.")
 
     (OUT / "content.json").write_text(
         json.dumps({"sections": sections, "source": _source_info()},
