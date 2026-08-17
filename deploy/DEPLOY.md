@@ -30,10 +30,21 @@ ssh root@46.224.220.94 "cp /opt/jdg/deploy/jdg.service /etc/systemd/system/ && s
 ## Обновление контента гайда (первоисточник обновился)
 
 ```bash
-ssh root@46.224.220.94 "cd /opt/jdg/sources/guide && git pull && cd /opt/jdg && venv/bin/python tools/build_content.py"
+ssh root@46.224.220.94 "runuser -u jdg -- bash -c 'cd /opt/jdg/sources/guide && git pull -q && cd /opt/jdg && venv/bin/python tools/build_content.py'"
 ```
 
 Рестарт не нужен: данные статические, читаются с диска.
+
+⚠️ Именно `runuser -u jdg`, а не от root: после деплойного `chown -R jdg:jdg`
+клон гайда принадлежит `jdg`, и root'овый git отказывается работать —
+`fatal: detected dubious ownership`. Собирать контент от root тоже нельзя:
+`webapp/data` уедет root'у, и сервис (он от `jdg`) её не перезапишет.
+
+⚠️ Реклама партнёров гайда в приложение не едет (решение user 2026-08-17):
+`EXCLUDE_ARTICLES` и `strip_promo` в `tools/build_content.py` выкидывают
+рекламную статью, врезки и реферальные ссылки. Если upstream переверстает
+рекламу так, что фильтр её не узнает, сборка **падает** и просит поправить
+фильтр — это не поломка, а сторож (`test_content_promo.py`).
 
 ## Справочник PKD 2025 (нужен для /pkd и поиска кодов)
 
