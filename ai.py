@@ -15,6 +15,8 @@ from pathlib import Path
 
 import httpx
 
+import monitor
+
 log = logging.getLogger("jdg.ai")
 
 ROOT = Path(__file__).parent
@@ -405,15 +407,17 @@ async def ask(user_id: int, question: str, profile: dict | None = None) -> dict:
                 json={"model": MODEL, "max_tokens": 1000, "system": SYSTEM,
                       "messages": [{"role": "user", "content":
                           f"{prof}Фрагменты гайда:\n\n{ctx}\n\nВопрос: {question}"}]})
-            if r.status_code == 400 and "credit balance" in r.text.lower():
+            if monitor.is_no_credits(r.status_code, r.text):
                 # деньги на ключе кончились: чинится оплатой, а не повтором —
                 # честнее сказать прямо, чем гонять человека по кнопке
                 log.error("ANTHROPIC: закончились кредиты, ассистент отключён")
+                monitor.mark_ai(False, "no_credits")
                 return {"error": "Ассистент временно недоступен по техническим "
                                  "причинам. Ответ можно поискать в гайде или "
                                  "спросить людей в чате @JDG_PBH.",
                         "reason": "no_credits"}
             r.raise_for_status()
+            monitor.mark_ai(True)
             answer = r.json()["content"][0]["text"].strip()
     except Exception as e:
         log.warning("ask failed: %s", e)

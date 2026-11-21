@@ -28,6 +28,28 @@ HAIKU = "claude-haiku-4-5-20251001"
 
 TOPICS = ("ZUS", "VAT", "PIT", "ryczałt", "KSeF", "легализация", "другое")
 
+# Новость, которая пролежала в очереди дольше этого (классификация не работала),
+# в ленту попадает, но пушем не уходит: в ноябре 2026 после двух месяцев без
+# кредитов Anthropic в очереди лежали октябрьские новости, и все они разом
+# прилетели бы подписчикам как «свежие».
+PUSH_MAX_AGE = 3 * 86400
+
+# Состояние ИИ для /api/health и сигнала админу. Живёт в памяти процесса:
+# после рестарта честно «неизвестно» (None), пока не случится первый вызов.
+AI_STATUS: dict = {"ok": None, "reason": None, "since": None}
+
+
+def mark_ai(ok: bool, reason: str | None = None) -> None:
+    """Запомнить исход последнего вызова Anthropic (монитор и ассистент)."""
+    if AI_STATUS["ok"] is not ok or AI_STATUS["reason"] != reason:
+        AI_STATUS["since"] = int(time.time())
+    AI_STATUS["ok"], AI_STATUS["reason"] = ok, reason
+
+
+def is_no_credits(status_code: int, body: str) -> bool:
+    """Anthropic отвечает на пустой баланс 400 с этой фразой — не 402."""
+    return status_code == 400 and "credit balance" in (body or "").lower()
+
 
 # ── источники ────────────────────────────────────────────────────────────────
 def _get(url: str) -> str:
@@ -104,6 +126,10 @@ def db() -> sqlite3.Connection:
         url TEXT PRIMARY KEY, source TEXT, title TEXT, found_at INTEGER,
         relevant INTEGER, importance INTEGER, topics TEXT, summary TEXT,
         who_vat TEXT, pushed INTEGER DEFAULT 0)""")
+    # очередь нерасклассифицированного: помним, КОГДА новость впервые увидели,
+    # чтобы после долгого простоя не пушить старьё как новое
+    conn.execute("""CREATE TABLE IF NOT EXISTS news_pending(
+        url TEXT PRIMARY KEY, first_seen INTEGER)""")
     return conn
 
 
@@ -143,7 +169,12 @@ def classify(items):
                   "system": CLASSIFY_PROMPT.format(topics=", ".join(TOPICS)),
                   "messages": [{"role": "user", "content": listing}]},
             timeout=60)
+        if is_no_credits(r.status_code, r.text):
+            log.error("ANTHROPIC: закончились кредиты, классификация новостей стоит")
+            mark_ai(False, "no_credits")
+            return None
         r.raise_for_status()
+        mark_ai(True)
         text = r.json()["content"][0]["text"]
         m = re.search(r"\[.*\]", text, re.S)
         data = json.loads(m.group(0)) if m else None
@@ -151,6 +182,8 @@ def classify(items):
             return data
     except Exception as e:
         log.warning("classify failed: %s", e)
+        if AI_STATUS["reason"] != "no_credits":
+            mark_ai(False, "error")
     return None
 
 
@@ -172,6 +205,17 @@ def run_once():
     if not fresh:
         return []
 
+    now = int(time.time())
+    with db() as c:
+        # URL, который ушёл с первых страниц источника, так и не дождавшись
+        # классификации, больше не придёт — не копим его вечно
+        c.execute("DELETE FROM news_pending WHERE first_seen < ?", (now - 60 * 86400,))
+        c.executemany("INSERT OR IGNORE INTO news_pending VALUES(?,?)",
+                      [(u, now) for u, _, _ in fresh])
+        first_seen = dict(c.execute(
+            "SELECT url, first_seen FROM news_pending WHERE url IN (%s)"
+            % ",".join("?" * len(fresh)), [u for u, _, _ in fresh]).fetchall())
+
     verdicts = classify(fresh)
     if verdicts is None:
         # весь батч не расклассифицирован (API упал/ответ не распарсился).
@@ -181,8 +225,7 @@ def run_once():
                     "следующего прохода", len(fresh))
         return []
 
-    now = int(time.time())
-    to_push = []
+    to_push, stale = [], 0
     _VAT = {"any", "vat_only", "nonvat_only"}
     with db() as c:
         for i, (url, src_label, title) in enumerate(fresh):
@@ -203,15 +246,24 @@ def run_once():
             who_vat = v.get("who_vat", "any")
             if who_vat not in _VAT:
                 who_vat = "any"
-            row = (url, src_label, title, now, int(relevant), importance,
+            seen_at = first_seen.get(url, now)
+            too_old = now - seen_at > PUSH_MAX_AGE
+            # found_at = когда новость реально появилась у источника (насколько
+            # мы знаем), а не когда до неё дошла классификация: лента сортирует
+            # по этому полю. pushed=1 у старья — чтобы его никто не допушил.
+            row = (url, src_label, title, seen_at, int(relevant), importance,
                    json.dumps(topics, ensure_ascii=False),
-                   str(v.get("summary") or ""), who_vat, 0)
+                   str(v.get("summary") or ""), who_vat, int(too_old))
             c.execute("INSERT OR IGNORE INTO news VALUES(?,?,?,?,?,?,?,?,?,?)", row)
-            if relevant and importance >= 2:
+            c.execute("DELETE FROM news_pending WHERE url=?", (url,))
+            if relevant and importance >= 2 and too_old:
+                stale += 1
+            elif relevant and importance >= 2:
                 to_push.append({"url": url, "source": src_label, "title": title,
                                 "summary": str(v.get("summary") or ""),
                                 "importance": importance, "who_vat": who_vat})
-    log.info("monitor: %d new, %d push-worthy", len(fresh), len(to_push))
+    log.info("monitor: %d new, %d push-worthy, %d too old to push",
+             len(fresh), len(to_push), stale)
     return to_push
 
 
