@@ -209,6 +209,7 @@ async def monitor_loop(app: FastAPI):
     while True:
         try:
             to_push = await asyncio.to_thread(monitor.run_once)
+            await _alert_ai_outage(monitor.AI_STATUS)
             bot = app.state.bot
             if bot:
                 for item in to_push:
@@ -337,6 +338,28 @@ async def _alert_admin(text: str) -> None:
         await bot.send_message(int(ADMIN_CHAT_ID), text, disable_web_page_preview=True)
     except Exception as e:
         log.warning("не смог предупредить админа: %s", e)
+
+
+NO_CREDITS_ALERT = ("🔴 Закончились кредиты Anthropic: не работают ассистент и "
+                    "классификация новостей, пуши подписчикам не уходят. "
+                    "Пополнить в console.anthropic.com → Plans & Billing.")
+
+
+async def _alert_ai_outage(status: dict) -> None:
+    """Сигнал админу, если ИИ лёг в фоне.
+
+    Раньше сигнал слал только /api/ask — то есть лишь когда человек спросил
+    ассистента. Осенью 2026 кредиты кончились, никто не спрашивал, и мониторинг
+    новостей простоял два месяца молча. Теперь сигналит и проход монитора.
+    Кулдаун общий с /api/ask (одинаковый текст), так что дубля не будет.
+    """
+    if status.get("ok") is not False:
+        return
+    if status.get("reason") == "no_credits":
+        await _alert_admin(NO_CREDITS_ALERT)
+    else:
+        await _alert_admin("🟠 Классификация новостей не проходит (ошибка Anthropic API), "
+                           "новые новости копятся в очереди. Подробности в journalctl -u jdg.")
 
 
 async def _json_or_400(req: Request) -> dict:
@@ -507,8 +530,13 @@ async def health():
     # флаг отдаём здесь, а не отдельной ручкой: страница и так знает этот
     # адрес, а щупать закрытый endpoint ради 404 — плохой способ узнать
     # о доступности функции
+    # ai: True/False по последнему вызову Anthropic, None — с рестарта вызовов
+    # не было. ok остаётся про сам сервис: без ИИ гайд, калькуляторы и реестры
+    # работают, но «всё хорошо» при мёртвом ассистенте health врать не должен.
+    import monitor
     return {"ok": True, "bot": app.state.bot is not None,
-            "pkd_dialog": _dialog_enabled()}
+            "pkd_dialog": _dialog_enabled(),
+            "ai": monitor.AI_STATUS["ok"], "ai_reason": monitor.AI_STATUS["reason"]}
 
 
 @app.get("/api/news")
@@ -570,9 +598,7 @@ async def api_ask(req: Request):
     res = await ai.ask(user["id"], body.get("question", ""),
                        body.get("profile") or None)
     if res.get("reason") == "no_credits":
-        await _alert_admin("🔴 Ассистент отключён: закончились кредиты Anthropic. "
-                           "Пополнить в console.anthropic.com → Plans & Billing. "
-                           "Мониторинг новостей тоже стоит.")
+        await _alert_admin(NO_CREDITS_ALERT)
         raise HTTPException(503, res["error"])
     if "error" in res:
         raise HTTPException(429 if "Лимит" in res["error"] else 400, res["error"])

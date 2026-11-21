@@ -122,3 +122,44 @@ def test_run_once_skips_non_dict_verdict(tmp_path, monkeypatch):
     assert monitor.run_once() == []
     with monitor.db() as c:
         assert c.execute("SELECT COUNT(*) FROM news").fetchone()[0] == 0
+
+
+def test_backlog_older_than_push_window_goes_to_feed_but_not_push(tmp_path, monkeypatch):
+    """После долгого простоя классификации старьё не прилетает пушем как новое.
+
+    Ноябрь 2026: кредиты Anthropic кончились в начале октября, в очереди
+    копились октябрьские новости. Новость, впервые увиденная раньше окна
+    PUSH_MAX_AGE, должна попасть в ленту с исходной датой и pushed=1.
+    """
+    state = {"ok": False}
+    def verdicts(items):
+        if not state["ok"]:
+            return None
+        return [{"relevant": True, "importance": 3, "topics": ["ZUS"],
+                 "summary": "s", "who_vat": "any"}] * len(items)
+    _run_once_env(tmp_path, monkeypatch, verdicts)
+
+    real_time = monitor.time.time
+    t0 = real_time() - monitor.PUSH_MAX_AGE - 3600
+    monkeypatch.setattr(monitor.time, "time", lambda: t0)
+    assert monitor.run_once() == []                 # API лежит — в очереди
+    monkeypatch.setattr(monitor.time, "time", real_time)
+    state["ok"] = True
+    assert monitor.run_once() == [], "старьё не пушим"
+    with monitor.db() as c:
+        found_at, pushed = c.execute("SELECT found_at, pushed FROM news").fetchone()
+        assert c.execute("SELECT COUNT(*) FROM news_pending").fetchone()[0] == 0
+    assert found_at == int(t0), "в ленте дата первого появления, а не выздоровления API"
+    assert pushed == 1
+    assert monitor.get_feed(), "в ленту новость всё равно попадает"
+
+
+def test_short_outage_still_pushes(tmp_path, monkeypatch):
+    """Сбой на один проход (6 ч) — новость ещё свежая и уходит пушем."""
+    state = {"ok": False}
+    _run_once_env(tmp_path, monkeypatch, lambda items: None if not state["ok"] else
+                  [{"relevant": True, "importance": 3, "topics": [], "summary": "s",
+                    "who_vat": "any"}] * len(items))
+    monitor.run_once()
+    state["ok"] = True
+    assert len(monitor.run_once()) == 1

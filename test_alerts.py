@@ -77,3 +77,56 @@ def test_cooldown_expires(monkeypatch):
     server._alerts["сигнал"[:40]] = time.time() - server.ALERT_COOLDOWN - 1
     asyncio.run(server._alert_admin("сигнал"))
     assert len(sent) == 2
+
+
+# ── фоновый простой ИИ (ноябрь 2026: монитор стоял два месяца молча) ─────────
+
+def _fake_bot(monkeypatch):
+    sent = []
+
+    class FakeBot:
+        async def send_message(self, chat_id, text, **kw):
+            sent.append(text)
+
+    monkeypatch.setattr(server, "bot", FakeBot())
+    monkeypatch.setattr(server, "ADMIN_CHAT_ID", "42")
+    server._alerts.clear()
+    return sent
+
+
+def test_monitor_classify_marks_no_credits(monkeypatch):
+    import monitor
+    monkeypatch.setattr(monitor, "ANTHROPIC_KEY", "test-key")
+    monkeypatch.setattr(monitor.httpx, "post", lambda *a, **kw: FakeResp())
+    monkeypatch.setattr(monitor, "AI_STATUS", {"ok": None, "reason": None, "since": None})
+    assert monitor.classify([("u", "s", "t")]) is None
+    assert monitor.AI_STATUS["ok"] is False
+    assert monitor.AI_STATUS["reason"] == "no_credits"
+
+
+def test_background_outage_alerts_admin_without_any_user_question(monkeypatch):
+    """Сигнал уходит из прохода монитора, а не только из /api/ask."""
+    sent = _fake_bot(monkeypatch)
+    asyncio.run(server._alert_ai_outage({"ok": False, "reason": "no_credits"}))
+    assert len(sent) == 1 and "кредиты Anthropic" in sent[0]
+
+
+def test_outage_alert_shares_cooldown_with_ask(monkeypatch):
+    """Монитор и /api/ask шлют один и тот же текст — второй сигнал глушится."""
+    sent = _fake_bot(monkeypatch)
+    asyncio.run(server._alert_ai_outage({"ok": False, "reason": "no_credits"}))
+    asyncio.run(server._alert_admin(server.NO_CREDITS_ALERT))
+    assert len(sent) == 1
+
+
+def test_no_alert_when_ai_fine_or_unknown(monkeypatch):
+    sent = _fake_bot(monkeypatch)
+    asyncio.run(server._alert_ai_outage({"ok": True, "reason": None}))
+    asyncio.run(server._alert_ai_outage({"ok": None, "reason": None}))
+    assert sent == []
+
+
+def test_other_api_error_alerts_differently(monkeypatch):
+    sent = _fake_bot(monkeypatch)
+    asyncio.run(server._alert_ai_outage({"ok": False, "reason": "error"}))
+    assert len(sent) == 1 and "кредиты" not in sent[0]

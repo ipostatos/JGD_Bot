@@ -35,6 +35,8 @@ def test_health():
         assert r.status_code == 200
         assert r.json()["ok"] is True
         assert r.json()["bot"] is False
+        # ИИ: True/False/None — health больше не говорит «всё хорошо» молча
+        assert "ai" in r.json() and r.json()["ai"] in (True, False, None)
 
 
 def test_webapp_pages_served():
