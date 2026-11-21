@@ -366,3 +366,56 @@ def test_not_outsourcing_is_not_manufacturing():
     manuf = [f for f in ex.features if f.key == feat.ACTIVITY_MANUFACTURE]
     assert not any(f.value is True for f in manuf), \
         "отрицание аутсорса ошибочно записало в производители"
+
+
+# ── техдолг: потерянная деятельность и застрявший главный код ──────────────
+@pytest.mark.parametrize("query", ["проектирую мебель",
+                                   "проектирование шкафов на заказ"])
+def test_design_without_mode_asks_instead_of_dropping(query):
+    """«Проектирую мебель» раньше давало «не распознано» без вопроса:
+    деятельность с неизвестной самостоятельностью молча отбрасывалась."""
+    r = run(query)
+    assert r.status is Status.NEEDS_CLARIFICATION
+    assert r.next_question.id == "activity.design_scope"
+    got = {}
+    for o in r.next_question.options:
+        a = (Answer("activity.design_scope", 1, (o.id,)),)
+        got[o.id] = run(query, a).codes
+    assert got == {"design_only": ("74.11.Z",),
+                   "design_in_manufacture": ("31.00.Z",),
+                   "design_sold_separately": ("31.00.Z", "74.11.Z")}
+
+
+def test_design_scope_not_asked_when_text_says_it():
+    assert run("только проектирую мебель").codes == ("74.11.Z",)
+    assert run("проектирую и делаю мебель").codes == ("31.00.Z",)
+
+
+def test_undecided_unit_is_loud_not_silent(monkeypatch):
+    """Если вопроса, решающего самостоятельность, не нашлось, это дыра в
+    покрытии. Молча выдать «не распознано» нельзя."""
+    import pkd_dialog.resolution as res
+    from pkd_dialog.selection import QuestionSelectionResult
+    monkeypatch.setattr(res, "select_next_question",
+                        lambda **kw: QuestionSelectionResult(None, "no_policy_applies"))
+    with pytest.raises(res.UndecidedActivityUnitError):
+        run("проектирую мебель")
+
+
+def test_primary_question_offers_only_found_activities():
+    r = run("Произвожу мебель и ремонтирую старую",
+            intent=DialogIntent.FIND_PRIMARY_CODE)
+    assert r.primary_code_status is PrimaryStatus.REVENUE_INFORMATION_REQUIRED
+    assert [o.id for o in r.primary_question.options] == ["manufacture_new",
+                                                          "repair_or_restore"]
+    # без намерения выбрать главный код вопрос не нужен
+    assert run("Произвожу мебель и ремонтирую старую").primary_question is None
+
+
+def test_answer_outside_found_activities_is_not_a_dead_end():
+    """Ответ про деятельность, которой у человека нет (пришёл по API), не
+    должен оставлять его без выхода: вопрос предлагается снова."""
+    a = (Answer("activity.primary_revenue", 1, ("resell",)),)
+    r = run("Произвожу мебель и ремонтирую старую", a, DialogIntent.FIND_PRIMARY_CODE)
+    assert r.primary_code is None
+    assert r.primary_question is not None

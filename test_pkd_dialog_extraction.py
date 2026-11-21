@@ -291,3 +291,13 @@ def test_scenarios_requiring_mode_question_have_no_mode_in_text():
         if "activity.mode.v1" in s["expected"]["required_questions"]:
             got = vals(s["query"])
             assert not (set(got) & set(feat.ACTIVITY_KEYS)), s["id"]
+
+
+def test_tokenizer_keeps_polish_words_whole():
+    """Польские буквы не режут слово: раньше «łóżka» распадалось на «żk»."""
+    from pkd_dialog.extraction.rule_based import tokenize
+    assert [t.norm for t in tokenize("Naprawa łóżek, wykończenie wnętrz")] == \
+        ["naprawa", "łóżek", "wykończenie", "wnętrz"]
+    # русский и цифры как раньше, подчёркивание — разделитель
+    assert [t.norm for t in tokenize("Сборка_мебели 3d Ёлки")] == \
+        ["сборка", "мебели", "3d", "елки"]

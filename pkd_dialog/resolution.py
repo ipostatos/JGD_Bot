@@ -17,7 +17,7 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from . import contracts, features as feat
 from .activity_units import (ActivityIndependence, ActivityUnit, build_units,
@@ -32,6 +32,16 @@ from .resolved import (FeatureState, ResolvedFeature, ResolvedFeatureSet,
 from .selection import select_next_question
 
 EXTRACTOR = RuleBasedFeatureExtractor()
+
+
+class UndecidedActivityUnitError(RuntimeError):
+    """Деятельность распознана, а самостоятельная она или часть другой — нет,
+    и вопроса, который это решил бы, не нашлось.
+
+    Раньше такие деятельности молча отбрасывались: «проектирую мебель»
+    получало «не удалось определить деятельность» без единого вопроса.
+    Теперь это дыра в покрытии вопросов, и она должна быть видна.
+    """
 
 
 class UncoveredActivityUnitError(RuntimeError):
@@ -69,6 +79,10 @@ class DialogResolution:
     units: tuple[UnitResolution, ...] = ()
     primary_code: str | None = None
     primary_code_status: PrimaryStatus = PrimaryStatus.NOT_REQUESTED
+    # вопрос о выручке, когда без него главный код не выбрать. Он идёт рядом
+    # с результатом, а не вместо него: коды уже известны и прятать их за
+    # вопросом незачем. Варианты — только деятельности, найденные у человека
+    primary_question: Question | None = None
     reason: str | None = None
     routing_hint: str | None = None
     input_fingerprint: str = ""
@@ -108,6 +122,12 @@ def resolve_furniture_dialog(*, query: str, answers: tuple[Answer, ...] = (),
             units=(), trace={"selection": selection.policy_id,
                              "features": sorted(fs.features)}, **base)
 
+    undecided = [u.kind for u in units
+                 if u.independence is ActivityIndependence.UNKNOWN]
+    if undecided:
+        raise UndecidedActivityUnitError(
+            f"{', '.join(undecided)}: неясно, самостоятельная ли деятельность, "
+            f"а вопроса, который это решает, нет")
     resolutions = tuple(_resolve_unit(u, fs) for u in units
                         if u.independence is ActivityIndependence.STANDALONE)
     in_pack = [r for r in resolutions if r.state != OUTSIDE]
@@ -115,9 +135,13 @@ def resolve_furniture_dialog(*, query: str, answers: tuple[Answer, ...] = (),
 
     status = _top_status(in_pack, outside)
     primary, primary_status = _primary(in_pack, outside, fs, intent)
+    primary_question = (_revenue_question(in_pack)
+                        if primary_status is PrimaryStatus.REVENUE_INFORMATION_REQUIRED
+                        else None)
     reason, hint = _routing(status, outside)
     return DialogResolution(status=status, units=resolutions,
                             primary_code=primary, primary_code_status=primary_status,
+                            primary_question=primary_question,
                             reason=reason, routing_hint=hint,
                             trace={"selection": selection.reason,
                                    "features": sorted(fs.features)}, **base)
@@ -221,6 +245,26 @@ KIND_BY_ACTIVITY = {
 
 def _kind_matches(kind: str, activity_key: str) -> bool:
     return any(kind.startswith(p) for p in KIND_BY_ACTIVITY.get(activity_key, ()))
+
+
+REVENUE_QUESTION = "activity.primary_revenue"
+
+
+def _revenue_question(in_pack) -> Question | None:
+    """Вопрос о выручке с вариантами только из найденных деятельностей.
+
+    Без этого режим «коды и главный код» застревал: результат говорил «укажите,
+    что даёт больше выручки», а ответить было негде. А если бы вопрос шёл со
+    всеми вариантами, ответ «перепродажа» у того, кто шьёт и чинит, снова
+    возвращал бы «нужна информация о выручке» — уже без выхода.
+    """
+    q = contracts.question(REVENUE_QUESTION)
+    if q is None:
+        return None
+    options = tuple(o for o in q.options
+                    if any(_kind_matches(u.kind, e.value)
+                           for e in o.effects for u in in_pack if u.codes))
+    return replace(q, options=options) if len(options) >= 2 else None
 
 
 def _question_changes_anything(question: Question, fs: ResolvedFeatureSet, units) -> bool:

@@ -273,9 +273,20 @@
     if (st === 'user_selected')
       return `<p class="pkd-desc">Главный код по вашему ответу о выручке:
         <b>${esc(d.primary_code)}</b>.</p>`;
-    if (st === 'revenue_information_required')
-      return `<p class="pkd-desc">Чтобы определить главный код, нужно указать,
-        какая деятельность будет давать наибольшую долю выручки.</p>`;
+    if (st === 'revenue_information_required') {
+      const q = d.primary_question;
+      if (!q || !(q.options || []).length)
+        return `<p class="pkd-desc">Чтобы определить главный код, нужно указать,
+          какая деятельность будет давать наибольшую долю выручки.</p>`;
+      // вопрос о выручке идёт под кодами, а не вместо них: коды уже найдены
+      return `<div class="card" style="margin-bottom:10px">
+        <div class="h2" style="margin:0 0 4px;font-size:15px">${esc(q.text)}</div>
+        <p class="pkd-desc" style="margin:0 0 8px">Главным станет код этой
+          деятельности. Остальные коды тоже нужно указать в CEIDG.</p>
+        <div class="ex">${q.options.map(o =>
+          `<button class="btn ghost" data-primary="${esc(o.id)}">${esc(o.label)}</button>`
+        ).join('')}</div></div>`;
+    }
     if (st === 'activity_resolution_required')
       return `<p class="pkd-desc">Главный код пока определить нельзя: одна из
         деятельностей относится к разделу, который этот режим ещё не
@@ -338,6 +349,17 @@
       const go = document.getElementById('go');
       if (go) go.click();
     };
+    const pq = d.primary_question;
+    root.querySelectorAll('[data-primary]').forEach(b => {
+      b.onclick = () => {
+        // прошлый ответ о выручке заменяем, а не копим: сервер отклонит
+        // два разных ответа на один вопрос
+        S.answers = S.answers.filter(a => a.question_id !== pq.id);
+        S.answers.push({ question_id: pq.id, question_version: pq.version,
+                         option_ids: [b.dataset.primary] });
+        ask();
+      };
+    });
     const bck = document.getElementById('dlg-back');
     if (bck) bck.onclick = back;
     const rst = document.getElementById('dlg-reset');

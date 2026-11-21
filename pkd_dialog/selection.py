@@ -20,7 +20,8 @@ from enum import IntEnum
 from functools import lru_cache
 from pathlib import Path
 
-from . import contracts
+from . import contracts, features as feat
+from .conditions import explain as _check, keys_of, validate
 from .models import Answer, DialogIntent, Question
 from .resolved import FeatureState, ResolvedFeatureSet
 
@@ -90,57 +91,13 @@ def policies() -> list[dict]:
                     f"{p['id']}: обещает закрыть {key}, но вопрос его не выставляет")
         if not p.get("why"):
             raise contracts.ContractError(f"{p['id']}: политика без объяснения")
+        for part in ("when", "unless"):
+            if part in p:
+                validate(p[part], f"{p['id']}.{part}")
+                for key in keys_of(p[part]):
+                    if key not in feat.REGISTRY:
+                        raise contracts.ContractError(f"{p['id']}: неизвестный признак {key}")
     return raw["policies"]
-
-
-# ── условия ───────────────────────────────────────────────────────────────
-
-def _check(cond: dict, fs: ResolvedFeatureSet,
-           intent: DialogIntent = DialogIntent.FIND_CODES) -> tuple[bool, list[str]]:
-    """Условие политики -> (выполнено, человеческие причины)."""
-    if "intent_is" in cond:
-        ok = intent.value == cond["intent_is"]
-        return ok, [f"намерение: {intent.value}"] if ok else [
-            f"вопрос нужен только при намерении {cond['intent_is']}"]
-    if "all" in cond:
-        reasons = []
-        for sub in cond["all"]:
-            ok, why = _check(sub, fs, intent)
-            reasons += why
-            if not ok:
-                return False, reasons
-        return True, reasons
-    if "any" in cond:
-        reasons = []
-        for sub in cond["any"]:
-            ok, why = _check(sub, fs, intent)
-            if ok:
-                return True, why
-            reasons += why
-        return False, reasons
-    # причина нужна и у отказа: без неё отладка слепая — непонятно, почему
-    # движок промолчал вместо того, чтобы спросить
-    if "any_true" in cond:
-        hit = [k for k in cond["any_true"] if fs.is_true(k)]
-        return bool(hit), ([f"известно: {k}" for k in hit] if hit else
-                           [f"ничего не подтверждено из: {', '.join(cond['any_true'])}"])
-    if "any_known" in cond:
-        hit = [k for k in cond["any_known"] if fs.is_known(k)]
-        return bool(hit), ([f"уже известно: {k}" for k in hit] if hit else
-                           [f"неизвестно ничего из: {', '.join(cond['any_known'])}"])
-    if "none_known" in cond:
-        known = [k for k in cond["none_known"] if fs.is_known(k)]
-        return not known, ([f"уже известно: {k}" for k in known] if known else
-                           [f"не известно ничего из: {', '.join(cond['none_known'])}"])
-    if "any_conflicted" in cond:
-        hit = [k for k in cond["any_conflicted"]
-               if fs.state(k) is FeatureState.CONFLICTED]
-        return bool(hit), ([f"противоречие: {k}" for k in hit] if hit else
-                           ["противоречий нет"])
-    if "feature" in cond:
-        return fs.value(cond["feature"]) == cond.get("equals"), \
-            [f"{cond['feature']} = {cond.get('equals')}"]
-    raise contracts.ContractError(f"неизвестное условие: {cond}")
 
 
 def select_next_question(*, features: ResolvedFeatureSet,

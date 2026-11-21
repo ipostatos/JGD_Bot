@@ -26,6 +26,24 @@
    ]
   },
   {
+   "id": "activity.design_scope",
+   "version": 1,
+   "type": "single_select",
+   "text": "Вы только проектируете мебель или делаете её тоже?",
+   "help": "От этого зависит код: проект, который продаётся сам по себе, — отдельная деятельность, а проект в составе заказа на изготовление входит в производство.",
+   "resolves": ["activity.design_only", "activity.manufacture_new",
+                "qualifier.offered_separately"],
+   "options": [
+    {"id": "design_only", "label": "Только проектирую, делают другие",
+     "effects": [{"key": "activity.design_only", "value": true}]},
+    {"id": "design_in_manufacture", "label": "Проектирую то, что сам изготавливаю",
+     "effects": [{"key": "activity.manufacture_new", "value": true}]},
+    {"id": "design_sold_separately", "label": "Изготавливаю, а проекты продаю и отдельно",
+     "effects": [{"key": "activity.manufacture_new", "value": true},
+                 {"key": "qualifier.offered_separately", "value": true}]}
+   ]
+  },
+  {
    "id": "furniture.object_context",
    "version": 2,
    "type": "multi_select",

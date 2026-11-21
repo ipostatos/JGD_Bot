@@ -21,6 +21,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from . import features as feat
+from .conditions import check as _check, keys_of as _keys_of, validate
 from .contracts import ContractError
 from .resolved import ResolvedFeatureSet
 
@@ -72,45 +73,18 @@ def policies() -> list[dict]:
             # без имени интерфейс покажет `kind` — внутренний идентификатор
             # вместо деятельности, и человек не поймёт, к чему относится код
             raise ContractError(f"{p['id']}: политика без имени деятельности")
-        for key in _keys_of(p["when"]):
-            if key not in feat.REGISTRY:
-                raise ContractError(f"{p['id']}: неизвестный признак {key}")
+        for part in ("when", "standalone_when", "integrated_when"):
+            if part in p:
+                validate(p[part], f"{p['id']}.{part}")
+                for key in _keys_of(p[part]):
+                    if key not in feat.REGISTRY:
+                        raise ContractError(f"{p['id']}: неизвестный признак {key}")
         import re
         if re.search(r"\b\d{2}\.\d{2}\.[A-Z]\b",
                      json.dumps({k: v for k, v in p.items() if k != "why"},
                                 ensure_ascii=False)):
             raise ContractError(f"{p['id']}: в слое деятельностей не может быть кода PKD")
     return raw["units"]
-
-
-def _keys_of(cond: dict) -> set[str]:
-    out: set[str] = set()
-    for op in ("all", "any"):
-        for sub in cond.get(op, []):
-            out |= _keys_of(sub)
-    for op in ("any_true", "none_true", "any_known", "none_known"):
-        out |= set(cond.get(op, []))
-    if "feature" in cond:
-        out.add(cond["feature"])
-    return out
-
-
-def _check(cond: dict, fs: ResolvedFeatureSet) -> bool:
-    if "all" in cond:
-        return all(_check(sub, fs) for sub in cond["all"])
-    if "any" in cond:
-        return any(_check(sub, fs) for sub in cond["any"])
-    if "any_true" in cond:
-        return any(fs.is_true(k) for k in cond["any_true"])
-    if "none_true" in cond:
-        return not any(fs.is_true(k) for k in cond["none_true"])
-    if "any_known" in cond:
-        return any(fs.is_known(k) for k in cond["any_known"])
-    if "none_known" in cond:
-        return not any(fs.is_known(k) for k in cond["none_known"])
-    if "feature" in cond:
-        return fs.value(cond["feature"]) == cond.get("equals")
-    raise ContractError(f"неизвестное условие: {cond}")
 
 
 def build_units(fs: ResolvedFeatureSet) -> tuple[ActivityUnit, ...]:
