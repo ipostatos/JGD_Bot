@@ -18,8 +18,25 @@ segInit('tabs', () => {
 });
 document.querySelectorAll('#tabs button').forEach(b => b.dataset.v = b.dataset.t);
 
+// кнопки годов: из данных, текущий по календарю нажат; будущий помечен
+function yearSeg(id) {
+  const cur = currentRatesYear(), now = new Date().getFullYear();
+  document.getElementById(id).innerHTML = ratesYears().map(y =>
+    `<button data-v="${y}"${y === cur ? ' class="on"' : ''}>${y}${y > now ? ' · скоро' : ''}</button>`).join('');
+}
+
+// что ещё не объявлено — человеческими словами
+const MISSING_RU = {
+  'pit': 'шкала PIT (реформа ждёт решения президента)',
+  'zdrowotna.ryczalt_tiers': 'składka zdrowotna на ryczałcie (GUS даёт базу в январе)',
+  'zdrowotna.liniowy_deduct_limit_year': 'лимит вычета zdrowotnej на liniowym (MF объявит в начале года)',
+};
+
 ratesReady.then(() => {
   document.getElementById('upd').textContent = RATES.updated;
+  const ys = ratesYears();
+  document.getElementById('yrs').textContent = ys[ys.length - 1] + '–' + ys[0];
+  yearSeg('zyear'); yearSeg('cyear');
 
   // ── ZUS ──
   const zres = document.getElementById('zres');
@@ -45,8 +62,18 @@ ratesReady.then(() => {
     }
     if (stage === 'ulga' && chor)
       rows.push(`<div class="res-row"><span class="muted">На Uldze na start chorobową подключить нельзя</span><span></span></div>`);
-    rows.push(`<div class="res-row"><span>Zdrowotna (${form})</span><span class="v">${fmtZl(zdr)}</span></div>`);
-    rows.push(`<div class="res-row total"><span><b>Итого в месяц</b></span><span class="v">${fmtZl(s.total + zdr)}</span></div>`);
+    if (zdr === null) {
+      // ставки года ещё не объявлены — честно говорим, а не подставляем прошлогодние
+      rows.push(`<div class="res-row"><span>Zdrowotna (${form})</span><span class="v muted">объявят в январе</span></div>`);
+      rows.push(`<div class="res-row total"><span><b>Итого в месяц</b></span><span class="v">${fmtZl(s.total)} + zdrowotna</span></div>`);
+    } else {
+      rows.push(`<div class="res-row"><span>Zdrowotna (${form})</span><span class="v">${fmtZl(zdr)}</span></div>`);
+      rows.push(`<div class="res-row total"><span><b>Итого в месяц</b></span><span class="v">${fmtZl(s.total + zdr)}</span></div>`);
+    }
+    if (stage === 'duzy' && isForecast(year, 'duzy_base'))
+      rows.push(`<div class="res-row" style="border:none"><span class="muted">База duży ZUS на ${year} — прогноз из проекта бюджета, окончательную ZUS объявит в конце декабря</span><span></span></div>`);
+    if (year > new Date().getFullYear() && zdr !== null && form !== 'ryczalt')
+      rows.push(`<div class="res-row" style="border:none"><span class="muted">Новая минимальная zdrowotna действует с 1 февраля ${year}, за январь платится по прошлогодней</span><span></span></div>`);
     if (stage !== 'ulga' && s.total > 0)
       rows.push(`<div class="res-row" style="border:none"><span class="muted"><span class="emi" style="color:var(--ok)">${Icons.svg('tree-palm')}</span>Месяц <a href="article.html?id=zus_vacation">ZUS-каникул</a> экономит</span><span class="v" style="color:var(--ok)">${fmtZl(s.total)}</span></div>`);
     zres.innerHTML = rows.join('');
@@ -58,12 +85,26 @@ ratesReady.then(() => {
 
   // ── сравнение форм ──
   const cres = document.getElementById('cres');
-  const NAMES = { skala: 'Skala 12/32%', liniowy: 'Liniowy 19%', ryczalt: 'Ryczałt' };
+  // подписи из ставок года: с реформой шкала может стать 12/24/32
+  const pct = (x) => (x * 100).toLocaleString('pl-PL') + '%';
+  const names = (y) => ({
+    skala: 'Skala ' + YEARS.years[y].pit.brackets.map(b => (b.rate * 100).toLocaleString('pl-PL')).join('/') + '%',
+    liniowy: 'Liniowy ' + pct(YEARS.years[y].pit.liniowy_rate), ryczalt: 'Ryczałt' });
   function cmp() {
     const rev = (+document.getElementById('crev').value || 0) * 12;
     const cost = (+document.getElementById('ccost').value || 0) * 12;
     const rate = +document.getElementById('cryc').value;
-    const r = compareForms(rev, cost, segVal('cstage'), false, rate);
+    const year = +segVal('cyear');
+    const r = compareForms(rev, cost, segVal('cstage'), false, rate, year);
+    if (r.unavailable) {
+      // без шкалы PIT и ставок zdrowotnej «выгоднее всего» было бы догадкой
+      cres.innerHTML = `<div class="card"><div class="h2" style="margin-bottom:6px">Сравнение на ${year} пока не посчитать</div>
+        <p class="muted" style="font-size:13px;margin:0 0 6px">Ещё не объявлено:</p>
+        <ul class="muted" style="font-size:13px;margin:0 0 8px;padding-left:18px">${r.unavailable.map(k => `<li>${MISSING_RU[k] || k}</li>`).join('')}</ul>
+        <p class="muted" style="font-size:13px;margin:0">Как только цифры выйдут, сравнение откроется. Заявление о форме налога на ${year} подаётся до 20 февраля, а если это выходной — до ближайшего рабочего дня.</p></div>`;
+      return;
+    }
+    const NAMES = names(year);
     cres.innerHTML = ['ryczalt', 'liniowy', 'skala'].map(f => {
       const d = r[f], win = r.best === f;
       return `<div class="card ${win ? 'win' : ''}" style="margin-bottom:8px">
@@ -77,7 +118,7 @@ ratesReady.then(() => {
       </div>`;
     }).join('');
   }
-  segInit('cstage', cmp);
+  segInit('cstage', cmp); segInit('cyear', cmp);
   ['crev', 'ccost', 'cryc'].forEach(id =>
     document.getElementById(id).addEventListener('input', cmp));
   cmp();

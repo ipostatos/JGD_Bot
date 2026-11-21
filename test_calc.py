@@ -106,3 +106,60 @@ def test_year_2026_matches_default():
     assert calc.spoleczne_monthly("duzy") == calc.spoleczne_monthly("duzy", year=2026)
     assert calc.zdrowotna_monthly("ryczalt", 100_000) == \
         calc.zdrowotna_monthly("ryczalt", 100_000, year=2026)
+
+
+# ── 2027: что уже объявлено считаем, чего нет — честно говорим ─────────────
+
+def test_year_2027_spoleczne_from_announced_bases():
+    pref = calc.spoleczne_monthly("pref", year=2027)
+    assert pref["emerytalna"] == 289.87        # 1485.00 × 19.52%
+    duzy = calc.spoleczne_monthly("duzy", year=2027)
+    assert duzy["emerytalna"] == 1175.06       # 6019.80 × 19.52% = 1175.065 → вниз
+    # сверка с публикациями (rcponline, infor): duży 2027 с chorobowym = 2052.15
+    assert calc.spoleczne_monthly("duzy", chorobowe=True, year=2027)["total"] == 2052.15
+    assert calc.is_forecast(2027, "duzy_base")
+    assert not calc.is_forecast(2026, "duzy_base")
+
+
+def test_year_2027_zdrowotna_min_and_unknown_ryczalt():
+    assert calc.zdrowotna_monthly("skala", 10_000, year=2027) == 445.5   # 9% × 4950
+    assert calc.zdrowotna_monthly("ryczalt", 100_000, year=2027) is None, \
+        "ставки ryczałtu 2027 ещё не объявлены — не подставлять прошлогодние"
+
+
+def test_compare_2027_refuses_until_data_exists():
+    r = calc.compare_forms(240_000, 12_000, "pref", year=2027)
+    assert set(r["unavailable"]) == {"pit", "zdrowotna.ryczalt_tiers",
+                                     "zdrowotna.liniowy_deduct_limit_year"}
+    assert "best" not in r
+
+
+def test_compare_default_year_unchanged_for_2026():
+    assert calc.compare_forms(240_000, 12_000, "pref") == \
+        calc.compare_forms(240_000, 12_000, "pref", year=2026)
+
+
+def test_current_year_follows_calendar_with_fallback():
+    from datetime import date
+    assert calc.current_year(date(2026, 11, 21)) == 2026
+    assert calc.current_year(date(2027, 1, 5)) == 2027
+    assert calc.current_year(date(2029, 3, 1)) == max(map(int, calc.YEARS["years"]))
+    assert calc.current_year(date(2020, 1, 1)) == min(map(int, calc.YEARS["years"]))
+
+
+def test_pit_scale_supports_three_brackets(monkeypatch):
+    """Реформа 2027 (если её подпишут): 12% до 130k, 24% до 150k, 32% выше."""
+    y = dict(calc.YEARS["years"]["2026"])
+    y["pit"] = {"free_amount": 30000.0, "liniowy_rate": 0.19, "brackets": [
+        {"upto": 130000.0, "rate": 0.12}, {"upto": 150000.0, "rate": 0.24},
+        {"upto": None, "rate": 0.32}]}
+    monkeypatch.setitem(calc.YEARS["years"], "2099", y)
+    assert calc.pit_skala(100_000, year=2099) == 8_400.0              # 70k × 12%
+    assert calc.pit_skala(140_000, year=2099) == 12_000 + 2_400       # 100k×12% + 10k×24%
+    assert calc.pit_skala(200_000, year=2099) == 12_000 + 4_800 + 16_000
+
+
+def test_vat_limit_by_year_in_data():
+    ys = calc.YEARS["years"]
+    assert ys["2025"]["vat_exemption_limit"] == 200_000
+    assert ys["2026"]["vat_exemption_limit"] == ys["2027"]["vat_exemption_limit"] == 240_000

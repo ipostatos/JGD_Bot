@@ -1,5 +1,5 @@
 {
-  "note": "Ставки ZUS по годам для калькулятора. Проценты społecznych неизменны с 2022. Сверено 2026-07-21 (zus.pl, публикации).",
+  "note": "Ставки ZUS, składki zdrowotnej и PIT по годам. Проценты społecznych неизменны с 2022. 2025–2026 сверены 2026-07-21 (zus.pl, публикации). 2027 добавлен 2026-11-21: null = ещё не объявлено, forecast = цифра из проекта, окончательная выйдет позже.",
   "spoleczne_rates": {
     "emerytalna": 0.1952,
     "rentowa": 0.08,
@@ -8,6 +8,35 @@
     "fp_fs": 0.0245
   },
   "years": {
+    "2027": {
+      "min_wage": 4950.0,
+      "pref_base": 1485.0,
+      "duzy_base": 6019.8,
+      "wakacje": true,
+      "forecast": [
+        "duzy_base"
+      ],
+      "sources": {
+        "min_wage": "rozporządzenie RM z 14.09.2026, Dz.U. 2026 poz. 1213",
+        "pref_base": "30% минимальной зарплаты 4950 zł",
+        "duzy_base": "60% прогноза средней зарплаты 10 033 zł из проекта бюджета 2027; окончательная база — в обвещении в конце декабря",
+        "zdrowotna.min_monthly": "9% минимальной зарплаты 4950 zł; действует с 01.02.2027 (январь 2027 ещё по ставке 2026: 432,54)",
+        "zdrowotna.ryczalt_tiers": "от средней зарплаты за IV кв. 2026 — GUS объявит в январе 2027",
+        "zdrowotna.liniowy_deduct_limit_year": "MF объявит в начале 2027",
+        "pit": "реформа шкалы PIT ждёт решения президента (до 27.11.2026)",
+        "vat_exemption_limit": "без изменений (art. 113 ustawy o VAT)"
+      },
+      "zdrowotna": {
+        "min_monthly": 445.5,
+        "skala_rate": 0.09,
+        "liniowy_rate": 0.049,
+        "liniowy_deduct_limit_year": null,
+        "ryczalt_deduct_share": 0.5,
+        "ryczalt_tiers": null
+      },
+      "pit": null,
+      "vat_exemption_limit": 240000.0
+    },
     "2026": {
       "min_wage": 4806.0,
       "pref_base": 1441.8,
@@ -20,11 +49,35 @@
         "liniowy_deduct_limit_year": 14100.0,
         "ryczalt_deduct_share": 0.5,
         "ryczalt_tiers": [
-          { "max_revenue": 60000, "monthly": 498.35 },
-          { "max_revenue": 300000, "monthly": 830.58 },
-          { "max_revenue": null, "monthly": 1495.04 }
+          {
+            "max_revenue": 60000,
+            "monthly": 498.35
+          },
+          {
+            "max_revenue": 300000,
+            "monthly": 830.58
+          },
+          {
+            "max_revenue": null,
+            "monthly": 1495.04
+          }
         ]
-      }
+      },
+      "pit": {
+        "free_amount": 30000.0,
+        "brackets": [
+          {
+            "upto": 120000.0,
+            "rate": 0.12
+          },
+          {
+            "upto": null,
+            "rate": 0.32
+          }
+        ],
+        "liniowy_rate": 0.19
+      },
+      "vat_exemption_limit": 240000.0
     },
     "2025": {
       "min_wage": 4666.0,
@@ -38,11 +91,35 @@
         "liniowy_deduct_limit_year": 12900.0,
         "ryczalt_deduct_share": 0.5,
         "ryczalt_tiers": [
-          { "max_revenue": 60000, "monthly": 461.66 },
-          { "max_revenue": 300000, "monthly": 769.43 },
-          { "max_revenue": null, "monthly": 1384.97 }
+          {
+            "max_revenue": 60000,
+            "monthly": 461.66
+          },
+          {
+            "max_revenue": 300000,
+            "monthly": 769.43
+          },
+          {
+            "max_revenue": null,
+            "monthly": 1384.97
+          }
         ]
-      }
+      },
+      "pit": {
+        "free_amount": 30000.0,
+        "brackets": [
+          {
+            "upto": 120000.0,
+            "rate": 0.12
+          },
+          {
+            "upto": null,
+            "rate": 0.32
+          }
+        ],
+        "liniowy_rate": 0.19
+      },
+      "vat_exemption_limit": 200000.0
     }
   }
 }

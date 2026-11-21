@@ -1,6 +1,7 @@
 """Расчётное ядро JDG HUB — python-зеркало webapp/calc.js.
 
-Единственный источник ставок — rates_2026.json. Любая правка формул здесь
+Ставки по годам — rates_years.json (ZUS, zdrowotna, PIT, лимит VAT),
+общие параметры — rates_2026.json. Любая правка формул здесь
 обязана попасть и в calc.js (test_calc.py гоняет оба через сверку фикстур).
 Все суммы — злотые (float, округление до грошей на выходе).
 """
@@ -20,6 +21,37 @@ def _r2(x: float) -> float:
 
 def year_rates(year: int) -> dict:
     return YEARS["years"][str(year)]
+
+
+def current_year(today=None) -> int:
+    """Год, ставки которого действуют сейчас: календарный, а если его ещё
+    не завезли — последний известный до него. Раньше везде стоял год по
+    умолчанию 2026, и 1 января дашборд продолжил бы считать по старым ставкам.
+    """
+    from datetime import date
+    y = (today or date.today()).year
+    known = sorted(int(k) for k in YEARS["years"])
+    past = [k for k in known if k <= y]
+    return past[-1] if past else known[0]
+
+
+def is_forecast(year: int, field: str) -> bool:
+    """Цифра из проекта/прогноза, окончательная выйдет позже."""
+    return field in year_rates(year).get("forecast", [])
+
+
+def missing_for_compare(year: int) -> list[str]:
+    """Что ещё не объявлено для сравнения форм налога за этот год."""
+    y = year_rates(year)
+    z = y["zdrowotna"]
+    out = []
+    if not y.get("pit"):
+        out.append("pit")
+    if z.get("ryczalt_tiers") is None:
+        out.append("zdrowotna.ryczalt_tiers")
+    if z.get("liniowy_deduct_limit_year") is None:
+        out.append("zdrowotna.liniowy_deduct_limit_year")
+    return out
 
 
 def spoleczne_monthly(stage: str, chorobowe: bool = False, year: int = 2026) -> dict:
@@ -45,15 +77,18 @@ def spoleczne_monthly(stage: str, chorobowe: bool = False, year: int = 2026) -> 
     return parts
 
 
-def zdrowotna_monthly(form: str, annual_income: float, year: int = 2026) -> float:
+def zdrowotna_monthly(form: str, annual_income: float, year: int = 2026) -> float | None:
     """Składka zdrowotna в месяц.
 
     skala/liniowy: annual_income = годовой dochód (доход минус расходы и społeczne);
     ryczałt: annual_income = годовой przychód (выручка).
+    None — ставки ryczałtu на этот год ещё не объявлены (GUS даёт базу в январе).
     """
     assert form in FORMS
     z = year_rates(year)["zdrowotna"]
     if form == "ryczalt":
+        if z["ryczalt_tiers"] is None:
+            return None
         for tier in z["ryczalt_tiers"]:
             if tier["max_revenue"] is None or annual_income <= tier["max_revenue"]:
                 return tier["monthly"]
@@ -61,43 +96,55 @@ def zdrowotna_monthly(form: str, annual_income: float, year: int = 2026) -> floa
     return _r2(max(annual_income / 12 * rate, z["min_monthly"]))
 
 
-def pit_skala(base: float) -> float:
-    """PIT по скале: 12% до порога, 32% выше; kwota wolna учтена в пороге 30k."""
-    p = RATES["pit"]
+def pit_skala(base: float, year: int = 2026) -> float:
+    """PIT по скале за год: ступени из rates_years (2026: 12% до 120k, 32% выше).
+
+    Kwota wolna 30k встроена как нулевая ступень: налог с первой ступени
+    считается от (порог − 30k). Число ступеней любое — с 2027 их может быть три.
+    """
+    p = year_rates(year)["pit"]
     if base <= p["free_amount"]:
         return 0.0
-    if base <= p["skala_threshold"]:
-        return _r2((base - p["free_amount"]) * p["skala_rate1"])
-    t1 = (p["skala_threshold"] - p["free_amount"]) * p["skala_rate1"]
-    return _r2(t1 + (base - p["skala_threshold"]) * p["skala_rate2"])
+    tax, lo = 0.0, p["free_amount"]
+    for b in p["brackets"]:
+        hi = b["upto"] if b["upto"] is not None else float("inf")
+        if base > lo:
+            tax += (min(base, hi) - lo) * b["rate"]
+        lo = hi
+    return _r2(tax)
 
 
 def compare_forms(annual_revenue: float, annual_costs: float,
                   stage: str, chorobowe: bool = False,
-                  ryczalt_rate: float = 0.12) -> dict:
+                  ryczalt_rate: float = 0.12, year: int = 2026) -> dict:
     """Годовое сравнение skala / liniowy / ryczałt.
 
     Оценка: zdrowotna считается от дохода до её вычета (без итераций),
     вычеты zdrowotnej для liniówki (лимит/год) и ryczałt (50%) учтены.
     """
-    z = RATES["zdrowotna"]
-    spol = spoleczne_monthly(stage, chorobowe)["total"] * 12
+    missing = missing_for_compare(year)
+    if missing:
+        # без шкалы PIT или ставок zdrowotnej «выгоднее всего» было бы догадкой
+        return {"unavailable": missing}
+    z = year_rates(year)["zdrowotna"]
+    pit = year_rates(year)["pit"]
+    spol = spoleczne_monthly(stage, chorobowe, year)["total"] * 12
     out = {}
 
     dochod = max(annual_revenue - annual_costs - spol, 0.0)
 
-    zdr_sk = zdrowotna_monthly("skala", dochod) * 12
-    tax_sk = pit_skala(dochod)
+    zdr_sk = zdrowotna_monthly("skala", dochod, year) * 12
+    tax_sk = pit_skala(dochod, year)
     out["skala"] = {"tax": tax_sk, "zdrowotna": _r2(zdr_sk),
                     "net": _r2(annual_revenue - annual_costs - spol - zdr_sk - tax_sk)}
 
-    zdr_li = zdrowotna_monthly("liniowy", dochod) * 12
+    zdr_li = zdrowotna_monthly("liniowy", dochod, year) * 12
     base_li = max(dochod - min(zdr_li, z["liniowy_deduct_limit_year"]), 0.0)
-    tax_li = _r2(base_li * RATES["pit"]["liniowy_rate"])
+    tax_li = _r2(base_li * pit["liniowy_rate"])
     out["liniowy"] = {"tax": tax_li, "zdrowotna": _r2(zdr_li),
                       "net": _r2(annual_revenue - annual_costs - spol - zdr_li - tax_li)}
 
-    zdr_ry = zdrowotna_monthly("ryczalt", annual_revenue) * 12
+    zdr_ry = zdrowotna_monthly("ryczalt", annual_revenue, year) * 12
     base_ry = max(annual_revenue - spol - zdr_ry * z["ryczalt_deduct_share"], 0.0)
     tax_ry = _r2(base_ry * ryczalt_rate)
     out["ryczalt"] = {"tax": tax_ry, "zdrowotna": _r2(zdr_ry),
