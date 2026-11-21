@@ -11,7 +11,7 @@
 </head>
 <body>
 <div class="hero"><span class="logo emi" data-icon="calculator"></span><h1>Калькуляторы</h1></div>
-<p class="sub">Ставки 2025–2026 · данные проверены <span id="upd"></span></p>
+<p class="sub">Ставки <span id="yrs"></span> · данные проверены <span id="upd"></span></p>
 
 <div class="seg" id="tabs" style="margin-bottom:14px">
   <button data-t="zus" class="on">ZUS</button>
@@ -23,10 +23,9 @@
 <section id="tab-zus">
   <div class="card" style="margin-bottom:10px">
     <div class="field"><label>Год</label>
-      <div class="seg" id="zyear">
-        <button data-v="2026" class="on">2026</button>
-        <button data-v="2025">2025</button>
-      </div>
+      <!-- кнопки годов строит js/calc.js из rates_years.json: новый год
+           появляется сам, как только завезли ставки -->
+      <div class="seg" id="zyear"></div>
     </div>
     <div class="field"><label>Режим ZUS</label>
       <div class="seg" id="zstage">
@@ -55,6 +54,9 @@
 <!-- ═══ Сравнение форм ═══ -->
 <section id="tab-cmp" class="hidden">
   <div class="card" style="margin-bottom:10px">
+    <div class="field"><label>Год</label>
+      <div class="seg" id="cyear"></div>
+    </div>
     <div class="field"><label>Выручка в месяц (netto, без VAT), zł</label>
       <input id="crev" type="number" inputmode="numeric" value="20000" min="0" step="500"></div>
     <div class="field"><label>Расходы в месяц (koszty), zł</label>
@@ -90,7 +92,7 @@
       <input id="vdate" type="date" value="2026-03-01"></div>
   </div>
   <div class="card" id="vres"></div>
-  <p class="foot" style="margin-top:10px">Лимит zwolnienia podmiotowego z VAT в 2026 — 240 000 zł/год (до 2026 было 200 000). Подробно: <a href="article.html?id=registration_vat">регистрация VAT</a></p>
+  <p class="foot" style="margin-top:10px">Лимит zwolnienia podmiotowego z VAT — 240 000 zł/год с 2026 года (в 2025 было 200 000), в 2027 не меняется. Подробно: <a href="article.html?id=registration_vat">регистрация VAT</a></p>
 </section>
 
 <script src="icons.js"></script>

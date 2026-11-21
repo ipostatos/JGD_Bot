@@ -535,3 +535,51 @@ def test_dialog_session_id_is_temporary_and_anonymous(browser, dialog_url):
         assert events and all("кухн" not in b.lower() for b in events), events
     finally:
         ctx.close()
+
+
+def test_calc_core_matches_python_mirror_by_year(browser, base_url):
+    """calc.js и calc.py обязаны считать одинаково для каждого года из данных.
+
+    До ноября 2026 зеркало ничто не сверяло, а годы стали жить в обоих
+    ядрах — расхождение дало бы разные цифры в калькуляторе и у ассистента.
+    """
+    import calc
+    ctx, page, _, _ = _open(browser, base_url + "/calc.html")
+    try:
+        page.wait_for_function("window.YEARS && window.compareForms")
+        for y in map(int, calc.YEARS["years"]):
+            js = page.evaluate("""(y) => ({
+                pref: spoleczneMonthly('pref', true, y), duzy: spoleczneMonthly('duzy', true, y),
+                skala: zdrowotnaMonthly('skala', 90000, y), ryc: zdrowotnaMonthly('ryczalt', 100000, y),
+                missing: missingForCompare(y),
+                cmp: compareForms(240000, 12000, 'pref', false, 0.12, y),
+            })""", y)
+            assert js["pref"] == calc.spoleczne_monthly("pref", True, y), y
+            assert js["duzy"] == calc.spoleczne_monthly("duzy", True, y), y
+            assert js["skala"] == calc.zdrowotna_monthly("skala", 90000, y), y
+            assert js["ryc"] == calc.zdrowotna_monthly("ryczalt", 100000, y), y
+            assert js["missing"] == calc.missing_for_compare(y), y
+            assert js["cmp"] == calc.compare_forms(240000, 12000, "pref", False, 0.12, y), y
+        cur = page.evaluate("currentRatesYear()")
+        assert cur == calc.current_year()
+    finally:
+        ctx.close()
+
+
+def test_calc_shows_2027_honestly(browser, base_url):
+    """Год без ставок не выдаёт прошлогодние цифры за новые."""
+    ctx, page, errors, _ = _open(browser, base_url + "/calc.html")
+    try:
+        page.wait_for_selector("#zyear button")
+        years = page.eval_on_selector_all("#zyear button", "bs => bs.map(b => b.dataset.v)")
+        assert "2027" in years and "2025" in years
+        page.click("#zyear button[data-v='2027']")      # ryczałt выбран по умолчанию
+        assert "объявят в январе" in page.inner_text("#zres")
+        page.click("#tabs button[data-t='cmp']")
+        page.click("#cyear button[data-v='2027']")
+        txt = page.inner_text("#cres")
+        assert "пока не посчитать" in txt and "шкала PIT" in txt
+        assert "выгоднее всего" not in txt
+        assert not errors, errors
+    finally:
+        ctx.close()

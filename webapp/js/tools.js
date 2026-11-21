@@ -38,7 +38,7 @@ const CATS = [
       u: 'nip.html', mine: 'Python + FastAPI: White List, VIES, GUS и CEIDG в одном запросе' },
   ]},
   { t: 'Данные', ic: 'bar-chart', items: [
-    { t: 'Składki ZUS по годам', d: '2025 · 2026, все режимы и формы налогообложения',
+    { t: 'Składki ZUS по годам', d: '2025 · 2026 · 2027, все режимы и формы налогообложения',
       u: 'calc.html', mine: 'расчётное ядро на Python (сверено с таблицей гайда), интерфейс на JavaScript' },
     doc('vazhnye-daty', 'Важные даты предпринимателя', 'сводная таблица сроков'),
     { t: 'Калькулятор Ryczałt (таблица)', d: 'интерактивная Google-таблица', u: 'https://docs.google.com/spreadsheets/d/14Y0ReOUMWA17pt931vgY2R0pSFYzqYOQ-XBzmkhllOw/edit' },

@@ -49,29 +49,43 @@ def _rates_entries() -> list[dict]:
     import calc
     from datetime import date
     out = []
+    this_year = date.today().year
     for year in sorted(calc.YEARS["years"], reverse=True):
         # «действуют сейчас» сверяем с календарём, а не с тем, что это самый
         # свежий файл: если ставки на новый год ещё не завезли, объявлять
-        # прошлогодние текущими — прямая дезинформация
-        now = "действуют сейчас, текущий год. " if int(year) == date.today().year \
-              else "прошлый год, для сравнения; сейчас не действуют. "
-        y = calc.year_rates(int(year))
+        # прошлогодние текущими — прямая дезинформация. Будущий год тоже
+        # «сейчас не действует», но назван будущим, а не прошлым.
+        yi = int(year)
+        if yi == this_year:
+            now = "действуют сейчас, текущий год. "
+        elif yi > this_year:
+            now = (f"следующий год, вступят в силу с 1 января {year}; "
+                   "сейчас не действуют. ")
+        else:
+            now = "прошлый год, для сравнения; сейчас не действуют. "
+        y = calc.year_rates(yi)
         z, r = y["zdrowotna"], calc.YEARS["spoleczne_rates"]
-        pref = calc.spoleczne_monthly("pref", chorobowe=True, year=int(year))
-        duzy = calc.spoleczne_monthly("duzy", chorobowe=True, year=int(year))
-        tiers = ", ".join(
-            f"до {t['max_revenue']:,} zł выручки — {t['monthly']} zł".replace(",", " ")
-            if t["max_revenue"] else f"свыше — {t['monthly']} zł"
-            for t in z["ryczalt_tiers"])
+        pref = calc.spoleczne_monthly("pref", chorobowe=True, year=yi)
+        duzy = calc.spoleczne_monthly("duzy", chorobowe=True, year=yi)
+        fc = " (прогноз из проекта бюджета, окончательная цифра будет позже)"             if calc.is_forecast(yi, "duzy_base") else ""
+        if z["ryczalt_tiers"] is None:
+            tiers = f"ставки на {year} ещё не объявлены (считаются от средней зарплаты за iv квартал, gus публикует в январе)"
+        else:
+            tiers = ", ".join(
+                f"до {t['max_revenue']:,} zł выручки — {t['monthly']} zł".replace(",", " ")
+                if t["max_revenue"] else f"свыше — {t['monthly']} zł"
+                for t in z["ryczalt_tiers"])
+        lim = z["liniowy_deduct_limit_year"]
+        lim_txt = f"не больше {lim} zł за год" if lim is not None else             f"лимит на {year} ещё не объявлен"
         out.append({
             "id": f"rates-zus-{year}",
             "title": f"Ставки ZUS {year} год",
             "text": (
                 f"ставки взносы zus {year} год. {now}минимальная зарплата "
                 f"{y['min_wage']} zł. база preferencyjny zus (pref, малый зус) "
-                f"{y['pref_base']} zł, база duży zus (полный) {y['duzy_base']} zł. "
+                f"{y['pref_base']} zł, база duży zus (полный) {y['duzy_base']} zł{fc}. "
                 f"składki społeczne в месяц с chorobowe: pref {pref['total']} zł, "
-                f"duży {duzy['total']} zł. ставки: emerytalna {r['emerytalna']*100:.2f}%, "
+                f"duży {duzy['total']} zł{fc}. ставки: emerytalna {r['emerytalna']*100:.2f}%, "
                 f"rentowa {r['rentowa']*100:.2f}%, wypadkowa {r['wypadkowa']*100:.2f}%, "
                 f"chorobowa {r['chorobowa']*100:.2f}%, fp/fs {r['fp_fs']*100:.2f}%. "
                 f"минимальная składka zdrowotna {z['min_monthly']} zł в месяц. "
@@ -83,23 +97,32 @@ def _rates_entries() -> list[dict]:
             "text": (
                 f"składka zdrowotna здоровотна {year} год. {now}skala {z['skala_rate']*100:.0f}% "
                 f"от dochodu, liniowy {z['liniowy_rate']*100:.1f}% "
-                f"(вычет из налога не больше {z['liniowy_deduct_limit_year']} zł за год), "
+                f"(вычет из налога {lim_txt}), "
                 f"ryczałt фиксированная по порогам: {tiers}; из дохода вычитается "
                 f"{z['ryczalt_deduct_share']*100:.0f}% уплаченной składki. "
                 f"минимальная składka zdrowotna минимум {z['min_monthly']} zł в месяц."
             ).lower()})
-    p = calc.RATES.get("pit") or {}
-    out.append({
-        "id": "rates-pit-2026",
-        "title": f"Налоги и лимиты {calc.RATES['year']} год",
-        "text": (
-            f"налоги лимиты {calc.RATES['year']} год pit skala: свободная сумма "
-            f"{p.get('free_amount')} zł, порог {p.get('skala_threshold')} zł, "
-            f"ставки {p.get('skala_rate1', 0)*100:.0f}% и {p.get('skala_rate2', 0)*100:.0f}%. "
-            f"podatek liniowy {p.get('liniowy_rate', 0)*100:.0f}%. "
-            f"лимит зволнения с vat (zwolnienie podmiotowe) "
-            f"{calc.RATES.get('vat_exemption_limit')} zł выручки за год."
-        ).lower()})
+        p = y.get("pit")
+        if p:
+            steps, lo = [], p["free_amount"]
+            for b in p["brackets"]:
+                steps.append(f"{b['rate']*100:.0f}% до {b['upto']} zł" if b["upto"]
+                             else f"{b['rate']*100:.0f}% свыше {lo} zł")
+                lo = b["upto"]
+            pit_txt = (f"pit skala: свободная сумма {p['free_amount']} zł, "
+                       f"ступени: {', '.join(steps)}. podatek liniowy "
+                       f"{p['liniowy_rate']*100:.0f}%. ")
+        else:
+            pit_txt = (f"шкала pit на {year} ещё не утверждена окончательно — "
+                       "проверяй на podatki.gov.pl. ")
+        out.append({
+            "id": f"rates-pit-{year}",
+            "title": f"Налоги и лимиты {year} год",
+            "text": (
+                f"налоги лимиты {year} год. {now}{pit_txt}"
+                f"лимит зволнения с vat (zwolnienie podmiotowe) "
+                f"{y.get('vat_exemption_limit', calc.RATES.get('vat_exemption_limit'))} zł выручки за год."
+            ).lower()})
     return out
 
 

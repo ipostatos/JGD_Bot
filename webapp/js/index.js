@@ -48,7 +48,11 @@ function buildCockpit(p) {
   // строка перехода — деньги и дата следующей ступени ZUS
   const nx = document.getElementById('cpNext');
   if (nxt) {
-    const delta = spoleczneMonthly(nxt.stage, true).total - socCur;
+    // следующая ступень считается по ставкам года, когда она наступит (если их уже
+    // завезли): переход pref → duży в марте 2027 стоит по базе 2027, а не 2026
+    const ny = nxt.start && YEARS.years[String(nxt.start.getFullYear())]
+      ? nxt.start.getFullYear() : currentRatesYear();
+    const delta = spoleczneMonthly(nxt.stage, true, ny).total - socCur;
     const MON = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
     const mon = MON[cur.end.getMonth()] + " '" + String(cur.end.getFullYear()).slice(2);
     const dTxt = daysToEnd > 45 ? '~' + Math.round(daysToEnd / 30) + ' мес' : daysToEnd + ' дн.';
@@ -56,7 +60,7 @@ function buildCockpit(p) {
     nx.className = 'cp-next' + (hot ? ' hot' : '');
     nx.innerHTML = '<span class="emi">' + Icons.svg(hot ? 'flame' : 'trending-up') + '</span>' +
       '<span>' + nxt.name + ' через <b>' + dTxt + '</b> (' + mon + ')' +
-      (delta > 0 ? ' · <b>+' + fmtZl(delta) + '</b>/мес' : '') + '</span>';
+      (delta > 0 ? ' · <b>' + (isForecast(ny, 'duzy_base') && nxt.stage === 'duzy' ? '~' : '') + '+' + fmtZl(delta) + '</b>/мес' : '') + '</span>';
   } else {
     nx.className = 'cp-next calm';
     nx.innerHTML = '<span class="emi">' + Icons.svg('check') + '</span>' +
