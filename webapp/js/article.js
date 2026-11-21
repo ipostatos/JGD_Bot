@@ -11,7 +11,7 @@ fetch('data/articles/' + id + '.html')
   .then(html => {
     art.innerHTML = html;
     window.Icons?.hydrate?.(art);   // Lucide-иконки в callout-блоках статьи
-    document.getElementById('srclink').href = 'https://sobolevbel.github.io/jdg/' + id + '/';
+    document.getElementById('srclink').href = 'https://twojajdg.pl/' + id + '/';
     // подсветка искомого слова при переходе из поиска
     const q = qs.get('q');
     if (q) {
