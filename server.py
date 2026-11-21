@@ -99,7 +99,7 @@ def build_bot():
             "личный план с дедлайнами, раздел KSeF, проверка контрагента по NIP, "
             "коды ошибок ZUS и AI-ассистент по базе гайда.\n\n"
             "Основано на гайде сообщества "
-            "<a href=\"https://sobolevbel.github.io/jdg/\">sobolevbel.github.io/jdg</a> "
+            "<a href=\"https://twojajdg.pl/\">twojajdg.pl</a> "
             "и чате @JDG_PBH.\n\n"
             "⚠️ Информация справочная, не является налоговой или юридической "
             "консультацией.",
