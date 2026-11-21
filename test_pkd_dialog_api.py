@@ -125,7 +125,7 @@ def test_answer_order_does_not_change_the_response():
 # ── оболочка ответа ───────────────────────────────────────────────────────
 
 ENVELOPE = {"status", "next_question", "activity_units", "primary_code",
-            "primary_code_status", "reason", "routing_hint", "versions",
+            "primary_code_status", "primary_question", "reason", "routing_hint", "versions",
             "input_fingerprint"}
 
 
@@ -435,3 +435,25 @@ def test_ui_event_endpoint_accepts_only_client_events():
 def test_ui_event_endpoint_hidden_behind_the_flag():
     with client(enabled=False) as c:
         assert c.post(URL + "/event", json={"event": "start"}).status_code == 404
+
+
+def test_primary_question_comes_with_the_result():
+    """Режим «коды и главный код» раньше упирался в стену: «укажите, что даёт
+    больше выручки», а ответить было негде. Вопрос приходит рядом с кодами,
+    и варианты в нём — только деятельности этого человека."""
+    with client() as c:
+        body = ask(c, query="Произвожу мебель и ремонтирую старую",
+                   intent="find_codes_and_primary").json()
+        assert body["status"] == "resolved_package"
+        assert body["primary_code_status"] == "revenue_information_required"
+        q = body["primary_question"]
+        assert q["id"] == "activity.primary_revenue"
+        assert [o["id"] for o in q["options"]] == ["manufacture_new", "repair_or_restore"]
+
+        body = ask(c, query="Произвожу мебель и ремонтирую старую",
+                   intent="find_codes_and_primary",
+                   answers=[{"question_id": q["id"], "question_version": q["version"],
+                             "option_ids": ["repair_or_restore"]}]).json()
+        assert body["primary_code"] == "95.24.Z"
+        assert body["primary_code_status"] == "user_selected"
+        assert body["primary_question"] is None

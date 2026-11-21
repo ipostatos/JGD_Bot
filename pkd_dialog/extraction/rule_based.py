@@ -29,7 +29,10 @@ from .. import features as feat
 from ..models import TRUST, FeatureSource
 
 RULES_PATH = Path(__file__).resolve().parent / "rules.json"
-TOKEN = re.compile(r"[а-яёa-z0-9]+", re.I)
+# Любые буквы и цифры, а не только русские и латиница без диакритики: старое
+# `[а-яёa-z0-9]` резало польское «łóżka» на обрывки «żk», и польский словарь,
+# когда появится, не нашёл бы ни одного слова целиком.
+TOKEN = re.compile(r"[^\W_]+")
 
 
 class Confidence(str, Enum):

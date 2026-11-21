@@ -484,6 +484,44 @@ def test_dialog_package_and_technical_data(browser, dialog_url):
         ctx.close()
 
 
+def test_dialog_primary_code_can_be_chosen(browser, dialog_url):
+    """Режим «коды и главный код» доходит до конца: вопрос о выручке под
+    кодами, ответ даёт главный код. Раньше здесь был тупик."""
+    ctx = browser.new_context(viewport=PHONE)
+    page = ctx.new_page()
+    try:
+        page.goto(dialog_url + "/pkd.html", wait_until="networkidle")
+        tap(page, "#mode-dialog")
+        page.check('input[name="dlg-intent"][value="find_codes_and_primary"]')
+        page.fill("#dlg-q", "Произвожу мебель и ремонтирую старую")
+        tap(page, "#dlg-go")
+        page.wait_for_selector("#dlg-result [data-primary]", timeout=15000)
+        assert page.locator("#dlg-result [data-primary]").count() == 2
+        tap(page, '#dlg-result [data-primary="repair_or_restore"]')
+        page.wait_for_selector("#dlg-result >> text=по вашему ответу", timeout=15000)
+        assert "95.24.Z" in page.inner_text("#dlg-result")
+        assert not page.locator("#dlg-result [data-primary]").count()
+    finally:
+        ctx.close()
+
+
+def test_dialog_design_is_asked_not_lost(browser, dialog_url):
+    ctx = browser.new_context(viewport=PHONE)
+    page = ctx.new_page()
+    try:
+        page.goto(dialog_url + "/pkd.html", wait_until="networkidle")
+        tap(page, "#mode-dialog")
+        page.fill("#dlg-q", "проектирую мебель")
+        tap(page, "#dlg-go")
+        page.wait_for_selector("#dlg-question", timeout=15000)
+        page.check('input[value="design_only"]')
+        tap(page, "#dlg-next")
+        page.wait_for_selector("#dlg-result", timeout=15000)
+        assert "74.11.Z" in page.inner_text("#dlg-result")
+    finally:
+        ctx.close()
+
+
 def test_dialog_unrecognized_activity(browser, dialog_url):
     ctx = browser.new_context(viewport=PHONE)
     page = ctx.new_page()

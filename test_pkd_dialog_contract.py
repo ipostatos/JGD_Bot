@@ -24,7 +24,8 @@ SCENARIOS = json.loads(
 
 def test_questions_load_and_validate():
     qs = contracts.questions()
-    assert set(qs) == {"activity.mode", "furniture.object_context",
+    assert set(qs) == {"activity.mode", "activity.design_scope",
+                       "furniture.object_context",
                        "joinery.windows_doors_material", "activity.primary_revenue"}
     assert all(q.version >= 1 for q in qs.values())
 
@@ -202,3 +203,31 @@ def test_scenario_set_covers_the_required_shape():
                for s in SCENARIOS)
     assert any(s["expected"]["primary_code_status"]
                == PrimaryStatus.REVENUE_INFORMATION_REQUIRED.value for s in SCENARIOS)
+
+
+# ── один язык условий ─────────────────────────────────────────────────────
+@pytest.mark.parametrize("cond", [
+    {"any_tru": ["activity.design"]},                       # опечатка
+    {"all": []},                                            # пустая группа
+    {"any_true": []},                                       # пустой список
+    {"any_true": ["activity.design"], "none_known": ["x"]},  # два оператора
+    {"feature": "activity.design", "equals": True, "extra": 1},
+])
+def test_condition_typos_fail_at_load(cond):
+    from pkd_dialog.conditions import validate
+    from pkd_dialog.contracts import ContractError
+    with pytest.raises(ContractError):
+        validate(cond, "test")
+
+
+def test_every_layer_speaks_the_same_condition_language():
+    """Оператор, понятный одному слою, понятен всем: раньше none_true знали
+    только деятельности, а any_conflicted — только выбор вопроса."""
+    from pkd_dialog.conditions import check
+    from pkd_dialog.resolved import resolve_features
+    from pkd_dialog.models import Feature, FeatureSource
+    fs = resolve_features([Feature("activity.design", True,
+                                   FeatureSource.EXPLICIT_QUERY)], [])
+    assert check({"none_true": ["activity.resell"]}, fs)
+    assert not check({"none_true": ["activity.design"]}, fs)
+    assert not check({"any_conflicted": ["activity.design"]}, fs)

@@ -27,6 +27,7 @@ import pkd
 
 from . import features as feat
 from .activity_units import ActivityUnit
+from .conditions import check as _check, keys_of as _keys_of, validate
 from .contracts import ContractError
 from .resolved import ResolvedFeatureSet
 
@@ -94,6 +95,7 @@ def rules() -> dict:
             raise ContractError(f"{rid}: причина исключения у разрешающего правила")
         if not r.get("explanation"):
             raise ContractError(f"{rid}: правило без объяснения")
+        validate(r["when"], rid)
         for key in _keys_of(r["when"]):
             if key not in feat.REGISTRY:
                 raise ContractError(f"{rid}: неизвестный признак {key}")
@@ -144,26 +146,6 @@ def _check_no_contradictory_pairs(items: list[dict]) -> None:
             raise ContractError(f"{r['id']}: то же условие, что у другого правила, "
                                 f"но противоположный эффект")
         seen[key] = r["effect"]
-
-
-def _keys_of(cond: dict) -> set[str]:
-    out: set[str] = set()
-    for op in ("all", "any"):
-        for sub in cond.get(op, []):
-            out |= _keys_of(sub)
-    if "feature" in cond:
-        out.add(cond["feature"])
-    return out
-
-
-def _check(cond: dict, fs: ResolvedFeatureSet) -> bool:
-    if "all" in cond:
-        return all(_check(sub, fs) for sub in cond["all"])
-    if "any" in cond:
-        return any(_check(sub, fs) for sub in cond["any"])
-    if "feature" in cond:
-        return fs.value(cond["feature"]) == cond.get("equals")
-    raise ContractError(f"неизвестное условие: {cond}")
 
 
 def apply_rules(unit: ActivityUnit, fs: ResolvedFeatureSet) -> tuple[CandidateDecision, ...]:

@@ -174,6 +174,7 @@ def serialize(result) -> dict:
         "activity_units": [_unit(u, idx) for u in result.units],
         "primary_code": result.primary_code,
         "primary_code_status": result.primary_code_status.value,
+        "primary_question": _question(result.primary_question),
         "reason": result.reason,
         "routing_hint": result.routing_hint,
         "versions": {"dialog_schema": SCHEMA_VERSION,

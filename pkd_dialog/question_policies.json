@@ -31,6 +31,21 @@
    "resolves": ["activity.manufacture_new", "activity.install_or_assemble",
                 "activity.repair_or_restore", "activity.design", "activity.resell"]},
 
+  {"id": "policy.design_scope.v1",
+   "question_id": "activity.design_scope",
+   "question_version": 1,
+   "priority": "activity_mode",
+   "why": "«Проектирую мебель» не говорит, продаётся ли проект сам по себе или это часть изготовления. Без ответа деятельность нельзя ни отнести к проектированию, ни растворить в производстве — раньше она молча пропадала, и человек получал «не распознано» без единого вопроса.",
+   "when": {"all": [
+     {"any_true": ["activity.design"]},
+     {"any_true": ["object.furniture", "object.kitchen_furniture",
+                   "object.freestanding_furniture", "object.built_in_furniture"]},
+     {"none_known": ["activity.design_only", "activity.manufacture_new"]},
+     {"none_true": ["qualifier.offered_separately"]}
+   ]},
+   "resolves": ["activity.design_only", "activity.manufacture_new",
+                "qualifier.offered_separately"]},
+
   {"id": "policy.object_context.install.v1",
    "question_id": "furniture.object_context",
    "question_version": 2,
