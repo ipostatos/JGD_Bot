@@ -163,3 +163,12 @@ def test_vat_limit_by_year_in_data():
     ys = calc.YEARS["years"]
     assert ys["2025"]["vat_exemption_limit"] == 200_000
     assert ys["2026"]["vat_exemption_limit"] == ys["2027"]["vat_exemption_limit"] == 240_000
+
+
+def test_rates_years_has_fresh_check_date():
+    """Экран расчётов пишет «данные проверены <дата>» по этому полю:
+    после добавления 2027 там оставалась июльская дата."""
+    import json
+    y = json.loads(open("rates_years.json", encoding="utf-8").read())
+    assert y["updated"] >= "2026-11-21"
+    assert max(y["years"]) in y["note"] or "2027" in y["note"]
