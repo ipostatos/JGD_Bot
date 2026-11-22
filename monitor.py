@@ -29,6 +29,12 @@ ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 # max_tokens, поэтому лимиты выше прежних, а ответ разбирается по типу блока.
 MODEL = "claude-haiku-5-5"
 
+# $ за миллион токенов (вход, выход). Тариф Haiku 5.5 до 100K токенов в запросе —
+# наши запросы на порядки короче. Неизвестная модель считается по самой дорогой
+# строке: занизить расход хуже, чем завысить.
+PRICES = {"claude-haiku-5-5": (0.10, 0.50),
+          "claude-haiku-4-5-20251001": (1.00, 5.00)}
+
 TOPICS = ("ZUS", "VAT", "PIT", "ryczałt", "KSeF", "легализация", "другое")
 
 # Новость, которая пролежала в очереди дольше этого (классификация не работала),
@@ -156,7 +162,72 @@ def db() -> sqlite3.Connection:
     # чтобы после долгого простоя не пушить старьё как новое
     conn.execute("""CREATE TABLE IF NOT EXISTS news_pending(
         url TEXT PRIMARY KEY, first_seen INTEGER)""")
+    # расход на ИИ в долларах по фактическим токенам из ответа API — по нему
+    # ассистент останавливается, когда дневной или месячный бюджет выбран
+    conn.execute("""CREATE TABLE IF NOT EXISTS ai_spend(
+        day TEXT, kind TEXT, calls INTEGER, usd REAL, PRIMARY KEY(day, kind))""")
     return conn
+
+
+def cost_usd(model: str, usage: dict) -> float:
+    pin, pout = PRICES.get(model, max(PRICES.values()))
+    inp = (usage.get("input_tokens", 0) + usage.get("cache_creation_input_tokens", 0)
+           + usage.get("cache_read_input_tokens", 0))
+    return (inp * pin + usage.get("output_tokens", 0) * pout) / 1_000_000
+
+
+def record_spend(kind: str, model: str, usage: dict) -> None:
+    day = time.strftime("%Y-%m-%d")
+    with db() as c:
+        c.execute("""INSERT INTO ai_spend VALUES(?,?,1,?)
+            ON CONFLICT(day,kind) DO UPDATE SET calls=calls+1, usd=usd+excluded.usd""",
+                  (day, kind, cost_usd(model, usage or {})))
+
+
+def reserve_spend(kind: str, est: float, daily: float, monthly: float) -> str | None:
+    """Занять бюджет ДО вызова модели — проверка и запись в одной транзакции.
+
+    Проверить «бюджет есть» и записать расход после ответа нельзя: десяток
+    параллельных запросов увидели бы один и тот же остаток и прошли все.
+    Здесь BEGIN IMMEDIATE берёт блокировку записи, так что второй запрос
+    видит уже занятую сумму. После ответа settle_spend() меняет оценку на факт.
+
+    Возвращает ключ дня, в который записан резерв (None — бюджета нет):
+    пересчёт обязан попасть в ту же строку, даже если ответ пришёл после полуночи.
+    """
+    day, month = time.strftime("%Y-%m-%d"), time.strftime("%Y-%m")
+    db().close()                                     # таблица существует
+    conn = sqlite3.connect(DB_PATH, isolation_level=None, timeout=15)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        d = conn.execute("SELECT COALESCE(SUM(usd),0) FROM ai_spend WHERE day=?",
+                         (day,)).fetchone()[0]
+        m = conn.execute("SELECT COALESCE(SUM(usd),0) FROM ai_spend WHERE day LIKE ?",
+                         (month + "%",)).fetchone()[0]
+        if d + est > daily or m + est > monthly:
+            conn.execute("ROLLBACK")
+            return None
+        conn.execute("""INSERT INTO ai_spend VALUES(?,?,0,?)
+            ON CONFLICT(day,kind) DO UPDATE SET usd=usd+excluded.usd""", (day, kind, est))
+        conn.execute("COMMIT")
+        return day
+    finally:
+        conn.close()
+
+
+def settle_spend(kind: str, day: str, est: float, actual: float, called: bool) -> None:
+    """Заменить резерв фактической суммой в той строке дня, где он занят."""
+    with db() as c:
+        c.execute("""UPDATE ai_spend SET usd=MAX(0, usd+?), calls=calls+?
+            WHERE day=? AND kind=?""", (actual - est, int(called), day, kind))
+
+
+def spent_usd(period: str = "day") -> float:
+    """Сколько потрачено сегодня («day») или в этом месяце («month»), все виды."""
+    prefix = time.strftime("%Y-%m-%d" if period == "day" else "%Y-%m")
+    with db() as c:
+        return c.execute("SELECT COALESCE(SUM(usd),0) FROM ai_spend WHERE day LIKE ?",
+                         (prefix + "%",)).fetchone()[0]
 
 
 def get_feed(limit: int = 30):
@@ -231,7 +302,9 @@ def _classify_batch(items):
             return None
         r.raise_for_status()
         mark_ai(True)
-        text = answer_text(r.json())
+        body = r.json()
+        record_spend("news", MODEL, body.get("usage"))
+        text = answer_text(body)
         m = re.search(r"\[.*\]", text, re.S)
         data = json.loads(m.group(0)) if m else None
         if isinstance(data, list) and len(data) == len(items):

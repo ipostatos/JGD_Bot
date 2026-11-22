@@ -190,6 +190,8 @@ def test_classify_reads_answer_after_thinking(monkeypatch):
 
 def test_ask_reads_answer_after_thinking(monkeypatch):
     sent = {}
+    with ai._db() as c:                 # тот же вопрос мог лечь в кэш в другом тесте
+        c.execute("DELETE FROM ai_cache")
 
     class Client(FakeClient):
         async def post(self, *a, **kw):
