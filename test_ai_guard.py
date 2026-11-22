@@ -154,29 +154,59 @@ def test_unknown_model_is_priced_high():
 def test_budget_reservation_is_atomic(api):
     """Два одновременных запроса не видят один и тот же остаток бюджета."""
     est = 0.003
-    assert monitor.reserve_spend("ask", est, est * 1.5, 10)
+    day = monitor.reserve_spend("ask", est, est * 1.5, 10)
+    assert day
     assert not monitor.reserve_spend("ask", est, est * 1.5, 10), \
         "второй резерв должен увидеть занятую сумму"
-    monitor.settle_spend("ask", est, ai.MODEL, {"input_tokens": 1000,
-                                                "output_tokens": 100})
+    monitor.settle_spend("ask", day, est, monitor.cost_usd(
+        ai.MODEL, {"input_tokens": 1000, "output_tokens": 100}), True)
     assert monitor.spent_usd("day") == pytest.approx(0.00015)
 
 
 def test_quota_take_is_atomic(api, monkeypatch):
     monkeypatch.setattr(ai, "DAILY_USER_LIMIT", 2)
-    assert ai._quota_take(5) and ai._quota_take(5)
+    day = ai._quota_take(5)
+    assert day and ai._quota_take(5)
     assert not ai._quota_take(5)
-    ai._quota_refund(5)
+    ai._quota_refund(5, day)
     assert ai._quota_take(5)
 
 
 def test_failed_call_releases_reservation_and_question(api, monkeypatch):
+    import httpx
+
     class Boom(Client):
         async def post(self, *a, **kw):
-            raise ConnectionError("сеть")
+            raise httpx.ConnectError("не соединились")
     monkeypatch.setattr(ai.httpx, "AsyncClient", lambda **kw: Boom([]))
     left = ai.quota_left(1)
     res = ask("до какого числа платить ZUS?")
     assert "error" in res
     assert ai.quota_left(1) == left, "до модели не дошли — вопрос не списан"
     assert monitor.spent_usd("day") == pytest.approx(0)
+
+
+def test_maybe_sent_call_keeps_charge(api, monkeypatch):
+    """Таймаут чтения: запрос мог дойти и стоить денег — в свою пользу не
+    угадываем, вопрос списан, расход по резерву."""
+    import httpx
+
+    class Slow(Client):
+        async def post(self, *a, **kw):
+            raise httpx.ReadTimeout("ждали ответа")
+    monkeypatch.setattr(ai.httpx, "AsyncClient", lambda **kw: Slow([]))
+    monkeypatch.setattr(ai, "estimate_cost", lambda chars: 0.003)
+    left = ai.quota_left(1)
+    assert "error" in ask("до какого числа платить ZUS?")
+    assert ai.quota_left(1) == left - 1
+    assert monitor.spent_usd("day") == pytest.approx(0.003)
+
+
+def test_settle_hits_reservation_day_after_midnight(api):
+    """Резерв в 23:59, ответ в 00:00: пересчёт идёт в строку дня резерва."""
+    with monitor.db() as c:
+        c.execute("INSERT INTO ai_spend VALUES('2026-01-01','ask',0,0.003)")
+    monitor.settle_spend("ask", "2026-01-01", 0.003, 0.001, True)
+    with monitor.db() as c:
+        usd = c.execute("SELECT usd FROM ai_spend WHERE day='2026-01-01'").fetchone()[0]
+    assert usd == pytest.approx(0.001)

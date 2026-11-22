@@ -433,9 +433,10 @@ def estimate_cost(prompt_chars: int) -> float:
                                     "output_tokens": MAX_TOKENS})
 
 
-def _quota_take(user_id: int) -> bool:
+def _quota_take(user_id: int) -> str | None:
     """Проверить и списать вопрос одной транзакцией: параллельные запросы
-    одного человека не проскочат лимит, увидев один и тот же остаток."""
+    одного человека не проскочат лимит, увидев один и тот же остаток.
+    Возвращает ключ дня списания (None — лимит выбран)."""
     day = time.strftime("%Y-%m-%d")
     _db().close()
     conn = sqlite3.connect(DB_PATH, isolation_level=None, timeout=15)
@@ -447,20 +448,21 @@ def _quota_take(user_id: int) -> bool:
                             (day, user_id)).fetchone()
         if total >= DAILY_GLOBAL_LIMIT or (mine[0] if mine else 0) >= daily_limit(user_id):
             conn.execute("ROLLBACK")
-            return False
+            return None
         conn.execute("""INSERT INTO ai_usage VALUES(?,?,1)
             ON CONFLICT(day,user_id) DO UPDATE SET n=n+1""", (day, user_id))
         conn.execute("COMMIT")
-        return True
+        return day
     finally:
         conn.close()
 
 
-def _quota_refund(user_id: int):
-    """Вызова не случилось (сеть, пустой баланс, бюджет) — вопрос возвращаем."""
+def _quota_refund(user_id: int, day: str):
+    """Вызова точно не было (не соединились, пустой баланс, бюджет) — вопрос
+    возвращаем в тот же день, где списали."""
     with _db() as c:
         c.execute("UPDATE ai_usage SET n=MAX(0,n-1) WHERE day=? AND user_id=?",
-                  (time.strftime("%Y-%m-%d"), user_id))
+                  (day, user_id))
 
 
 async def ask(user_id: int, question: str, profile: dict | None = None) -> dict:
@@ -520,12 +522,14 @@ async def ask(user_id: int, question: str, profile: dict | None = None) -> dict:
                f"<question>{_tagsafe(question)}</question>")
 
     # вопрос и деньги занимаем ДО вызова, атомарно; после — пересчёт по факту
-    if not _quota_take(user_id):
+    qday = _quota_take(user_id)
+    if not qday:
         return {"error": f"Лимит {daily_limit(user_id)} вопросов в день исчерпан — "
                          "спроси в чате @JDG_PBH или возвращайся завтра"}
     est = estimate_cost(len(SYSTEM) + len(content))
-    if not monitor.reserve_spend("ask", est, DAILY_BUDGET_USD, MONTHLY_BUDGET_USD):
-        _quota_refund(user_id)
+    sday = monitor.reserve_spend("ask", est, DAILY_BUDGET_USD, MONTHLY_BUDGET_USD)
+    if not sday:
+        _quota_refund(user_id, qday)
         log.error("ai: бюджет на ИИ выбран (день %.4f$ / месяц %.4f$)",
                   monitor.spent_usd("day"), monitor.spent_usd("month"))
         return {"error": "Ассистент на сегодня отдыхает. Ответ можно поискать в "
@@ -549,8 +553,8 @@ async def ask(user_id: int, question: str, profile: dict | None = None) -> dict:
                 # честнее сказать прямо, чем гонять человека по кнопке
                 log.error("ANTHROPIC: закончились кредиты, ассистент отключён")
                 monitor.mark_ai(False, "no_credits")
-                monitor.settle_spend("ask", est, MODEL, None)
-                _quota_refund(user_id)
+                monitor.settle_spend("ask", sday, est, 0.0, False)   # 400 не биллится
+                _quota_refund(user_id, qday)
                 return {"error": "Ассистент временно недоступен по техническим "
                                  "причинам. Ответ можно поискать в гайде или "
                                  "спросить людей в чате @JDG_PBH.",
@@ -562,12 +566,19 @@ async def ask(user_id: int, question: str, profile: dict | None = None) -> dict:
             answer = monitor.answer_text(body)
     except Exception as e:
         log.warning("ask failed: %s", e)
-        monitor.settle_spend("ask", est, MODEL, usage)
-        if usage is None:                 # до модели не дошли — вопрос не тратим
-            _quota_refund(user_id)
+        if usage is not None:             # ответ был — платим по факту
+            monitor.settle_spend("ask", sday, est, monitor.cost_usd(MODEL, usage), True)
+        elif isinstance(e, (httpx.ConnectError, httpx.ConnectTimeout)):
+            # соединение не установилось — запрос точно не ушёл: всё возвращаем
+            monitor.settle_spend("ask", sday, est, 0.0, False)
+            _quota_refund(user_id, qday)
+        else:
+            # запрос мог дойти и стоить денег (таймаут чтения, обрыв, битый
+            # ответ): не угадываем в свою пользу — резерв и вопрос остаются
+            monitor.settle_spend("ask", sday, est, est, True)
         return {"error": "Не получилось получить ответ, попробуй ещё раз"}
 
-    monitor.settle_spend("ask", est, MODEL, usage)
+    monitor.settle_spend("ask", sday, est, monitor.cost_usd(MODEL, usage), True)
     # вызов стоил денег — в лимит идёт и отказ модели (вопрос уже списан выше)
     if answer.strip().upper().startswith(OFF_TOPIC):
         log.info("ai: модель признала вопрос посторонним: %r", question[:60])
