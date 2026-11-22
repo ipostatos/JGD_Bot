@@ -181,10 +181,37 @@ CLASSIFY_PROMPT = """Ты — фильтр новостей для русско�
 Ответ строго JSON-массив в том же порядке, без пояснений."""
 
 
+CLASSIFY_BATCH = 8
+
+
 def classify(items):
-    """items: [(url, source_label, title)] → список dict или None при ошибке."""
+    """items: [(url, source_label, title)] → список вердиктов или None.
+
+    Размечаем пачками: после простоя приходит 20–30 новостей разом, и ответ
+    на все сразу — длинный JSON, в котором модель однажды ломает разделитель
+    (22.11.2026: 29 новостей, «Expecting ',' delimiter» — и вся очередь снова
+    отложена). Битая пачка теперь откладывает только свои новости: на их
+    местах None, run_once такие пропускает до следующего прохода.
+    """
     if not ANTHROPIC_KEY or not items:
         return None
+    out, ok = [], False
+    for i in range(0, len(items), CLASSIFY_BATCH):
+        part = items[i:i + CLASSIFY_BATCH]
+        verdicts = _classify_batch(part)
+        if verdicts is None:
+            if AI_STATUS["reason"] == "no_credits":
+                return None              # денег нет — дальше пачки не гоняем
+            out += [None] * len(part)
+        else:
+            ok = True
+            out += verdicts
+    if ok:
+        mark_ai(True)                    # ИИ жив, сломался только ответ на пачку
+    return out if ok else None
+
+
+def _classify_batch(items):
     listing = "\n".join(f"{i+1}. [{s}] {t}" for i, (_, s, t) in enumerate(items))
     try:
         r = httpx.post(
