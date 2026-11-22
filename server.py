@@ -595,10 +595,19 @@ async def api_ask(req: Request):
     if user is None:
         raise HTTPException(401, "bad initData")
     _limit_or_429("ai", user["id"])
+    # профиль берём из своей базы, а не из тела запроса: клиент может прислать
+    # что угодно. Присланный — только запасной вариант и только белый список
+    import profiles
+    stored = profiles.get(user["id"])
     res = await ai.ask(user["id"], body.get("question", ""),
-                       body.get("profile") or None)
+                       stored or body.get("profile") or None)
     if res.get("reason") == "no_credits":
         await _alert_admin(NO_CREDITS_ALERT)
+        raise HTTPException(503, res["error"])
+    if res.get("reason") == "budget":
+        await _alert_admin(f"🟡 Бюджет на ИИ выбран (день ${ai.DAILY_BUDGET_USD:.2f}, "
+                           f"месяц ${ai.MONTHLY_BUDGET_USD:.2f}): ассистент молчит до "
+                           f"завтра или нового месяца. Лимиты — AI_*_BUDGET_USD в .env.")
         raise HTTPException(503, res["error"])
     if "error" in res:
         raise HTTPException(429 if "Лимит" in res["error"] else 400, res["error"])
