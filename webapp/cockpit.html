@@ -78,17 +78,18 @@
 </head>
 <body>
 <div class="hero"><span class="logo emi" data-icon="gauge"></span><h1>Кокпит</h1></div>
-<p class="sub">Закрытие месяца, независимая сверка ZUS и налога, платежи — на твоих данных inFakt</p>
+<p class="sub" id="sub">Закрытие месяца, независимая сверка ZUS и налога, платежи — на твоих данных inFakt</p>
 
 <div id="gate" class="card hidden">
-  <div class="h2" style="margin-bottom:4px">Нужен ключ inFakt</div>
+  <div class="h2" style="margin-bottom:4px">Нужна подключённая бухгалтерия</div>
   <p class="muted" style="font-size:13px;margin:0 0 10px">
-    Кокпит работает на твоих данных inFakt. Подключи ключ в разделе «Мой план» → inFakt.</p>
+    Кокпит работает на твоих данных из inFakt или wFirma. Подключи ключ
+    в разделе «Мой план» → карточка бухгалтерии.</p>
   <a class="btn" href="plan.html"><span class="emi" data-icon="chevron-right"></span> Открыть «Мой план»</a>
 </div>
 
 <div id="panel" class="hidden">
-  <div class="seg">
+  <div class="seg" id="tabs">
     <button id="tab-over" class="on" data-tab="over">Обзор</button>
     <button id="tab-close" data-tab="close">Закрыть месяц</button>
     <button id="tab-pay" data-tab="pay">Платежи</button>
@@ -100,7 +101,7 @@
   <div id="out"></div>
 </div>
 
-<p class="foot" style="margin-top:16px">
+<p class="foot" style="margin-top:16px" id="foot">
   Hermes считает и сверяет двумя независимыми путями — подпись деклараций и переводы остаются за тобой.<br>
   Справочная информация, не юридическая и не налоговая консультация.</p>
 

@@ -16,7 +16,7 @@ from urllib.parse import parse_qsl
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
@@ -442,12 +442,16 @@ async def _nip_reply(raw_nip: str) -> str:
 
 
 async def _ksef_sales(user_id: int) -> dict | None:
-    """Свод по фактурам inFakt для порога 10 000 zł (если ключ подключён)."""
+    """Свод по фактурам inFakt или wFirma для порога 10 000 zł (что подключено)."""
     import ksef
     try:
         import infakt
         key = infakt.load_key(user_id)
         if not key:
+            import wfirma
+            if wfirma.enabled() and wfirma.load_keys(user_id):
+                raw = await wfirma._raw(user_id)
+                return ksef.sales_from_invoices(wfirma.ksef_invoices(raw)) if raw else None
             return None
         cached = infakt.cache_get(user_id, "ksef_sales")
         if cached:
@@ -536,7 +540,9 @@ async def health():
     import monitor
     return {"ok": True, "bot": app.state.bot is not None,
             "pkd_dialog": _dialog_enabled(),
-            "ai": monitor.AI_STATUS["ok"], "ai_reason": monitor.AI_STATUS["reason"]}
+            "ai": monitor.AI_STATUS["ok"], "ai_reason": monitor.AI_STATUS["reason"],
+            # wFirma видна в интерфейсе только с ключом приложения (WFIRMA_APP_KEY)
+            "wfirma": _wfirma_enabled()}
 
 
 @app.get("/api/news")
@@ -854,6 +860,82 @@ async def infakt_summary(req: Request):
     except Exception as e:                       # как overview/close/pay: чистый 502
         log.warning("infakt.summary failed for %s: %s", user["id"], e)
         raise HTTPException(502, "inFakt не ответил — попробуй ещё раз")
+
+
+# ── wFirma ──────────────────────────────────────────────────────────────────
+def _wfirma_enabled() -> bool:
+    import wfirma
+    return wfirma.enabled()
+
+
+def _wfirma_user(body: dict) -> dict:
+    """Общий вход ручек wFirma: функция включена и запрос из Telegram."""
+    if not _wfirma_enabled():
+        raise HTTPException(404, "Not Found")
+    user = verify_init_data(body.get("initData", ""))
+    if user is None:
+        raise HTTPException(401, "bad initData")
+    return user
+
+
+@app.post("/api/wfirma/connect")
+async def wfirma_connect(req: Request):
+    import wfirma
+    body = await _json_or_400(req)
+    user = _wfirma_user(body)
+    _limit_or_429("wfirma", user["id"])
+    access = str(body.get("access_key") or "").strip()
+    secret = str(body.get("secret_key") or "").strip()
+    company = str(body.get("company_id") or "").strip() or None
+    if not (8 <= len(access) <= 200 and 8 <= len(secret) <= 200):
+        raise HTTPException(400, "Похоже, это не ключи wFirma")
+    if company and not company.isdigit():
+        raise HTTPException(400, "Неверный номер фирмы")
+    try:
+        return await wfirma.connect(user["id"], access, secret, company)
+    except wfirma.WfirmaError as e:
+        if e.code == "COMPANY ID REQUIRED" and e.companies:
+            # у ключа несколько фирм — интерфейс покажет выбор
+            return JSONResponse(status_code=409, content={
+                "detail": "Выбери фирму", "companies": e.companies})
+        raise HTTPException(400, e.human)
+    except Exception as e:                       # сеть, таймаут, битый ответ
+        log.warning("wfirma.connect failed: %s", e)
+        raise HTTPException(502, "wFirma не ответила — попробуй ещё раз")
+
+
+@app.delete("/api/wfirma")
+async def wfirma_disconnect(req: Request):
+    import wfirma
+    user = _wfirma_user(await _json_or_400(req))
+    wfirma.delete_keys(user["id"])
+    return {"ok": True}
+
+
+async def _wfirma_call(fn, user_id: int) -> dict:
+    import wfirma
+    try:
+        return await fn(user_id)
+    except wfirma.WfirmaError as e:
+        log.warning("wfirma %s for %s: %s", fn.__name__, user_id, e.code)
+        raise HTTPException(502, e.human)
+    except Exception as e:
+        log.warning("wfirma %s failed for %s: %s", fn.__name__, user_id, e)
+        raise HTTPException(502, "wFirma не ответила — попробуй ещё раз")
+
+
+@app.post("/api/wfirma/summary")
+async def wfirma_summary(req: Request):
+    import wfirma
+    user = _wfirma_user(await _json_or_400(req))
+    return await _wfirma_call(wfirma.summary, user["id"])
+
+
+@app.post("/api/wfirma/overview")
+async def wfirma_overview(req: Request):
+    import wfirma
+    user = _wfirma_user(await _json_or_400(req))
+    return await _wfirma_call(wfirma.overview, user["id"])
 
 
 def _month_arg(body: dict) -> str:

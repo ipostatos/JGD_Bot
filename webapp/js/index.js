@@ -98,12 +98,15 @@ function buildVat(p, now) {
       '<div class="meter ' + (live ? cls : '') + '"><i style="width:' + (live ? pct : 0) + '%"></i></div>' +
       '<div class="cp-vat-note">' + (live
         ? pct.toFixed(0) + '% лимита · при превышении — обязательная регистрация VAT'
-        : 'Подключи inFakt в «Плане» — покажу твой оборот к лимиту') + '</div>';
+        : 'Подключи бухгалтерию в «Плане» — покажу твой оборот к лимиту') + '</div>';
     if (window.Icons) Icons.hydrate();
   };
   draw(0, false);
-  if (tg && tg.initData && localStorage.getItem('jdg_infakt_on') === '1') {
-    fetch('/api/infakt/summary', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  // оборот — из подключённой бухгалтерии: inFakt, иначе wFirma
+  const accSrc = localStorage.getItem('jdg_infakt_on') === '1' ? '/api/infakt/summary'
+    : localStorage.getItem('jdg_wfirma_on') === '1' ? '/api/wfirma/summary' : null;
+  if (tg && tg.initData && accSrc) {
+    fetch(accSrc, { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ initData: tg.initData }) })
       .then(r => r.ok ? r.json() : null)
       .then(s => { if (s && s.connected && typeof s.net_ytd === 'number') draw(s.net_ytd, true); })
