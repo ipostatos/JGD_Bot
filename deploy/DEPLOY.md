@@ -5,10 +5,48 @@ Caddy-сайт `jdg-46-224-220-94.sslip.io` (авто-TLS).
 
 ## Обновление кода (строго git archive, см. grabli Обшака)
 
+Порядок: тесты на `main` → копия для отката → код → `chown` → зависимости →
+рестарт → через 20+ секунд health и смоки → маркер версии.
+
 ```bash
+# 0. копия для отката (код + база, без venv и клона гайда)
+ssh root@46.224.220.94 "cd /opt && tar czf jdg-rollback-\$(cat jdg/DEPLOYED_COMMIT).tgz --exclude=venv --exclude=sources --exclude=__pycache__ jdg"
+# 1. код
 git -C C:/Users/user/Desktop/JDG archive HEAD | ssh root@46.224.220.94 "tar -x -C /opt/jdg"
-ssh root@46.224.220.94 "chown -R jdg:jdg /opt/jdg && cd /opt/jdg && venv/bin/pip install -q -r requirements.txt && systemctl restart jdg"
+# 2. права, зависимости, рестарт
+ssh root@46.224.220.94 "chown -R jdg:jdg /opt/jdg && cd /opt/jdg && runuser -u jdg -- venv/bin/pip install -q -r requirements.txt && systemctl restart jdg"
+# 3. маркер версии — после успешных смоков
+ssh root@46.224.220.94 "echo $(git -C C:/Users/user/Desktop/JDG rev-parse --short HEAD) > /opt/jdg/DEPLOYED_COMMIT && chown jdg:jdg /opt/jdg/DEPLOYED_COMMIT"
 ```
+
+Если менялись `rates_years.json` или сборка контента — после деплоя пересобрать
+контент (раздел ниже): `rates_years.json` копируется в `webapp/data` сборкой.
+
+### Смоки после деплоя
+
+Рестарт занимает 15–20 с: раньше health отдаст 502, это не поломка.
+
+```bash
+curl -s https://jdg-46-224-220-94.sslip.io/api/health
+# {"ok":true,"bot":true,"pkd_dialog":true,"ai":true|false|null,"ai_reason":...}
+```
+
+- `ai: null` — после рестарта к модели ещё не обращались; монитор новостей
+  стартует через 90 с, дальше раз в 6 часов. `ai_reason: "no_credits"` — пуст
+  баланс Anthropic, `"error"` — другой сбой (смотреть журнал).
+- открыть `/calc.html`, `/pkd.html` (точный подбор: «проектирую мебель» → вопрос),
+  `/guide.html`; в журнале нет трейсбеков:
+  `journalctl -u jdg --since -5min | grep -iE "error|traceback"`.
+
+### Откат
+
+```bash
+ssh root@46.224.220.94 "systemctl stop jdg && cd /opt && tar xzf jdg-rollback-<commit>.tgz && chown -R jdg:jdg jdg && systemctl start jdg"
+```
+
+Архив содержит и `news.db` на момент деплоя: всё, что пользователи записали
+после, откат сотрёт. Если база не менялась по схеме, при откате её можно не трогать —
+распаковать архив во временный каталог и вернуть только код.
 
 ⚠️ Всегда `git -C <корень>` — из подкаталога archive упакует только его.
 `.env` в архив не входит (не в git) — лежит на VPS отдельно, не затирается.
@@ -242,8 +280,31 @@ gunzip -c /opt/backups/jdg/news-YYYYMMDD-HHMM.db.gz > /opt/jdg/news.db
 systemctl start jdg
 ```
 
+## ИИ: модель, бюджет, сигналы
+
+Модель одна на весь бот — `monitor.MODEL` (Claude Haiku 5.5). Ключ — `ANTHROPIC_API_KEY`.
+
+Бюджет в долларах (по фактическим токенам, таблица `ai_spend` в `news.db`):
+
+```
+AI_DAILY_BUDGET_USD=0.50     # по умолчанию
+AI_MONTHLY_BUDGET_USD=5.00
+```
+
+Выбран — ассистент молчит для всех до следующего дня/месяца, владельцу
+(`ADMIN_CHAT_ID`) приходит сигнал. Разметка новостей в бюджет считается, но
+не останавливается. Посмотреть расход:
+
+```bash
+ssh root@46.224.220.94 "sqlite3 /opt/jdg/news.db 'SELECT * FROM ai_spend ORDER BY day DESC LIMIT 14'"
+```
+
+Сигналы владельцу (не чаще раза в 6 часов на каждый): пустой баланс Anthropic,
+сбой разметки новостей, выбранный бюджет. Пока ИИ недоступен, новости ждут в
+`news_pending`; после восстановления старше 3 суток в ленту попадают без пушей.
+
 ## Проверка
 
 ```bash
-curl -s https://jdg-46-224-220-94.sslip.io/api/health   # {"ok":true,"bot":true}
+curl -s https://jdg-46-224-220-94.sslip.io/api/health   # см. «Смоки после деплоя»
 ```

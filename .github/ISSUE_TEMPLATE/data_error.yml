@@ -1,0 +1,24 @@
+name: Ошибка в данных
+description: Устаревшая ставка, неверный срок, битая ссылка, неточный текст
+labels: [данные]
+body:
+  - type: input
+    id: where
+    attributes:
+      label: Где
+      description: Экран или раздел приложения (например, «Расчёты → ZUS 2027»)
+    validations:
+      required: true
+  - type: textarea
+    id: wrong
+    attributes:
+      label: Что сейчас написано и как должно быть
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Источник
+      description: Ссылка на zus.pl, podatki.gov.pl, Dziennik Ustaw или другой официальный источник
+    validations:
+      required: true

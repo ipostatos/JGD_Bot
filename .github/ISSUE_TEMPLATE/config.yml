@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Вопрос по JDG
+    url: https://t.me/JDG_PBH
+    about: Вопросы про налоги, ZUS и регистрацию — в чат сообщества
+  - name: Уязвимость
+    url: https://github.com/ipostatos/JGD_Bot/security/advisories/new
+    about: Сообщайте приватно, не в публичном issue
