@@ -755,3 +755,87 @@ def test_wfirma_cockpit_overview(browser, base_url):
         assert not errors, errors
     finally:
         ctx.close()
+
+
+# ── склейка: зашифрованные PDF и режим «паспорт» ────────────────────────────
+MERGE_FX = Path(__file__).parent / "tests" / "fixtures" / "merge"
+
+INSPECT_PDF = """async (b64) => {
+  const lib = await import('/vendor/pdfjs/pdf.mjs');
+  lib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.mjs';
+  const data = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const task = lib.getDocument({ data });
+  const doc = await task.promise;
+  const pages = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const vp = page.getViewport({ scale: 0.5 });
+    const c = document.createElement('canvas');
+    c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    const px = ctx.getImageData(0, 0, c.width, c.height).data;
+    let dark = 0, top = 0, bottom = 0;
+    for (let k = 0; k < px.length; k += 4) {
+      if (px[k] < 128) { dark++; ((k / 4) / c.width < c.height / 2) ? top++ : bottom++; }
+    }
+    pages.push({ dark, top, bottom });
+  }
+  await task.destroy();
+  return pages;
+}"""
+
+
+def _merge(browser, base_url, names, passport=False):
+    import base64
+    ctx = browser.new_context(viewport=PHONE, accept_downloads=True)
+    page = ctx.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.route("**/telegram.org/**", lambda r: r.abort())
+    try:
+        page.goto(base_url + "/merge.html", wait_until="networkidle")
+        page.set_input_files("#pick", [str(MERGE_FX / n) for n in names])
+        if passport:
+            page.check("#passport")
+        try:
+            with page.expect_download(timeout=20000) as dl:
+                tap(page, "#make")
+            data = Path(dl.value.path()).read_bytes()
+        except Exception:
+            return None, page.inner_text("#msg"), errors
+        pages = page.evaluate(INSPECT_PDF, base64.b64encode(data).decode())
+        return pages, page.inner_text("#msg"), errors
+    finally:
+        ctx.close()
+
+
+def test_merge_encrypted_bank_pdfs_are_not_blank(browser, base_url):
+    """Квитанции банков зашифрованы паролем владельца. Раньше их страницы
+    выходили в склейке пустыми, а экран писал «Готово»."""
+    pages, msg, errors = _merge(browser, base_url,
+                                ["plain.pdf", "receipt_aes256.pdf", "receipt_rc4.pdf"])
+    assert pages is not None, msg
+    assert len(pages) == 3
+    ink = pages[0]["dark"]
+    for p in pages[1:]:
+        assert p["dark"] > ink * 0.5, f"зашифрованная страница пустая: {pages}"
+    assert "Зашифрованных PDF: 2" in msg
+    assert not errors, errors
+
+
+def test_merge_password_protected_pdf_names_the_file(browser, base_url):
+    pages, msg, _ = _merge(browser, base_url, ["plain.pdf", "receipt_userpw.pdf"])
+    assert pages is None
+    assert "receipt_userpw.pdf" in msg and "паролем" in msg
+
+
+def test_merge_passport_two_spreads_per_a4(browser, base_url):
+    pages, msg, errors = _merge(browser, base_url,
+                                ["spread1.jpg", "spread2.jpg", "spread3.jpg"], passport=True)
+    assert pages is not None, msg
+    assert len(pages) == 2, "три разворота — два листа"
+    assert pages[0]["top"] > 0 and pages[0]["bottom"] > 0, "на первом листе оба разворота"
+    assert pages[1]["top"] > 0 and pages[1]["bottom"] == 0, "третий — сверху второго листа"
+    assert not errors, errors

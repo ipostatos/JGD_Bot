@@ -31,12 +31,15 @@
     <span class="tt">Фото: лист по ориентации снимка (иначе всегда портрет)</span></label>
   <label class="chk" style="border:none"><input id="oddstart" type="checkbox">
     <span class="tt">Каждый файл с нечётной страницы (для двусторонней печати)</span></label>
+  <label class="chk" style="border:none"><input id="passport" type="checkbox">
+    <span class="tt">Паспорт: два разворота на один лист A4</span></label>
 </div>
 
 <button id="make" class="btn" disabled><span class="emi" data-icon="file-check"></span> Собрать PDF</button>
 <div id="msg" class="state" style="padding:12px"></div>
 
-<p class="foot">Утилита работает целиком в приложении (pdf-lib, MIT). Ничего не загружается на сервер, кроме готового файла — и только чтобы открыть его для печати.</p>
+<p class="foot">Утилита работает целиком в приложении (pdf-lib, MIT; зашифрованные PDF
+  банковских квитанций открывает pdf.js, Apache-2.0). Ничего не загружается на сервер, кроме готового файла — и только чтобы открыть его для печати.</p>
 
 <script src="icons.js"></script>
 <script src="app.js"></script>
