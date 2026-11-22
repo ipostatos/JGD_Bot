@@ -188,12 +188,65 @@ def test_ksef_invoices_feed_the_ksef_section():
 
 # ── ключи ──────────────────────────────────────────────────────────────────
 def test_keys_encrypted_at_rest(tmp_path):
-    wfirma.save_keys(7, "plain-access-xyz", "plain-secret-xyz", "555")
-    assert wfirma.load_keys(7) == ("plain-access-xyz", "plain-secret-xyz", "555")
+    wfirma.save_keys(7, "plain-access-xyz", "plain-secret-xyz", "555",
+                     "plain-appkey-xyz", "JK Studio")
+    k = wfirma.load_keys(7)
+    assert (k.access, k.secret, k.company_id, k.app_key, k.company_name) == (
+        "plain-access-xyz", "plain-secret-xyz", "555", "plain-appkey-xyz", "JK Studio")
     raw = (tmp_path / "w.db").read_bytes()
-    assert b"plain-access-xyz" not in raw and b"plain-secret-xyz" not in raw
+    for secret in (b"plain-access-xyz", b"plain-secret-xyz", b"plain-appkey-xyz", b"JK Studio"):
+        assert secret not in raw
     wfirma.delete_keys(7)
     assert wfirma.load_keys(7) is None
+
+
+def test_old_rows_without_app_key_still_load():
+    # строки, сохранённые до окна ключей: {"a","s"} без appKey и имени фирмы
+    import json as _json
+    blob = infakt.fernet().encrypt(_json.dumps({"a": "old-access-1", "s": "old-secret-1"}).encode())
+    with wfirma._db() as c:
+        c.execute("INSERT INTO wfirma_keys VALUES(?,?,?,?)", (9, blob, None, 1))
+    k = wfirma.load_keys(9)
+    assert (k.access, k.secret, k.app_key, k.company_name) == ("old-access-1", "old-secret-1", None, "")
+
+
+def test_status_never_returns_keys():
+    wfirma.save_keys(7, "plain-access-xyz", "plain-secret-xyz", None, "plain-appkey-xyz", "JK")
+    s = wfirma.status(7)
+    assert s["connected"] and s["own_app_key"] and s["company_name"] == "JK"
+    assert s["access_tail"] == "-xyz"
+    dumped = str(s)
+    assert "plain-access" not in dumped and "plain-secret" not in dumped and "appkey" not in dumped
+    assert wfirma.status(8) == {"server_app_key": True, "connected": False}
+
+
+def test_users_app_key_wins_over_server_one():
+    api = Api({"companies/get": lambda r: numbered("companies", "company", [{"id": "1"}])})
+    http = httpx.AsyncClient(transport=httpx.MockTransport(api.handler))
+    run(wfirma.Client("acc-key-123", "sec-key-456", http=http, app_key="users-own-app").company())
+    assert api.calls[0].headers["appKey"] == "users-own-app"
+
+
+def test_connect_without_any_app_key_is_refused_before_network(monkeypatch):
+    monkeypatch.setattr(wfirma, "APP_KEY", "")
+    monkeypatch.setattr(wfirma, "Client", lambda *a, **k: pytest.fail("в сеть идти нельзя"))
+    with pytest.raises(wfirma.WfirmaError) as e:
+        run(wfirma.connect(1, "acc-key-123", "sec-key-456", None))
+    assert e.value.code == "NO APP KEY" and "appKey" in e.value.human
+
+
+def test_connect_saves_users_app_key(monkeypatch):
+    monkeypatch.setattr(wfirma, "APP_KEY", "")
+    api = Api({"companies/get": lambda r: numbered("companies", "company",
+                                                   [{"id": "1", "name": "JK Studio"}])})
+    real = wfirma.Client
+    monkeypatch.setattr(wfirma, "Client", lambda a, s, c=None, **kw: real(
+        a, s, c, http=httpx.AsyncClient(transport=httpx.MockTransport(api.handler)), **kw))
+    assert run(wfirma.connect(1, "acc-key-123", "sec-key-456", None, "users-own-app")) == {
+        "ok": True, "company_name": "JK Studio"}
+    assert api.calls[0].headers["appKey"] == "users-own-app"
+    k = wfirma.load_keys(1)
+    assert k.app_key == "users-own-app" and k.company_name == "JK Studio"
 
 
 def test_connect_with_many_companies_returns_choice(monkeypatch):
@@ -204,8 +257,8 @@ def test_connect_with_many_companies_returns_choice(monkeypatch):
             {"id": "2", "company": {"id": "22", "name": "Firma B"}}]),
     })
     real = wfirma.Client
-    monkeypatch.setattr(wfirma, "Client", lambda a, s, c=None: real(
-        a, s, c, http=httpx.AsyncClient(transport=httpx.MockTransport(api.handler))))
+    monkeypatch.setattr(wfirma, "Client", lambda a, s, c=None, **kw: real(
+        a, s, c, http=httpx.AsyncClient(transport=httpx.MockTransport(api.handler)), **kw))
     with pytest.raises(wfirma.WfirmaError) as e:
         run(wfirma.connect(1, "acc-key-123", "sec-key-456", None))
     assert e.value.companies == [{"id": "11", "name": "Firma A"},
@@ -223,17 +276,25 @@ def _server():
     return TestClient(server.app), make_init_data(server.BOT_TOKEN, user_id=4242)
 
 
-def test_endpoints_hidden_without_app_key(monkeypatch):
+def test_without_server_app_key_user_brings_own(monkeypatch):
     monkeypatch.setattr(wfirma, "APP_KEY", "")
     c, good = _server()
     with c:
-        assert c.get("/api/health").json()["wfirma"] is False
-        assert c.post("/api/wfirma/summary", json={"initData": good}).status_code == 404
-        assert c.post("/api/wfirma/connect", json={"initData": good}).status_code == 404
+        h = c.get("/api/health").json()
+        assert h["wfirma"] is True and h["wfirma_app_key"] is False
+        r = c.post("/api/wfirma/connect", json={"initData": good, "access_key": "a" * 20,
+                                                "secret_key": "b" * 20})
+        assert r.status_code == 400 and "appKey" in r.json()["detail"]
+        r = c.post("/api/wfirma/connect", json={"initData": good, "access_key": "a" * 20,
+                                                "secret_key": "b" * 20, "app_key": "short"})
+        assert r.status_code == 400
+        assert c.post("/api/wfirma/status", json={"initData": good}).json() == {
+            "server_app_key": False, "connected": False}
+        assert c.post("/api/wfirma/status", json={"initData": "bad"}).status_code == 401
 
 
 def test_connect_endpoint_flow(monkeypatch):
-    async def fake_connect(uid, a, s, comp):
+    async def fake_connect(uid, a, s, comp, app=None):
         if not comp:
             raise wfirma.WfirmaError("COMPANY ID REQUIRED", [{"id": "11", "name": "A"}])
         return {"ok": True, "company_name": "A"}

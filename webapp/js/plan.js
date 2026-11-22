@@ -124,7 +124,7 @@ renderDock('plan');
   }
 
   fetch('/api/health').then(r => r.json()).then(h => {
-    if (!h.wfirma) return;                       // интеграция выключена — нет и кнопки
+    if (!h.wfirma) return;                       // старый сервер без wFirma — нет и кнопки
     $('acc-seg').classList.remove('hidden');
     if (localStorage.getItem(WFKEY) === '1') {
       setAcc('wfirma');
@@ -132,41 +132,7 @@ renderDock('plan');
     }
   }).catch(() => {});
 
-  $('wf-connect').onclick = async () => {
-    if (!inTg) { $('wf-msg').textContent = 'Открой через Telegram.'; return; }
-    const access = $('wf-access').value.trim(), secret = $('wf-secret').value.trim();
-    if (!access || !secret) { $('wf-msg').textContent = 'Нужны оба ключа: access и secret.'; return; }
-    const companyBox = $('wf-company-box');
-    const company = companyBox.classList.contains('hidden') ? '' : $('wf-company').value;
-    $('wf-msg').textContent = 'Проверяю ключи…'; haptic('medium');
-    try {
-      await wfApi('/api/wfirma/connect', 'POST',
-        { access_key: access, secret_key: secret, company_id: company });
-      localStorage.setItem(WFKEY, '1');
-      $('wf-access').value = ''; $('wf-secret').value = '';
-      companyBox.classList.add('hidden');
-      $('wf-msg').textContent = 'Загружаю данные…';
-      load();
-      $('wf-msg').textContent = '';
-    } catch (e) {
-      if (e.status === 409 && e.data && e.data.companies) {
-        // у ключа несколько фирм — выбираем, какую показывать
-        $('wf-company').innerHTML = e.data.companies.map(c =>
-          `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
-        companyBox.classList.remove('hidden');
-        $('wf-msg').textContent = 'У ключа несколько фирм — выбери свою и нажми «Подключить».';
-      } else {
-        $('wf-msg').textContent = e.message;
-      }
-    }
-  };
-
-  $('wf-disconnect').onclick = async () => {
-    try { await wfApi('/api/wfirma', 'DELETE'); } catch (e) {}
-    localStorage.removeItem(WFKEY);
-    $('wf-on').classList.add('hidden');
-    $('wf-off').classList.remove('hidden');
-  };
+  // ввод, замена и удаление ключей — в отдельном окне wfirma.html
 })();
 
 const CHECKLISTS = {

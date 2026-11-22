@@ -542,7 +542,7 @@ async def health():
             "pkd_dialog": _dialog_enabled(),
             "ai": monitor.AI_STATUS["ok"], "ai_reason": monitor.AI_STATUS["reason"],
             # wFirma видна в интерфейсе только с ключом приложения (WFIRMA_APP_KEY)
-            "wfirma": _wfirma_enabled()}
+            "wfirma": _wfirma_enabled(), "wfirma_app_key": _wfirma_server_app_key()}
 
 
 @app.get("/api/news")
@@ -868,6 +868,11 @@ def _wfirma_enabled() -> bool:
     return wfirma.enabled()
 
 
+def _wfirma_server_app_key() -> bool:
+    import wfirma
+    return wfirma.server_app_key()
+
+
 def _wfirma_user(body: dict) -> dict:
     """Общий вход ручек wFirma: функция включена и запрос из Telegram."""
     if not _wfirma_enabled():
@@ -887,12 +892,15 @@ async def wfirma_connect(req: Request):
     access = str(body.get("access_key") or "").strip()
     secret = str(body.get("secret_key") or "").strip()
     company = str(body.get("company_id") or "").strip() or None
+    app_key = str(body.get("app_key") or "").strip() or None
     if not (8 <= len(access) <= 200 and 8 <= len(secret) <= 200):
         raise HTTPException(400, "Похоже, это не ключи wFirma")
+    if app_key and not 8 <= len(app_key) <= 200:
+        raise HTTPException(400, "Похоже, это не ключ приложения wFirma")
     if company and not company.isdigit():
         raise HTTPException(400, "Неверный номер фирмы")
     try:
-        return await wfirma.connect(user["id"], access, secret, company)
+        return await wfirma.connect(user["id"], access, secret, company, app_key)
     except wfirma.WfirmaError as e:
         if e.code == "COMPANY ID REQUIRED" and e.companies:
             # у ключа несколько фирм — интерфейс покажет выбор
@@ -902,6 +910,14 @@ async def wfirma_connect(req: Request):
     except Exception as e:                       # сеть, таймаут, битый ответ
         log.warning("wfirma.connect failed: %s", e)
         raise HTTPException(502, "wFirma не ответила — попробуй ещё раз")
+
+
+@app.post("/api/wfirma/status")
+async def wfirma_status(req: Request):
+    """Окно ключей: что сохранено. В wFirma не ходит, ключи не отдаёт."""
+    import wfirma
+    user = _wfirma_user(await _json_or_400(req))
+    return wfirma.status(user["id"])
 
 
 @app.delete("/api/wfirma")

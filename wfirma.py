@@ -1,10 +1,11 @@
 """Интеграция wFirma API2: обзор бухгалтерии на данных пользователя.
 
 Авторизация — ключами API: пользователь создаёт accessKey и secretKey в своём
-кабинете (Ustawienia → Bezpieczeństwo → Aplikacje → Klucze API), а appKey
-выдаёт wFirma интегратору, то есть нам, — он лежит в .env (WFIRMA_APP_KEY).
-Без appKey интеграция выключена целиком: ручки отвечают 404, а в интерфейсе
-нет ни кнопки, ни упоминания.
+кабинете (Ustawienia → Bezpieczeństwo → Aplikacje → Klucze API). Третий ключ,
+appKey, wFirma выдаёт под приложение. Если он есть у сервера (.env WFIRMA_APP_KEY),
+пользователю хватает двух своих ключей; если нет — пользователь вводит и свой
+appKey в окне ключей (webapp/wfirma.html), и он хранится зашифрованным вместе
+с остальными. Свой appKey пользователя важнее серверного.
 
 Что API отдаёт и что мы показываем (doc.wfirma.pl):
 - companies/get           → плательщик ли VAT, KPiR или ryczałt, название;
@@ -30,6 +31,7 @@ import sqlite3
 import time
 from datetime import date
 from pathlib import Path
+from typing import NamedTuple
 from xml.sax.saxutils import escape
 
 import httpx
@@ -59,11 +61,26 @@ ERRORS = {
     "TOTAL EXECUTION TIME LIMIT EXCEEDED": "wFirma просит сделать паузу — попробуй через пару минут",
     "OUT OF SERVICE": "wFirma на техническом обслуживании — попробуй позже",
     "SNAPSHOT LOCK": "wFirma восстанавливает данные фирмы из копии — попробуй позже",
+    "NO APP KEY": "Нужен ещё ключ приложения (appKey) — введи его в окне ключей",
 }
 
 
 def enabled() -> bool:
+    # интеграция доступна всегда: appKey или у сервера, или у пользователя
+    return True
+
+
+def server_app_key() -> bool:
     return bool(APP_KEY)
+
+
+class Keys(NamedTuple):
+    access: str
+    secret: str
+    company_id: str | None
+    app_key: str | None = None
+    company_name: str = ""
+    created: int = 0
 
 
 class WfirmaError(RuntimeError):
@@ -88,17 +105,21 @@ def _db():
     return conn
 
 
-def save_keys(user_id: int, access: str, secret: str, company_id: str | None):
-    blob = infakt.fernet().encrypt(json.dumps({"a": access, "s": secret}).encode())
+def save_keys(user_id: int, access: str, secret: str, company_id: str | None,
+              app_key: str | None = None, company_name: str = ""):
+    payload = {"a": access, "s": secret, "n": company_name}
+    if app_key:
+        payload["k"] = app_key
+    blob = infakt.fernet().encrypt(json.dumps(payload).encode())
     with _db() as c:
         c.execute("INSERT OR REPLACE INTO wfirma_keys VALUES(?,?,?,?)",
                   (user_id, blob, company_id or None, int(time.time())))
         c.execute("DELETE FROM wfirma_cache WHERE user_id=?", (user_id,))
 
 
-def load_keys(user_id: int) -> tuple[str, str, str | None] | None:
+def load_keys(user_id: int) -> Keys | None:
     with _db() as c:
-        row = c.execute("SELECT enc, company_id FROM wfirma_keys WHERE user_id=?",
+        row = c.execute("SELECT enc, company_id, created FROM wfirma_keys WHERE user_id=?",
                         (user_id,)).fetchone()
     if not row:
         return None
@@ -107,7 +128,18 @@ def load_keys(user_id: int) -> tuple[str, str, str | None] | None:
     except (InvalidToken, ValueError):
         log.warning("wfirma: ключи user=%s не расшифровались (ротация FERNET_KEY?)", user_id)
         return None
-    return k["a"], k["s"], row[1]
+    return Keys(k["a"], k["s"], row[1], k.get("k") or None, k.get("n") or "", row[2] or 0)
+
+
+def status(user_id: int) -> dict:
+    """Что сохранено — без запроса в wFirma и без самих ключей."""
+    k = load_keys(user_id)
+    out = {"server_app_key": server_app_key(), "connected": bool(k)}
+    if k:
+        out |= {"company_name": k.company_name, "since": k.created,
+                "own_app_key": bool(k.app_key),
+                "access_tail": k.access[-4:]}
+    return out
 
 
 def delete_keys(user_id: int):
@@ -164,11 +196,12 @@ def _total(resp: dict, module: str) -> int:
 
 class Client:
     def __init__(self, access: str, secret: str, company_id: str | None = None,
-                 http: httpx.AsyncClient | None = None):
+                 http: httpx.AsyncClient | None = None, app_key: str | None = None):
         self.company_id = company_id
         self._own = http is None
         self._http = http or httpx.AsyncClient(timeout=httpx.Timeout(40, connect=15))
-        self._headers = {"accessKey": access, "secretKey": secret, "appKey": APP_KEY,
+        self._headers = {"accessKey": access, "secretKey": secret,
+                         "appKey": app_key or APP_KEY,
                          "Content-Type": "application/xml"}
 
     async def close(self):
@@ -419,7 +452,7 @@ async def _raw(user_id: int, today: date | None = None) -> dict | None:
     cached = cache_get(user_id, "raw")
     if cached:
         return cached
-    client = Client(*keys)
+    client = Client(keys.access, keys.secret, keys.company_id, app_key=keys.app_key)
     try:
         raw = await fetch_all(client, today or date.today())
     finally:
@@ -450,9 +483,12 @@ async def summary(user_id: int) -> dict:
     return out
 
 
-async def connect(user_id: int, access: str, secret: str, company_id: str | None) -> dict:
+async def connect(user_id: int, access: str, secret: str, company_id: str | None,
+                  app_key: str | None = None) -> dict:
     """Проверка ключей лёгким запросом; несколько фирм — вернуть список для выбора."""
-    client = Client(access, secret, company_id)
+    if not (app_key or APP_KEY):
+        raise WfirmaError("NO APP KEY")
+    client = Client(access, secret, company_id, app_key=app_key)
     try:
         try:
             comp = await client.company()
@@ -462,5 +498,6 @@ async def connect(user_id: int, access: str, secret: str, company_id: str | None
             raise
     finally:
         await client.close()
-    save_keys(user_id, access, secret, company_id)
-    return {"ok": True, "company_name": comp.get("altname") or comp.get("name") or ""}
+    name = comp.get("altname") or comp.get("name") or ""
+    save_keys(user_id, access, secret, company_id, app_key, name)
+    return {"ok": True, "company_name": name}

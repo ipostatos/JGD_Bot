@@ -38,6 +38,7 @@ PAGES = [
     ("/zus_err.html", "body"),
     ("/ksef.html", ".tl-row"),
     ("/merge.html", "body"),
+    ("/wfirma.html", "#wk-connect"),
     ("/photo.html", "label.btn"),   # #pick — скрытый input, ждать его нельзя
     ("/article.html?id=glossary", "body"),
     ("/reader.html?file=docs/800plus.pdf&title=test", ".toolbar"),
@@ -635,7 +636,7 @@ TG_STUB = """window.Telegram = { WebApp: { initData: 'stub', initDataUnsafe: {},
   themeParams: {}, colorScheme: 'light', onEvent(){}, openLink(){}, close(){} } };"""
 
 
-def _wfirma_page(browser, base_url, routes, storage=None):
+def _wfirma_page(browser, base_url, routes, storage=None, server_app_key=True):
     """Страница с эмуляцией Telegram и подменёнными ручками wFirma."""
     import json as _json
     ctx = browser.new_context(viewport=PHONE)
@@ -650,69 +651,144 @@ def _wfirma_page(browser, base_url, routes, storage=None):
 
     def health(route):
         route.fulfill(json={"ok": True, "bot": False, "pkd_dialog": False,
-                            "ai": None, "ai_reason": None, "wfirma": True})
+                            "ai": None, "ai_reason": None, "wfirma": True,
+                            "wfirma_app_key": server_app_key})
     page.route("**/api/health", health)
     for pattern, fn in routes.items():
         page.route(pattern, fn)
     return ctx, page, errors
 
 
-def test_wfirma_connect_screens(browser, base_url):
-    """«Мой план»: вкладка wFirma → ключи → выбор фирмы → сводка."""
+def test_wfirma_plan_tab_opens_keys_window(browser, base_url):
+    """«Мой план»: вкладка wFirma без ключей ведёт в окно ключей, с ключами — сводка."""
+    def summary(route):
+        route.fulfill(json={"connected": True, "provider": "wfirma", "company_name": "JK Studio",
+                            "net_ytd": 182400.5,
+                            "vat_due": {"period": "2026-10", "to_pay": 2300.0, "carry": 0}})
+    ctx, page, errors = _wfirma_page(browser, base_url, {"**/api/wfirma/summary": summary})
+    try:
+        page.goto(base_url + "/plan.html", wait_until="networkidle")
+        page.wait_for_selector("#acc-seg:not(.hidden)", timeout=10000)
+        tap(page, '#acc-seg button[data-acc="wfirma"]')
+        assert page.locator("#acc-infakt").is_hidden()
+        assert page.locator("#wf-keys").get_attribute("href") == "wfirma.html"
+        assert page.locator("#acc-wfirma input").count() == 0, "ключи вводятся только в окне"
+        if SHOTS:
+            page.locator("#infakt-card").screenshot(path=str(SHOTS / "wfirma_plan_off.png"))
+        page.evaluate("localStorage.setItem('jdg_wfirma_on', '1')")
+        page.reload(wait_until="networkidle")
+        page.wait_for_selector("#wf-on:not(.hidden)", timeout=10000)
+        text = page.inner_text("#wf-sums")
+        assert "JK Studio" in text and "JPK" in text and "ZUS и аванс налога" in text
+        assert page.locator('#wf-on a[href="wfirma.html"]').count() == 1
+        if SHOTS:
+            page.locator("#infakt-card").screenshot(path=str(SHOTS / "wfirma_plan_on.png"))
+        assert not errors, errors
+    finally:
+        ctx.close()
+
+
+def _keys_window(browser, base_url, server_app_key, calls, status_box):
     import json as _json
-    calls = []
 
     def connect(route):
         body = _json.loads(route.request.post_data or "{}")
         calls.append(body)
         if not body.get("company_id"):
             route.fulfill(status=409, json={"detail": "Выбери фирму", "companies": [
-                {"id": "11", "name": "JK Studio"}, {"id": "22", "name": "Другая фирма"}]})
+                {"id": "11", "name": "JK <b>Studio</b>"}, {"id": "22", "name": "Другая фирма"}]})
         else:
+            status_box.update({"connected": True, "company_name": "JK <b>Studio</b>",
+                               "since": 1795305600, "own_app_key": bool(body.get("app_key")),
+                               "access_tail": body["access_key"][-4:]})
             route.fulfill(json={"ok": True, "company_name": "JK Studio"})
 
-    def summary(route):
-        route.fulfill(json={"connected": True, "provider": "wfirma", "company_name": "JK Studio",
-                            "net_ytd": 182400.5,
-                            "vat_due": {"period": "2026-10", "to_pay": 2300.0, "carry": 0}})
-    ctx, page, errors = _wfirma_page(browser, base_url, {
-        "**/api/wfirma/connect": connect, "**/api/wfirma/summary": summary})
-    try:
-        page.goto(base_url + "/plan.html", wait_until="networkidle")
-        page.wait_for_selector("#acc-seg:not(.hidden)", timeout=10000)
-        tap(page, '#acc-seg button[data-acc="wfirma"]')
-        assert page.locator("#acc-wfirma").is_visible()
-        assert page.locator("#acc-infakt").is_hidden()
-        page.locator("#infakt-card").screenshot(path=str(SHOTS / "wfirma_connect.png")) \
-            if SHOTS else None
+    def status(route):
+        route.fulfill(json={"server_app_key": server_app_key} | status_box)
 
-        page.fill("#wf-access", "a" * 20)
-        page.fill("#wf-secret", "b" * 20)
-        tap(page, "#wf-connect")
-        page.wait_for_selector("#wf-company-box:not(.hidden)", timeout=10000)
-        assert page.locator("#wf-company option").count() == 2
-        page.select_option("#wf-company", "11")
-        tap(page, "#wf-connect")
-        page.wait_for_selector("#wf-on:not(.hidden)", timeout=10000)
-        text = page.inner_text("#wf-sums")
-        assert "JK Studio" in text and "2" in text and "JPK" in text
-        assert "ZUS и аванс налога" in text, "честно говорим, чего API не отдаёт"
-        assert calls[-1]["company_id"] == "11"
+    def delete(route):
+        status_box.clear(); status_box["connected"] = False
+        route.fulfill(json={"ok": True})
+    return _wfirma_page(browser, base_url, {
+        "**/api/wfirma/connect": connect, "**/api/wfirma/status": status,
+        "**/api/wfirma": delete}, server_app_key=server_app_key)
+
+
+def test_wfirma_keys_window_with_own_app_key(browser, base_url):
+    """Окно ключей без appKey на сервере: три ключа → выбор фирмы → «Подключено» → отключение."""
+    calls, box = [], {"connected": False}
+    ctx, page, errors = _keys_window(browser, base_url, False, calls, box)
+    try:
+        page.goto(base_url + "/wfirma.html", wait_until="networkidle")
+        assert page.locator("#wk-app-box").is_visible(), "без ключа сервера просим appKey"
+        assert page.locator("#wk-on").is_hidden()
+        if SHOTS:
+            page.screenshot(path=str(SHOTS / "wfirma_keys.png"), full_page=True)
+        page.fill("#wk-access", "a" * 16 + "TAIL")
+        page.fill("#wk-secret", "b" * 20)
+        tap(page, "#wk-connect")
+        assert "App key" in page.inner_text("#wk-msg") and not calls, "без appKey в сеть не идём"
+        page.check("#wk-show")
+        assert page.get_attribute("#wk-secret", "type") == "text"
+        page.fill("#wk-app", "c" * 20)
+        tap(page, "#wk-connect")
+        page.wait_for_selector("#wk-company-box:not(.hidden)", timeout=10000)
+        assert page.locator("#wk-company option").count() == 2
+        assert page.locator("#wk-company b").count() == 0, "имя фирмы экранировано"
+        page.select_option("#wk-company", "11")
+        tap(page, "#wk-connect")
+        page.wait_for_selector("#wk-on:not(.hidden)", timeout=10000)
+        assert calls[-1] == {"initData": "stub", "access_key": "a" * 16 + "TAIL",
+                             "secret_key": "b" * 20, "app_key": "c" * 20, "company_id": "11"}
+        state = page.inner_text("#wk-state")
+        assert "JK <b>Studio</b>" in state and "…TAIL" in state and "твой" in state
+        assert page.locator("#wk-form").is_hidden()
+        assert page.locator("#wk-help").is_hidden(), "инструкция не нужна, когда подключено"
+        assert page.input_value("#wk-access") == "" and page.input_value("#wk-app") == ""
         assert page.evaluate("localStorage.getItem('jdg_wfirma_on')") == "1"
         if SHOTS:
-            page.locator("#infakt-card").screenshot(path=str(SHOTS / "wfirma_connected.png"))
+            page.screenshot(path=str(SHOTS / "wfirma_keys_on.png"), full_page=True)
+        tap(page, "#wk-disconnect")
+        page.wait_for_selector("#wk-form:not(.hidden)", timeout=10000)
+        assert page.evaluate("localStorage.getItem('jdg_wfirma_on')") is None
+        assert "удалены" in page.inner_text("#wk-msg")
         assert not errors, errors
     finally:
         ctx.close()
 
 
-def test_wfirma_hidden_when_server_has_no_app_key(browser, base_url):
-    ctx = browser.new_context(viewport=PHONE)
-    page = ctx.new_page()
+def test_wfirma_keys_window_with_server_app_key(browser, base_url):
+    """appKey есть у сервера: поле не показываем, хватает двух ключей."""
+    calls, box = [], {"connected": False}
+    ctx, page, errors = _keys_window(browser, base_url, True, calls, box)
     try:
-        page.goto(base_url + "/plan.html", wait_until="networkidle")
-        assert page.locator("#acc-seg").is_hidden()
-        assert "wFirma" not in page.inner_text("#infakt-card")
+        page.goto(base_url + "/wfirma.html", wait_until="networkidle")
+        assert page.locator("#wk-app-box").is_hidden()
+        assert page.locator("#wk-app-help").is_hidden()
+        page.fill("#wk-access", "a" * 20)
+        page.fill("#wk-secret", "b" * 20)
+        tap(page, "#wk-connect")
+        page.wait_for_selector("#wk-company-box:not(.hidden)", timeout=10000)
+        tap(page, "#wk-connect")
+        page.wait_for_selector("#wk-on:not(.hidden)", timeout=10000)
+        assert calls[-1]["app_key"] == ""
+        assert "приложения JDG HUB" in page.inner_text("#wk-state")
+        assert not errors, errors
+    finally:
+        ctx.close()
+
+
+def test_wfirma_keys_window_shows_saved_state_on_open(browser, base_url):
+    calls, box = [], {"connected": True, "company_name": "JK Studio", "since": 1795305600,
+                      "own_app_key": True, "access_tail": "9F2A"}
+    ctx, page, errors = _keys_window(browser, base_url, False, calls, box)
+    try:
+        page.goto(base_url + "/wfirma.html", wait_until="networkidle")
+        page.wait_for_selector("#wk-on:not(.hidden)", timeout=10000)
+        assert "…9F2A" in page.inner_text("#wk-state")
+        tap(page, "#wk-replace")
+        assert page.locator("#wk-form").is_visible() and page.locator("#wk-on").is_hidden()
+        assert not errors, errors
     finally:
         ctx.close()
 
