@@ -1,66 +1,109 @@
 # JDG HUB — [@JGD_PL_bot](https://t.me/JGD_PL_bot)
 
-Telegram Mini App «Путеводитель по JDG (ИП) в Польше»: гайд сообщества
-[JDG PBH](https://t.me/JDG_PBH), калькуляторы ZUS и налогов, персональный план
-предпринимателя, локальная библиотека шаблонов с PDF-читалкой и свои утилиты.
+[![tests](https://github.com/ipostatos/JGD_Bot/actions/workflows/tests.yml/badge.svg)](https://github.com/ipostatos/JGD_Bot/actions/workflows/tests.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
 
-**Прод:** https://jdg-46-224-220-94.sslip.io · дизайн-система ISSA (Lucide, тема Telegram)
+Telegram Mini App для русскоязычных предпринимателей с JDG (ИП) в Польше.
+Гайд сообщества [JDG PBH](https://t.me/JDG_PBH), калькуляторы ZUS и налогов,
+личный план с дедлайнами, подбор кода PKD, проверка контрагента, KSeF
+и ассистент, который отвечает только по материалам гайда.
 
-## Возможности
+> Информация в приложении справочная. Это не налоговая и не юридическая консультация.
 
-- **Гайд** — 38 статей (CC0, [sobolevbel/jdg](https://github.com/sobolevbel/jdg)):
-  «путь предпринимателя» по шагам + справочное, полнотекстовый поиск, лайтбокс картинок
-- **Расчёты** — ZUS по режимам и годам (2025/2026, экономия ZUS-каникул),
-  сравнение skala / liniowy / ryczałt «на руки», трекер лимита VAT 240 000 zł
-- **Мой план** — профиль → этапы Ulga na Start → Preferencyjne → Duży ZUS с датами,
-  ближайшие дедлайны (DRA, JPK, PIT, переходы льгот), чек-листы с прогрессом
-- **Инструменты** — 15 документов сообщества хранятся локально и открываются
-  во встроенной PDF-читалке с печатью; свои утилиты: склейка PDF (pdf-lib,
-  на клиенте) и подгонка фото для MOS 684×883
-- **KSeF** — этапы 2026–2027, порог 10 000 zł, поблажки переходного периода
-  и чек-лист подключения; личный статус считается из профиля и (если подключён inFakt)
-  из твоих же фактур
-- **Что нового** — скрейпинг podatki.gov.pl / gov.pl / zus.pl, классификация Haiku,
-  лента и пуши по профилю
-- **AI-ассистент** — RAG по гайду, базе ошибок ZUS и фактам KSeF (Claude Haiku 4.5)
-- **Кокпит** — на данных inFakt: обзор года, обязательства, лимит VAT, закрытие месяца,
-  сверка ZUS/ryczałtu и платёжные пакеты (движок Hermes)
-- **Контрагент и ошибки ZUS** — проверка NIP по White List / VIES / GUS / CEIDG,
-  справочник кодов ошибок ZUS; из REGON приходят и коды PKD **с версией
-  классификации** (2007 или 2025) — этого не говорит ни один другой реестр
-- **Поддержка авторов гайда** — ссылки на сообщество и репозитории; приложение денег не собирает
+<p>
+  <img src="docs/img/home.png" width="200" alt="Главный экран">
+  <img src="docs/img/calc.png" width="200" alt="Калькулятор ZUS по годам">
+  <img src="docs/img/pkd.png" width="200" alt="Точный подбор PKD">
+  <img src="docs/img/guide.png" width="200" alt="Гайд">
+</p>
 
-## Структура
+## Что умеет
 
-- `server.py` — FastAPI (Mini App + API + временная выдача файлов) + aiogram-бот одним процессом
-- `calc.py` / `webapp/calc.js` — расчётное ядро (зеркала; ставки в `rates_2026.json`
-  и `rates_years.json`, сверены с zus.pl / таблицей гайда копейка в копейку)
-- `tools/build_content.py` — markdown гайда → `webapp/data/` (статьи, поиск, картинки, иконки секций)
-- `webapp/` — vanilla JS, без сборщика: `theme.css` (ISSA) + `jdg.css`, `icons.js` (Lucide),
-  `reader.html` (pdf.js 6, ESM), `merge.html`, `photo.html`, `lightbox.js`
-- `deploy/` — systemd-юнит и процедура (git archive | ssh, VPS + Caddy)
-- Концепция и роадмап: `docs/CONCEPT.md` (мониторинг госсайтов, AI-ассистент, inFakt API)
+| Раздел | Что внутри |
+|---|---|
+| **Гайд** | 38 статей гайда [twojajdg.pl](https://twojajdg.pl/) (CC0): путь предпринимателя по шагам, поиск, картинки. Рекламные врезки партнёров вырезаются при сборке |
+| **Расчёты** | ZUS по годам 2025–2027 и режимам (Ulga na start, preferencyjne, duży), składka zdrowotna, сравнение skala / liniowy / ryczałt «на руки», лимит VAT. Чего ещё не объявили — так и пишем, прошлогодние цифры не подставляем |
+| **Мой план** | Профиль → этапы ZUS с датами, ближайшие дедлайны (DRA, JPK, PIT), чек-листы |
+| **Код PKD** | Поиск по всем 728 подклассам PKD 2025 на русском + «точный подбор»: диалог с уточняющими вопросами, несколько кодов на несколько деятельностей и выбор главного |
+| **Контрагент** | Проверка NIP по White List, VIES, GUS BIR (REGON) и CEIDG; PKD с версией классификации |
+| **KSeF** | Этапы, пороги, переходный период, чек-лист; личный статус по профилю и фактурам inFakt |
+| **Что нового** | Мониторинг podatki.gov.pl, gov.pl и zus.pl каждые 6 часов, разметка ИИ, лента и пуши по профилю |
+| **Ассистент** | Ответы по гайду, базе ошибок ZUS и ставкам. Только темы JDG; отказ по посторонним вопросам ничего не стоит |
+| **Кокпит** | На данных inFakt (по ключу пользователя, read-only): год, обязательства, закрытие месяца, сверка ZUS и налога |
+| **Инструменты** | Шаблоны сообщества во встроенной PDF-читалке, склейка PDF и фото для MOS прямо на телефоне |
 
-## Локальный запуск
+## Как устроено
+
+Один процесс: FastAPI (Mini App + API) и aiogram-бот, SQLite, фронтенд на
+vanilla JS без сборщика. Подробно — [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+```
+server.py        FastAPI + бот, фоновые циклы (монитор, пуши, уборка)
+calc.py          расчётное ядро; webapp/calc.js — его зеркало, тесты сверяют их
+rates_years.json ставки ZUS/zdrowotna/PIT/VAT по годам (null = ещё не объявлено)
+ai.py            ассистент: поиск по корпусу → ворота → Claude Haiku 5.5
+monitor.py       скрейпинг госсайтов, разметка новостей, учёт расходов на ИИ
+pkd.py           поиск PKD 2025; pkd_dialog/ — движок точного подбора
+registries.py    White List, VIES, GUS BIR, CEIDG
+hermes/          read-only учёт на данных inFakt (кокпит)
+tools/           сборка контента гайда, справочника PKD, FAQ из чата
+webapp/          Mini App: страницы, js/, тема ISSA, вендоренные pdf.js и pdf-lib
+deploy/          systemd-юнит, бэкап, процедура деплоя
+```
+
+## Запуск локально
 
 ```bash
 pip install -r requirements.txt
 git clone --depth 1 https://github.com/sobolevbel/jdg sources/guide
-python tools/build_content.py
-DISABLE_BOT=1 uvicorn server:app --port 4400   # без поллинга (иначе 409 с продом)
-pytest -q                                      # 97 тестов (NO_NET=1 — без сетевых)
+python tools/build_content.py                  # гайд → webapp/data/
+cp .env.example .env                           # и заполнить
+DISABLE_BOT=1 uvicorn server:app --port 4400   # без поллинга, иначе 409 с продом
 ```
 
-Секреты — в `.env` (см. `.env.example`), в git не попадают.
+Без `ANTHROPIC_API_KEY` всё работает, кроме ассистента и разметки новостей.
+
+## Тесты
+
+```bash
+NO_NET=1 pytest -q --ignore=test_webapp_browser.py   # логика, ~940 тестов
+pip install playwright && python -m playwright install chromium
+NO_NET=1 pytest -q test_webapp_browser.py            # браузерный смоук на телефонной ширине
+```
+
+`NO_NET=1` выключает живые запросы к реестрам. CI на каждый PR гоняет обе части
+и собирает контент из upstream гайда.
 
 ## Данные и актуальность
 
-Ставки версионируются (`rates_years.json`, поле `updated`). При смене года: добавить
-год в файл, проверить изменения правил, прогнать `test_calc.py` по опорным числам.
-Обновление контента гайда: `git pull` в `sources/guide` + `build_content.py`, без рестарта.
+- **Ставки** — `rates_years.json`, по году на запись. Новый год добавляется, когда
+  объявлены цифры; неизвестное — `null`, прогноз помечен `forecast`. Калькуляторы,
+  дашборд и ассистент берут ставки отсюда, второй копии нет.
+- **Гайд** — upstream [sobolevbel/jdg](https://github.com/sobolevbel/jdg),
+  обновление без рестарта, см. [deploy/DEPLOY.md](deploy/DEPLOY.md).
+- **PKD 2025** — артефакт `data/pkd/*.json.gz` в git, собирается `tools/pkd_build.py`
+  из файлов GUS.
+- **Что ждёт обновления** — [CHANGELOG.md](CHANGELOG.md), раздел «Дальше».
+
+## ИИ и расходы
+
+Ассистент и разметка новостей работают на Claude Haiku 5.5 (~$0,001 за вопрос).
+От сжигания баланса защищают: подпись Telegram, бесплатные ворота до модели
+(посторонние задачи, подмена роли, низкая релевантность), дневные лимиты по ролям,
+бюджет в долларах на день и месяц (`AI_*_BUDGET_USD`) и иерархия инструкций в самой
+модели. Подробно — [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#ассистент-и-защита-баланса).
+
+## Документация
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — модули, потоки данных, решения
+- [deploy/DEPLOY.md](deploy/DEPLOY.md) — деплой, откат, бэкапы, Caddy
+- [docs/PKD_DIALOG_SPEC.md](docs/PKD_DIALOG_SPEC.md) — спецификация точного подбора PKD
+- [docs/CONCEPT.md](docs/CONCEPT.md) — исходная концепция (июль 2026)
+- [CHANGELOG.md](CHANGELOG.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md)
 
 ## Лицензии
 
-Код — MIT. Контент гайда — CC0 (сообщество JDG PBH). pdf.js (Apache-2.0),
-pdf-lib (MIT), иконки Lucide (ISC) — вендорены локально.
-Информация в приложении справочная и не является налоговой или юридической консультацией.
+Код — [MIT](LICENSE). Контент гайда — CC0 (сообщество JDG PBH).
+pdf.js (Apache-2.0), pdf-lib (MIT), иконки Lucide (ISC) вендорены локально.
+Приложение денег не собирает; поддержать можно авторов гайда.

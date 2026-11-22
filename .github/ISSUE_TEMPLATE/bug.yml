@@ -1,0 +1,16 @@
+name: Что-то не работает
+description: Ошибка в приложении или боте
+labels: [баг]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Что случилось
+      description: Что делали, что ожидали, что получили. Без личных данных — NIP, суммы и ключи замените.
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Устройство
+      description: Telegram на iPhone / Android / десктопе, версия Telegram
