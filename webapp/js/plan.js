@@ -207,7 +207,10 @@ function renderStages() {
   let note = `Сейчас: <b>${curSt.t}</b>.`;
   if (curSt.end) {
     const days = Math.ceil((curSt.end - now) / 864e5);
-    note += ` До перехода на следующий режим ~${days} дн. — заявление в ZUS подаётся самостоятельно, не пропусти!`;
+    note += ` До перехода на следующий режим ~${days} дн. — заявление в ZUS подаётся самостоятельно, не пропусти!`
+      + ` Если через тебя застрахована семья, её нужно выписать и заново зарегистрировать`
+      + ` в ZUS ZCNA — иначе родственники выпадут из NFZ.`
+      + ` <a href="article.html?id=zus_obnizone_skladki">Как это сделать</a>`;
   }
   document.getElementById('stagenote').innerHTML = note;
 }
@@ -232,8 +235,8 @@ function renderDeadlines() {
   const prof2 = getProfile();
   if (prof2.reg) {
     const { ulgaEnd, prefEnd } = stageDates(new Date(prof2.reg + 'T00:00:00'), useUlga(prof2));
-    if (useUlga(prof2) && ulgaEnd >= now) evs.push({ d: ulgaEnd, t: 'Конец Ulga na Start', s: 'подать ZUS ZUA (переход на preferencyjne)', hot: true });
-    if (prefEnd >= now) evs.push({ d: prefEnd, t: 'Конец Preferencyjnych', s: 'переход на Duży ZUS', hot: true });
+    if (useUlga(prof2) && ulgaEnd >= now) evs.push({ d: ulgaEnd, t: 'Конец Ulga na Start', s: 'подать ZUS ZUA (переход на preferencyjne); семью — заново в ZCNA', hot: true });
+    if (prefEnd >= now) evs.push({ d: prefEnd, t: 'Конец Preferencyjnych', s: 'переход на Duży ZUS; семью — заново в ZCNA', hot: true });
   }
   const up = evs.filter(e => e.d >= new Date(now.getFullYear(), now.getMonth(), now.getDate()))
     .sort((a, b) => a.d - b.d).slice(0, 5);

@@ -58,3 +58,15 @@ def test_due_pushes_and_dedup(tmp_path, monkeypatch):
     # за день до — новый ключ, снова в очереди
     due1 = profiles.due_pushes(date(2026, 9, 19))
     assert due1 and due1[0]["days"] == 1
+
+
+def test_stage_transition_reminds_about_family_zcna():
+    """Гайд, октябрь 2026: при смене режима ZUS семью выписывают и заново
+    регистрируют в ZCNA, иначе родственники выпадают из NFZ. Пуш о переходе
+    обязан это сказать — один на оба перехода."""
+    from datetime import date
+    import profiles
+    evs = profiles.upcoming({"reg": "2026-06-10", "ulga": 1}, date(2026, 11, 22), 400)
+    transitions = [e for e in evs if e["key"].startswith(("ulga-end", "pref-end"))]
+    assert transitions
+    assert all("ZCNA" in e["desc"] and "NFZ" in e["desc"] for e in transitions)

@@ -85,6 +85,13 @@ def stage_dates(reg: date, use_ulga: bool):
     return ulga_end, pref_end
 
 
+# Гайд, октябрь 2026: при смене кода (ZWUA + ZUA) членов семьи на медстраховке
+# надо выписать и зарегистрировать заново через ZCNA, а не удалять
+# сгенерированный ZCNA — иначе родственники выпадают из NFZ.
+FAMILY_NOTE = ("Если через тебя застрахована семья — выпиши и заново "
+               "зарегистрируй её в ZUS ZCNA, иначе родственники выпадут из NFZ.")
+
+
 def upcoming(profile: dict, today: date, horizon: int = 40) -> list[dict]:
     """Дедлайны в ближайшие horizon дней: ZUS/JPK/PIT + переходы этапов."""
     evs = []
@@ -109,11 +116,12 @@ def upcoming(profile: dict, today: date, horizon: int = 40) -> list[dict]:
             if ulga_end and ulga_end >= today:
                 evs.append({"d": ulga_end, "key": f"ulga-end-{ulga_end}",
                             "title": "🔥 Конец Ulga na Start",
-                            "desc": "подай ZUS ZUA — переход на preferencyjne"})
+                            "desc": "подай ZUS ZUA — переход на preferencyjne. "
+                                    + FAMILY_NOTE})
             if pref_end >= today:
                 evs.append({"d": pref_end, "key": f"pref-end-{pref_end}",
                             "title": "🔥 Конец Preferencyjnych",
-                            "desc": "переход на Duży ZUS"})
+                            "desc": "переход на Duży ZUS. " + FAMILY_NOTE})
         except ValueError:
             pass
     evs = [e for e in evs if today <= e["d"] <= today + timedelta(days=horizon)]
