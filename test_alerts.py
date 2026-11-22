@@ -205,3 +205,28 @@ def test_ask_reads_answer_after_thinking(monkeypatch):
     assert res.get("answer") == "Платить до 20 числа.", res
     assert sent["model"] == "claude-haiku-5-5"
     assert not {"temperature", "top_p", "top_k"} & set(sent)
+
+
+def test_classify_in_batches_one_broken_batch_defers_only_itself(monkeypatch):
+    """22.11.2026: ответ на 29 новостей разом пришёл с битым JSON, и отложилась
+    вся очередь. Пачки по CLASSIFY_BATCH: битая откладывает только свои."""
+    import json as _json
+    import monitor
+    calls = []
+
+    def post(*a, **kw):
+        n = kw["json"]["messages"][0]["content"].count("\n") + 1
+        calls.append(n)
+        if len(calls) == 2:
+            return OkResp(_thinking_first('[{"relevant": true "importance": 2}]'))
+        item = {"relevant": True, "importance": 2, "topics": ["ZUS"],
+                "summary": "s", "who_vat": "any"}
+        return OkResp(_thinking_first(_json.dumps([item] * n)))
+    monkeypatch.setattr(monitor, "ANTHROPIC_KEY", "test-key")
+    monkeypatch.setattr(monitor.httpx, "post", post)
+    items = [(f"https://x/{i}", "ZUS", f"t{i}") for i in range(20)]
+    out = monitor.classify(items)
+    assert calls == [8, 8, 4]
+    assert len(out) == 20
+    assert out[8:16] == [None] * 8 and all(out[:8]) and all(out[16:])
+    assert monitor.AI_STATUS["ok"] is True
