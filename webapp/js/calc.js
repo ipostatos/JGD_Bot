@@ -33,7 +33,9 @@ const MISSING_RU = {
 };
 
 ratesReady.then(() => {
-  document.getElementById('upd').textContent = RATES.updated;
+  // дата проверки — по файлу ставок по годам: в нём меняются цифры при каждом
+  // новом годе, а rates_2026.json (лимит VAT и прочее) правится редко
+  document.getElementById('upd').textContent = YEARS.updated || RATES.updated;
   const ys = ratesYears();
   document.getElementById('yrs').textContent = ys[ys.length - 1] + '–' + ys[0];
   yearSeg('zyear'); yearSeg('cyear');
