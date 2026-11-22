@@ -34,7 +34,7 @@ import httpx
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "webapp" / "data" / "faq_data.json"
-MODEL = "claude-haiku-4-5-20251001"
+MODEL = "claude-haiku-5-5"
 BATCH = 20
 
 
@@ -85,11 +85,12 @@ def distill(qa_batch, api_key):
     r = httpx.post(
         "https://api.anthropic.com/v1/messages",
         headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
-        json={"model": MODEL, "max_tokens": 4000, "system": PROMPT,
+        json={"model": MODEL, "max_tokens": 12000, "system": PROMPT,
               "messages": [{"role": "user", "content": listing}]},
         timeout=120)
     r.raise_for_status()
-    text = r.json()["content"][0]["text"]
+    text = "".join(b.get("text", "") for b in r.json()["content"]
+                   if b.get("type") == "text")
     m = re.search(r"\[.*\]", text, re.S)
     return json.loads(m.group(0)) if m else []
 

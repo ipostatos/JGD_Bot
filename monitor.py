@@ -24,7 +24,10 @@ DB_PATH = Path(os.environ.get("JDG_DB")
                 or Path(__file__).parent / "news.db")
 UA = {"User-Agent": "Mozilla/5.0 (compatible; JDGGuideBot/1.0)"}
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-HAIKU = "claude-haiku-4-5-20251001"
+# Haiku 5.5: в 10 раз дешевле Haiku 4.5 ($0,10 / $0,50 за миллион токенов при
+# запросе до 100K). У него размышление включено по умолчанию и считается в
+# max_tokens, поэтому лимиты выше прежних, а ответ разбирается по типу блока.
+MODEL = "claude-haiku-5-5"
 
 TOPICS = ("ZUS", "VAT", "PIT", "ryczałt", "KSeF", "легализация", "другое")
 
@@ -49,6 +52,29 @@ def mark_ai(ok: bool, reason: str | None = None) -> None:
 def is_no_credits(status_code: int, body: str) -> bool:
     """Anthropic отвечает на пустой баланс 400 с этой фразой — не 402."""
     return status_code == 400 and "credit balance" in (body or "").lower()
+
+
+class ModelAnswerError(RuntimeError):
+    """Модель ответила, но текста, которым можно пользоваться, нет."""
+
+
+def answer_text(body: dict) -> str:
+    """Текст ответа из тела Messages API.
+
+    Первым блоком у Haiku 5.5 может прийти `thinking`, поэтому брать
+    `content[0]["text"]` нельзя: это KeyError на первом же размышлении.
+    Отказ модели и обрыв по лимиту — не ответ, а повод сказать об ошибке.
+    """
+    stop = body.get("stop_reason")
+    if stop == "refusal":
+        raise ModelAnswerError("модель отказалась отвечать")
+    text = "".join(b.get("text", "") for b in body.get("content", [])
+                   if b.get("type") == "text").strip()
+    if stop == "max_tokens":
+        raise ModelAnswerError("ответ оборван по max_tokens")
+    if not text:
+        raise ModelAnswerError(f"в ответе нет текста (stop_reason={stop})")
+    return text
 
 
 # ── источники ────────────────────────────────────────────────────────────────
@@ -165,7 +191,10 @@ def classify(items):
             "https://api.anthropic.com/v1/messages",
             headers={"x-api-key": ANTHROPIC_KEY,
                      "anthropic-version": "2023-06-01"},
-            json={"model": HAIKU, "max_tokens": 2000,
+            # разметка простая: низкое усилие, но запас на размышление и на
+            # большую пачку (после простоя приходит десяток-другой новостей сразу)
+            json={"model": MODEL, "max_tokens": 8000,
+                  "output_config": {"effort": "low"},
                   "system": CLASSIFY_PROMPT.format(topics=", ".join(TOPICS)),
                   "messages": [{"role": "user", "content": listing}]},
             timeout=60)
@@ -175,7 +204,7 @@ def classify(items):
             return None
         r.raise_for_status()
         mark_ai(True)
-        text = r.json()["content"][0]["text"]
+        text = answer_text(r.json())
         m = re.search(r"\[.*\]", text, re.S)
         data = json.loads(m.group(0)) if m else None
         if isinstance(data, list) and len(data) == len(items):
