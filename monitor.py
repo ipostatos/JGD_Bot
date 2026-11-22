@@ -184,6 +184,43 @@ def record_spend(kind: str, model: str, usage: dict) -> None:
                   (day, kind, cost_usd(model, usage or {})))
 
 
+def reserve_spend(kind: str, est: float, daily: float, monthly: float) -> bool:
+    """Занять бюджет ДО вызова модели — проверка и запись в одной транзакции.
+
+    Проверить «бюджет есть» и записать расход после ответа нельзя: десяток
+    параллельных запросов увидели бы один и тот же остаток и прошли все.
+    Здесь BEGIN IMMEDIATE берёт блокировку записи, так что второй запрос
+    видит уже занятую сумму. После ответа settle_spend() меняет оценку на факт.
+    """
+    day, month = time.strftime("%Y-%m-%d"), time.strftime("%Y-%m")
+    db().close()                                     # таблица существует
+    conn = sqlite3.connect(DB_PATH, isolation_level=None, timeout=15)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        d = conn.execute("SELECT COALESCE(SUM(usd),0) FROM ai_spend WHERE day=?",
+                         (day,)).fetchone()[0]
+        m = conn.execute("SELECT COALESCE(SUM(usd),0) FROM ai_spend WHERE day LIKE ?",
+                         (month + "%",)).fetchone()[0]
+        if d + est > daily or m + est > monthly:
+            conn.execute("ROLLBACK")
+            return False
+        conn.execute("""INSERT INTO ai_spend VALUES(?,?,0,?)
+            ON CONFLICT(day,kind) DO UPDATE SET usd=usd+excluded.usd""", (day, kind, est))
+        conn.execute("COMMIT")
+        return True
+    finally:
+        conn.close()
+
+
+def settle_spend(kind: str, est: float, model: str, usage: dict | None) -> None:
+    """Заменить зарезервированную оценку фактом (usage=None — вызова не было)."""
+    actual = cost_usd(model, usage) if usage else 0.0
+    with db() as c:
+        c.execute("""UPDATE ai_spend SET usd=MAX(0, usd+?), calls=calls+?
+            WHERE day=? AND kind=?""",
+                  (actual - est, 1 if usage else 0, time.strftime("%Y-%m-%d"), kind))
+
+
 def spent_usd(period: str = "day") -> float:
     """Сколько потрачено сегодня («day») или в этом месяце («month»), все виды."""
     prefix = time.strftime("%Y-%m-%d" if period == "day" else "%Y-%m")

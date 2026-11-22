@@ -136,8 +136,11 @@ def test_spend_is_recorded_from_real_usage(api):
 def test_budget_stops_the_model_for_everyone(api, monkeypatch):
     sent, _ = api
     monkeypatch.setattr(ai, "ADMIN_ID", "1")          # даже владелец
-    monkeypatch.setattr(ai, "DAILY_BUDGET_USD", 0.0005)
-    ask("до какого числа платить ZUS?")                # потратил 0.0009
+    # бюджет впритык на один резерв: после первого ответа (факт 0.0009)
+    # второй резерв уже не помещается
+    monkeypatch.setattr(ai, "estimate_cost", lambda chars: 0.003)
+    monkeypatch.setattr(ai, "DAILY_BUDGET_USD", 0.0031)
+    ask("до какого числа платить ZUS?")
     res = ask("как платить VAT в KSeF?")
     assert res.get("reason") == "budget"
     assert len(sent) == 1, "после бюджета к API не ходим"
@@ -145,3 +148,35 @@ def test_budget_stops_the_model_for_everyone(api, monkeypatch):
 
 def test_unknown_model_is_priced_high():
     assert monitor.cost_usd("какая-то-модель", {"input_tokens": 1_000_000}) >= 1.0
+
+
+# ── гонка: проверка и списание одной транзакцией ───────────────────────────
+def test_budget_reservation_is_atomic(api):
+    """Два одновременных запроса не видят один и тот же остаток бюджета."""
+    est = 0.003
+    assert monitor.reserve_spend("ask", est, est * 1.5, 10)
+    assert not monitor.reserve_spend("ask", est, est * 1.5, 10), \
+        "второй резерв должен увидеть занятую сумму"
+    monitor.settle_spend("ask", est, ai.MODEL, {"input_tokens": 1000,
+                                                "output_tokens": 100})
+    assert monitor.spent_usd("day") == pytest.approx(0.00015)
+
+
+def test_quota_take_is_atomic(api, monkeypatch):
+    monkeypatch.setattr(ai, "DAILY_USER_LIMIT", 2)
+    assert ai._quota_take(5) and ai._quota_take(5)
+    assert not ai._quota_take(5)
+    ai._quota_refund(5)
+    assert ai._quota_take(5)
+
+
+def test_failed_call_releases_reservation_and_question(api, monkeypatch):
+    class Boom(Client):
+        async def post(self, *a, **kw):
+            raise ConnectionError("сеть")
+    monkeypatch.setattr(ai.httpx, "AsyncClient", lambda **kw: Boom([]))
+    left = ai.quota_left(1)
+    res = ask("до какого числа платить ZUS?")
+    assert "error" in res
+    assert ai.quota_left(1) == left, "до модели не дошли — вопрос не списан"
+    assert monitor.spent_usd("day") == pytest.approx(0)
