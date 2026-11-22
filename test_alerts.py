@@ -130,3 +130,101 @@ def test_other_api_error_alerts_differently(monkeypatch):
     sent = _fake_bot(monkeypatch)
     asyncio.run(server._alert_ai_outage({"ok": False, "reason": "error"}))
     assert len(sent) == 1 and "кредиты" not in sent[0]
+
+
+# ── Haiku 5.5: размышление первым блоком, отказ, обрыв ─────────────────────
+class OkResp:
+    status_code = 200
+    text = ""
+
+    def __init__(self, body):
+        self._body = body
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._body
+
+
+def _thinking_first(text, stop="end_turn"):
+    return {"stop_reason": stop, "content": [
+        {"type": "thinking", "thinking": "", "signature": "sig"},
+        {"type": "text", "text": text}]}
+
+
+def test_answer_text_skips_thinking_block():
+    import monitor
+    assert monitor.answer_text(_thinking_first(" ответ ")) == "ответ"
+
+
+@pytest.mark.parametrize("body", [
+    {"stop_reason": "refusal", "content": []},
+    _thinking_first('[{"relevant": tr', stop="max_tokens"),
+    {"stop_reason": "end_turn", "content": [{"type": "thinking", "thinking": ""}]},
+])
+def test_answer_text_rejects_non_answers(body):
+    import monitor
+    with pytest.raises(monitor.ModelAnswerError):
+        monitor.answer_text(body)
+
+
+def test_classify_reads_answer_after_thinking(monkeypatch):
+    import monitor
+    sent = {}
+    item = ('[{"relevant": true, "importance": 2, "topics": ["ZUS"], '
+            '"summary": "s", "who_vat": "any"}]')
+
+    def post(*a, **kw):
+        sent.update(kw["json"])
+        return OkResp(_thinking_first(item))
+    monkeypatch.setattr(monitor, "ANTHROPIC_KEY", "test-key")
+    monkeypatch.setattr(monitor.httpx, "post", post)
+    out = monitor.classify([("https://x", "ZUS", "Nowe stawki")])
+    assert out and out[0]["topics"] == ["ZUS"]
+    assert sent["model"] == "claude-haiku-5-5"
+    # у Haiku 5.5 sampling-параметры дают 400, а размышление ест max_tokens
+    assert not {"temperature", "top_p", "top_k"} & set(sent)
+    assert sent["max_tokens"] >= 4000
+
+
+def test_ask_reads_answer_after_thinking(monkeypatch):
+    sent = {}
+
+    class Client(FakeClient):
+        async def post(self, *a, **kw):
+            sent.update(kw["json"])
+            return OkResp(_thinking_first("Платить до 20 числа."))
+    monkeypatch.setattr(ai, "ANTHROPIC_KEY", "test-key")
+    monkeypatch.setattr(ai.httpx, "AsyncClient", lambda **kw: Client())
+    monkeypatch.setattr(ai, "_quota_ok", lambda uid: True)
+    monkeypatch.setattr(ai, "_quota_bump", lambda uid: None)
+    res = asyncio.run(ai.ask(1, "до какого числа платить ZUS?", None))
+    assert res.get("answer") == "Платить до 20 числа.", res
+    assert sent["model"] == "claude-haiku-5-5"
+    assert not {"temperature", "top_p", "top_k"} & set(sent)
+
+
+def test_classify_in_batches_one_broken_batch_defers_only_itself(monkeypatch):
+    """22.11.2026: ответ на 29 новостей разом пришёл с битым JSON, и отложилась
+    вся очередь. Пачки по CLASSIFY_BATCH: битая откладывает только свои."""
+    import json as _json
+    import monitor
+    calls = []
+
+    def post(*a, **kw):
+        n = kw["json"]["messages"][0]["content"].count("\n") + 1
+        calls.append(n)
+        if len(calls) == 2:
+            return OkResp(_thinking_first('[{"relevant": true "importance": 2}]'))
+        item = {"relevant": True, "importance": 2, "topics": ["ZUS"],
+                "summary": "s", "who_vat": "any"}
+        return OkResp(_thinking_first(_json.dumps([item] * n)))
+    monkeypatch.setattr(monitor, "ANTHROPIC_KEY", "test-key")
+    monkeypatch.setattr(monitor.httpx, "post", post)
+    items = [(f"https://x/{i}", "ZUS", f"t{i}") for i in range(20)]
+    out = monitor.classify(items)
+    assert calls == [8, 8, 4]
+    assert len(out) == 20
+    assert out[8:16] == [None] * 8 and all(out[:8]) and all(out[16:])
+    assert monitor.AI_STATUS["ok"] is True

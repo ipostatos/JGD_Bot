@@ -24,7 +24,7 @@ SEARCH_JSON = ROOT / "webapp" / "data" / "search.json"
 DB_PATH = Path(os.environ.get("JDG_DB") or ROOT / "news.db")
 
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-MODEL = "claude-haiku-4-5-20251001"
+MODEL = monitor.MODEL          # одна модель на весь бот, меняется в одном месте
 DAILY_USER_LIMIT = 10
 DAILY_GLOBAL_LIMIT = 300
 CONTEXT_ARTICLES = 3
@@ -427,7 +427,10 @@ async def ask(user_id: int, question: str, profile: dict | None = None) -> dict:
                 "https://api.anthropic.com/v1/messages",
                 headers={"x-api-key": ANTHROPIC_KEY,
                          "anthropic-version": "2023-06-01"},
-                json={"model": MODEL, "max_tokens": 1000, "system": SYSTEM,
+                # max_tokens включает размышление: 1000, как у Haiku 4.5, может
+                # уйти на него целиком, и человек получит пустоту
+                json={"model": MODEL, "max_tokens": 4000,
+                      "output_config": {"effort": "medium"}, "system": SYSTEM,
                       "messages": [{"role": "user", "content":
                           f"{prof}Фрагменты гайда:\n\n{ctx}\n\nВопрос: {question}"}]})
             if monitor.is_no_credits(r.status_code, r.text):
@@ -441,7 +444,7 @@ async def ask(user_id: int, question: str, profile: dict | None = None) -> dict:
                         "reason": "no_credits"}
             r.raise_for_status()
             monitor.mark_ai(True)
-            answer = r.json()["content"][0]["text"].strip()
+            answer = monitor.answer_text(r.json())
     except Exception as e:
         log.warning("ask failed: %s", e)
         return {"error": "Не получилось получить ответ, попробуй ещё раз"}

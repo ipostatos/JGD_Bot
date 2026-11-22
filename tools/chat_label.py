@@ -26,7 +26,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 ROOT = Path(__file__).resolve().parent.parent
 DIR = ROOT / "chat_analysis"
-MODEL = "claude-haiku-4-5-20251001"
+MODEL = "claude-haiku-5-5"
 
 STAGES = """0-выбор-формы, 1-легализация-право-открыть, 2-регистрация-CEIDG,
 3-первые-месяцы-ulga-na-start, 4-налоги-и-PIT, 5-ZUS-взносы-льготы-больничные,
@@ -86,14 +86,15 @@ async def label(client, key, c, cands, sem):
                 r = await client.post(
                     "https://api.anthropic.com/v1/messages",
                     headers={"x-api-key": key, "anthropic-version": "2023-06-01"},
-                    json={"model": MODEL, "max_tokens": 600, "system": PROMPT,
+                    json={"model": MODEL, "max_tokens": 3000, "system": PROMPT,
                           "messages": [{"role": "user", "content": user_msg(c, cands)}]},
                     timeout=120)
                 if r.status_code == 429 or r.status_code >= 500:
                     await asyncio.sleep(3 * (attempt + 1))
                     continue
                 r.raise_for_status()
-                text = r.json()["content"][0]["text"]
+                text = "".join(b.get("text", "") for b in r.json()["content"]
+                        if b.get("type") == "text")
                 m = re.search(r"\{.*\}", text, re.S)
                 data = json.loads(m.group(0)) if m else {}
                 return {**c, **{k: data.get(k) for k in
