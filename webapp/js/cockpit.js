@@ -5,6 +5,18 @@ Icons?.hydrate?.();
 
 let tab = 'over';   // обзор — первый экран кокпита
 const $ = (id) => document.getElementById(id);
+// Источник данных: wFirma, только если подключена она одна. Закрытие месяца и
+// платёжные пакеты считает движок Hermes на начислениях ZUS/налога inFakt —
+// в API wFirma их нет, поэтому у wFirma только обзор.
+const PROVIDER = localStorage.getItem('jdg_wfirma_on') === '1'
+  && localStorage.getItem('jdg_infakt_on') !== '1' ? 'wfirma' : 'infakt';
+const SRC = PROVIDER === 'wfirma' ? 'wFirma' : 'inFakt';
+if (PROVIDER === 'wfirma') {
+  $('tabs').classList.add('hidden');          // вкладка одна — переключатель не нужен
+  $('foot').innerHTML = 'Цифры — из твоей wFirma, мы их только читаем.<br>'
+    + 'Справочная информация, не юридическая и не налоговая консультация.';
+  $('sub').textContent = 'Обзор продаж, расходов, VAT и KSeF — на твоих данных wFirma';
+}
 $('month').value = new Date().toISOString().slice(0, 7);
 $('monthbar').classList.add('hidden');  // на обзоре выбор месяца не нужен
 
@@ -38,11 +50,12 @@ function showPanel() { $('gate').classList.add('hidden'); $('panel').classList.r
 async function run() {
   showPanel();
   const out = $('out');
-  out.innerHTML = '<div class="card muted">Считаю на данных inFakt…</div>';
+  out.innerHTML = `<div class="card muted">Считаю на данных ${SRC}…</div>`;
   try {
     const month = $('month').value;
-    const path = { over: '/api/infakt/overview', close: '/api/infakt/close',
-                   pay: '/api/infakt/pay' }[tab];
+    const path = PROVIDER === 'wfirma' ? '/api/wfirma/overview'
+      : { over: '/api/infakt/overview', close: '/api/infakt/close',
+          pay: '/api/infakt/pay' }[tab];
     const d = await api(path, { month });
     if (d.connected === false) { showGate(); return; }
     out.innerHTML = tab === 'over' ? renderOverview(d)
@@ -75,7 +88,13 @@ const SERIES = [
   { name: 'Расходы', val: (r) => r.costs },
 ];
 
-function chartSVG(series) {
+// у wFirma нет начислений ZUS и налога: сегмент «Налоги» не рисуем вовсе,
+// иначе нулевой сегмент выглядел бы как «налогов нет»
+const seriesFor = (d) => d.taxes_available === false
+  ? [{ name: 'Прибыль до налогов', val: (r) => r.profit }, { name: 'Расходы', val: (r) => r.costs, slot: 3 }]
+  : SERIES;
+
+function chartSVG(series, segs = SERIES) {
   const W = 320, H = 132, PAD_B = 16, PAD_T = 6;
   const n = series.length, gap = 5;
   const bw = (W - gap * (n - 1)) / n;
@@ -86,14 +105,14 @@ function chartSVG(series) {
   series.forEach((r, i) => {
     const x = i * (bw + gap);
     let acc = 0;
-    SERIES.forEach((s, si) => {
+    segs.forEach((s, si) => {
       const v = Math.max(0, s.val(r));
       if (v <= 0) return;
       const y0 = y(acc), y1 = y(acc + v);
       const h = Math.max(1, y0 - y1 - 2);              // 2px просвет между сегментами
       const isTop = si === 0 || acc + v >= (r.income - 0.5);
       bars += `<rect x="${x.toFixed(1)}" y="${y1.toFixed(1)}" width="${bw.toFixed(1)}"
-        height="${h.toFixed(1)}" rx="${isTop ? 3 : 0}" fill="var(--s${si + 1})"></rect>`;
+        height="${h.toFixed(1)}" rx="${isTop ? 3 : 0}" fill="var(--s${s.slot || si + 1})"></rect>`;
       acc += v;
     });
     bars += `<rect class="hit" data-i="${i}" x="${(x - gap / 2).toFixed(1)}" y="0"
@@ -115,12 +134,36 @@ function renderOverview(d) {
   const deltaStr = delta === null ? ''
     : `<span class="delta ${delta >= 0 ? 'up' : 'down'}">${delta >= 0 ? '+' : ''}${delta}% к ${mLabel(prev.month)}</span>`;
 
-  let s = `<div class="card kpis">
+  const taxes = d.taxes_available !== false;
+  const segs = seriesFor(d);
+  let s = d.company_name
+    ? `<p class="muted" style="font-size:12px;margin:0 0 8px">${esc(d.company_name)}${
+        d.tax_form ? ' · ' + esc(d.tax_form) : ''} · данные wFirma</p>` : '';
+  s += `<div class="card kpis">
     <div class="kpi"><span class="l">Доход месяца</span><b>${zl(m.income)}</b>${deltaStr}</div>
-    <div class="kpi"><span class="l">Прибыль после налогов</span><b>${zl(m.profit)}</b></div>
-    <div class="kpi"><span class="l">Обязательства месяца</span><b>${zl(m.zus + m.tax)}</b>
-      <span class="sml">ZUS ${zl(m.zus)} + налог ${zl(m.tax)}</span></div>
+    <div class="kpi"><span class="l">${taxes ? 'Прибыль после налогов' : 'Прибыль до налогов'}</span><b>${zl(m.profit)}</b></div>
+    ${taxes ? `<div class="kpi"><span class="l">Обязательства месяца</span><b>${zl(m.zus + m.tax)}</b>
+      <span class="sml">ZUS ${zl(m.zus)} + налог ${zl(m.tax)}</span></div>`
+      : `<div class="kpi"><span class="l">Расходы месяца</span><b>${zl(m.costs)}</b>
+      <span class="sml">ZUS и аванс налога wFirma по API не отдаёт</span></div>`}
   </div>`;
+
+  if (d.jpk) {
+    s += `<div class="card">
+      <div class="h2" style="margin-bottom:6px">VAT за ${esc(d.jpk.period)} по JPK</div>
+      <div class="row"><span>К оплате до 25-го</span><span class="v">${zl(d.jpk.to_pay)}</span></div>
+      ${d.jpk.carry ? `<div class="row"><span>Переносится на следующий период</span>
+        <span class="v">${zl(d.jpk.carry)}</span></div>` : ''}
+      <p class="muted" style="font-size:11px;margin:4px 0 0">Сумма из декларации JPK_V7,
+        которую посчитала wFirma.</p></div>`;
+  }
+  if (d.ksef) {
+    s += `<div class="card">
+      <div class="h2" style="margin-bottom:6px">KSeF</div>
+      <div class="row"><span>Фактур с номером KSeF</span><span class="v">${d.ksef.with}</span></div>
+      <div class="row"><span>С апреля 2026 без номера KSeF</span>
+        <span class="v ${d.ksef.without ? 'bad' : 'ok'}">${d.ksef.without}</span></div></div>`;
+  }
 
   s += `<div class="card">
     <div class="h2" style="margin-bottom:2px">Здоровье учёта
@@ -148,24 +191,25 @@ function renderOverview(d) {
                <span class="v">${esc(v.eta)}${v.months_left ? ` · через ${v.months_left} мес.` : ''}</span></div>`
             : ''}
     </div>`;
-  } else {
+  } else if (!d.jpk) {                 // у wFirma VAT уже показан карточкой JPK
     s += '<div class="card"><div class="row"><span>VAT</span><span class="v">плательщик · JPK до 25-го</span></div></div>';
   }
 
   s += `<div class="card">
     <div class="h2" style="margin-bottom:6px">12 месяцев</div>
-    <div class="legend">${SERIES.map((x, i) =>
-      `<span class="lg"><i style="background:var(--s${i + 1})"></i>${x.name}</span>`).join('')}</div>
-    <div class="chart">${chartSVG(d.series)}</div>
+    <div class="legend">${segs.map((x, i) =>
+      `<span class="lg"><i style="background:var(--s${x.slot || i + 1})"></i>${x.name}</span>`).join('')}</div>
+    <div class="chart">${chartSVG(d.series, segs)}</div>
     <div id="tip" class="tip muted">Нажми на столбец, чтобы увидеть месяц целиком</div>
     <p class="muted" style="font-size:11px;margin:0">Высота столбца — доход месяца.
-      Если налоги и расходы его превысили, столбец выше дохода: месяц ушёл в минус.</p>
+      Если ${taxes ? 'налоги и расходы его превысили' : 'расходы его превысили'}, столбец
+      выше дохода: месяц ушёл в минус.</p>
     <button class="copy" id="tblbtn" style="margin-top:8px">Показать таблицей</button>
     <div id="tbl" class="hidden tblwrap">
       <table class="tbl"><thead><tr><th>Месяц</th><th>Доход</th><th>Расходы</th>
-        <th>ZUS</th><th>Налог</th><th>Прибыль</th></tr></thead><tbody>
+        ${taxes ? '<th>ZUS</th><th>Налог</th>' : ''}<th>Прибыль</th></tr></thead><tbody>
         ${d.series.map((r) => `<tr><td>${esc(r.month)}</td><td>${zl(r.income)}</td>
-          <td>${zl(r.costs)}</td><td>${zl(r.zus)}</td><td>${zl(r.tax)}</td>
+          <td>${zl(r.costs)}</td>${taxes ? `<td>${zl(r.zus)}</td><td>${zl(r.tax)}</td>` : ''}
           <td>${zl(r.profit)}</td></tr>`).join('')}
       </tbody></table></div>
   </div>`;
@@ -174,8 +218,8 @@ function renderOverview(d) {
     <div class="h2" style="margin-bottom:6px">Итого за ${d.year}</div>
     <div class="row"><span>Доход</span><span class="v">${zl(ytd.income)}</span></div>
     <div class="row"><span>Расходы</span><span class="v">${zl(ytd.costs)}</span></div>
-    <div class="row"><span>ZUS + налог</span><span class="v">${zl(ytd.zus + ytd.tax)}</span></div>
-    <div class="row"><span>Прибыль</span><span class="v">${zl(ytd.profit)}</span></div>
+    ${taxes ? `<div class="row"><span>ZUS + налог</span><span class="v">${zl(ytd.zus + ytd.tax)}</span></div>` : ''}
+    <div class="row"><span>${taxes ? 'Прибыль' : 'Прибыль до налогов'}</span><span class="v">${zl(ytd.profit)}</span></div>
     ${ytd.burden_pct !== null ? `<div class="row"><span>Эффективная нагрузка</span>
       <span class="v">${ytd.burden_pct}% от дохода</span></div>` : ''}
   </div>`;
@@ -194,7 +238,10 @@ function bindOverview(d) {
   document.querySelectorAll('.hit').forEach((el) => el.addEventListener('click', () => {
     const r = d.series[+el.dataset.i];
     haptic?.('light');
-    tip.innerHTML = `<b>${esc(r.month)}</b> · доход ${zl(r.income)} · расходы ${zl(r.costs)}
+    tip.innerHTML = d.taxes_available === false
+      ? `<b>${esc(r.month)}</b> · доход ${zl(r.income)} · расходы ${zl(r.costs)}
+      · прибыль до налогов ${zl(r.profit)}`
+      : `<b>${esc(r.month)}</b> · доход ${zl(r.income)} · расходы ${zl(r.costs)}
       · ZUS ${zl(r.zus)} · налог ${zl(r.tax)} · прибыль ${zl(r.profit)}`;
   }));
   const btn = $('tblbtn'), tbl = $('tbl');

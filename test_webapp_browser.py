@@ -7,7 +7,9 @@
 
 Требует playwright + chromium; без них тесты пропускаются (в CI ставятся явно).
 """
+import os
 import re
+from pathlib import Path
 import socket
 import threading
 import time
@@ -42,6 +44,8 @@ PAGES = [
 ]
 
 IGNORE_URL_PARTS = ("telegram.org",)  # внешний скрипт TG: в CI его может не быть
+# Скриншоты для ревью экранов: JDG_SHOTS=<папка> — снимки, без переменной — нет
+SHOTS = Path(os.environ["JDG_SHOTS"]) if os.environ.get("JDG_SHOTS") else None
 
 
 @pytest.fixture(scope="module")
@@ -618,6 +622,136 @@ def test_calc_shows_2027_honestly(browser, base_url):
         txt = page.inner_text("#cres")
         assert "пока не посчитать" in txt and "шкала PIT" in txt
         assert "выгоднее всего" not in txt
+        assert not errors, errors
+    finally:
+        ctx.close()
+
+
+# ── wFirma: экраны подключения и кокпит ─────────────────────────────────────
+TG_STUB = """window.Telegram = { WebApp: { initData: 'stub', initDataUnsafe: {},
+  ready(){}, expand(){}, setHeaderColor(){}, setBackgroundColor(){},
+  BackButton: { show(){}, hide(){}, onClick(){}, offClick(){} },
+  HapticFeedback: { impactOccurred(){}, notificationOccurred(){}, selectionChanged(){} },
+  themeParams: {}, colorScheme: 'light', onEvent(){}, openLink(){}, close(){} } };"""
+
+
+def _wfirma_page(browser, base_url, routes, storage=None):
+    """Страница с эмуляцией Telegram и подменёнными ручками wFirma."""
+    import json as _json
+    ctx = browser.new_context(viewport=PHONE)
+    ctx.add_init_script(TG_STUB)
+    if storage:
+        ctx.add_init_script("".join(
+            f"localStorage.setItem({_json.dumps(k)}, {_json.dumps(v)});" for k, v in storage.items()))
+    page = ctx.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.route("**/telegram.org/**", lambda r: r.abort())
+
+    def health(route):
+        route.fulfill(json={"ok": True, "bot": False, "pkd_dialog": False,
+                            "ai": None, "ai_reason": None, "wfirma": True})
+    page.route("**/api/health", health)
+    for pattern, fn in routes.items():
+        page.route(pattern, fn)
+    return ctx, page, errors
+
+
+def test_wfirma_connect_screens(browser, base_url):
+    """«Мой план»: вкладка wFirma → ключи → выбор фирмы → сводка."""
+    import json as _json
+    calls = []
+
+    def connect(route):
+        body = _json.loads(route.request.post_data or "{}")
+        calls.append(body)
+        if not body.get("company_id"):
+            route.fulfill(status=409, json={"detail": "Выбери фирму", "companies": [
+                {"id": "11", "name": "JK Studio"}, {"id": "22", "name": "Другая фирма"}]})
+        else:
+            route.fulfill(json={"ok": True, "company_name": "JK Studio"})
+
+    def summary(route):
+        route.fulfill(json={"connected": True, "provider": "wfirma", "company_name": "JK Studio",
+                            "net_ytd": 182400.5,
+                            "vat_due": {"period": "2026-10", "to_pay": 2300.0, "carry": 0}})
+    ctx, page, errors = _wfirma_page(browser, base_url, {
+        "**/api/wfirma/connect": connect, "**/api/wfirma/summary": summary})
+    try:
+        page.goto(base_url + "/plan.html", wait_until="networkidle")
+        page.wait_for_selector("#acc-seg:not(.hidden)", timeout=10000)
+        tap(page, '#acc-seg button[data-acc="wfirma"]')
+        assert page.locator("#acc-wfirma").is_visible()
+        assert page.locator("#acc-infakt").is_hidden()
+        page.locator("#infakt-card").screenshot(path=str(SHOTS / "wfirma_connect.png")) \
+            if SHOTS else None
+
+        page.fill("#wf-access", "a" * 20)
+        page.fill("#wf-secret", "b" * 20)
+        tap(page, "#wf-connect")
+        page.wait_for_selector("#wf-company-box:not(.hidden)", timeout=10000)
+        assert page.locator("#wf-company option").count() == 2
+        page.select_option("#wf-company", "11")
+        tap(page, "#wf-connect")
+        page.wait_for_selector("#wf-on:not(.hidden)", timeout=10000)
+        text = page.inner_text("#wf-sums")
+        assert "JK Studio" in text and "2" in text and "JPK" in text
+        assert "ZUS и аванс налога" in text, "честно говорим, чего API не отдаёт"
+        assert calls[-1]["company_id"] == "11"
+        assert page.evaluate("localStorage.getItem('jdg_wfirma_on')") == "1"
+        if SHOTS:
+            page.locator("#infakt-card").screenshot(path=str(SHOTS / "wfirma_connected.png"))
+        assert not errors, errors
+    finally:
+        ctx.close()
+
+
+def test_wfirma_hidden_when_server_has_no_app_key(browser, base_url):
+    ctx = browser.new_context(viewport=PHONE)
+    page = ctx.new_page()
+    try:
+        page.goto(base_url + "/plan.html", wait_until="networkidle")
+        assert page.locator("#acc-seg").is_hidden()
+        assert "wFirma" not in page.inner_text("#infakt-card")
+    finally:
+        ctx.close()
+
+
+def test_wfirma_cockpit_overview(browser, base_url):
+    """Кокпит на wFirma: только обзор, без ZUS/налога, с JPK и KSeF."""
+    from datetime import date as _date
+    import wfirma
+
+    raw = {"company": {"altname": "JK Studio", "vat_payer": "1", "tax": "lumpregister"},
+           "invoices": [wfirma.norm_invoice(r) for r in [
+               {"fullnumber": "FV 1/11/2026", "date": "2026-11-03", "netto": "8000.00",
+                "total": "9840.00", "alreadypaid": "9840.00", "paymentstate": "paid",
+                "ksef_reference_number": "K-1"},
+               {"fullnumber": "FV 7/10/2026", "date": "2026-10-20", "netto": "6500.00",
+                "total": "7995.00", "alreadypaid": "0", "paymentstate": "unpaid",
+                "paymentdate": "2026-10-30"},
+               {"fullnumber": "FV 3/09/2026", "date": "2026-09-12", "netto": "7200.00",
+                "total": "8856.00", "alreadypaid": "8856.00", "paymentstate": "paid",
+                "ksef_reference_number": "K-3"}]],
+           "expenses": [{"date": "2026-11-04", "netto": 1200.0, "paid": True, "due": None},
+                        {"date": "2026-10-04", "netto": 900.0, "paid": True, "due": None}],
+           "jpk": {"to_pay": 1610.0, "carry": 0.0, "period": "2026-10"}}
+    data = {"connected": True} | wfirma.build_overview(raw, _date(2026, 11, 22))
+    ctx, page, errors = _wfirma_page(
+        browser, base_url,
+        {"**/api/wfirma/overview": lambda r: r.fulfill(json=data)},
+        storage={"jdg_wfirma_on": "1"})
+    try:
+        page.goto(base_url + "/cockpit.html", wait_until="networkidle")
+        page.wait_for_selector("#out .kpis", timeout=10000)
+        assert page.locator("#tabs").is_hidden(), "у wFirma только обзор"
+        out = page.inner_text("#out")
+        assert "Прибыль до налогов" in out and "JK Studio" in out
+        assert "VAT за 2026-10 по JPK" in out and "KSeF" in out
+        assert "Обязательства месяца" not in out, "ZUS/налога у wFirma нет — не рисуем"
+        assert "Налоги (ZUS + PIT)" not in out
+        if SHOTS:
+            page.screenshot(path=str(SHOTS / "wfirma_cockpit.png"), full_page=True)
         assert not errors, errors
     finally:
         ctx.close()

@@ -70,6 +70,105 @@ renderDock('plan');
   };
 })();
 
+// ── wFirma: та же карточка, вторая вкладка ──
+(function () {
+  const $ = id => document.getElementById(id);
+  const WFKEY = 'jdg_wfirma_on';
+  const inTg = tg && tg.initData;
+  // имя фирмы и тексты ошибок приходят извне — только экранированными
+  const esc = v => String(v == null ? '' : v).replace(/[&<>"]/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  async function wfApi(path, method, extra) {
+    const r = await fetch(path, {
+      method: method || 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ initData: tg.initData }, extra || {})),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error(data.detail || 'Ошибка'); e.status = r.status; e.data = data; throw e; }
+    return data;
+  }
+
+  function setAcc(which) {
+    document.querySelectorAll('#acc-seg button').forEach(b =>
+      b.classList.toggle('on', b.dataset.acc === which));
+    $('acc-infakt').classList.toggle('hidden', which !== 'infakt');
+    $('acc-wfirma').classList.toggle('hidden', which !== 'wfirma');
+    $('acc-title').textContent = which === 'wfirma' ? 'wFirma' : 'inFakt';
+  }
+  document.querySelectorAll('#acc-seg button').forEach(b =>
+    b.addEventListener('click', () => { haptic('light'); setAcc(b.dataset.acc); }));
+
+  function showSums(s) {
+    $('wf-off').classList.add('hidden');
+    $('wf-on').classList.remove('hidden');
+    const rows = [];
+    if (s.company_name) rows.push(`<div class="res-row"><span>Фирма</span><span class="v">${esc(s.company_name)}</span></div>`);
+    if (typeof s.net_ytd === 'number') {
+      rows.push(`<div class="res-row"><span>Продажи netto с начала года</span><span class="v">${fmtZl(s.net_ytd)}</span></div>`);
+    }
+    if (s.vat_due) {
+      rows.push(`<div class="res-row"><span>VAT за ${esc(s.vat_due.period || '')} по JPK</span><span class="v">${
+        s.vat_due.to_pay > 0 ? fmtZl(s.vat_due.to_pay) + ' к оплате' : 'к оплате нет'}</span></div>`);
+    }
+    rows.push('<div class="muted" style="font-size:12px;margin-top:6px">ZUS и аванс налога wFirma по API не отдаёт — их суммы смотри в калькуляторе и в самой wFirma.</div>');
+    $('wf-sums').innerHTML = rows.join('');
+    if (window.Icons) Icons.hydrate();
+  }
+
+  function load() {
+    wfApi('/api/wfirma/summary').then(s => {
+      if (s.connected) showSums(s); else localStorage.removeItem(WFKEY);
+    }).catch(e => { $('wf-on').classList.remove('hidden'); $('wf-off').classList.add('hidden');
+      $('wf-sums').innerHTML = `<div class="muted" style="font-size:13px">${esc(e.message)}</div>`; });
+  }
+
+  fetch('/api/health').then(r => r.json()).then(h => {
+    if (!h.wfirma) return;                       // интеграция выключена — нет и кнопки
+    $('acc-seg').classList.remove('hidden');
+    if (localStorage.getItem(WFKEY) === '1') {
+      setAcc('wfirma');
+      if (inTg) load();
+    }
+  }).catch(() => {});
+
+  $('wf-connect').onclick = async () => {
+    if (!inTg) { $('wf-msg').textContent = 'Открой через Telegram.'; return; }
+    const access = $('wf-access').value.trim(), secret = $('wf-secret').value.trim();
+    if (!access || !secret) { $('wf-msg').textContent = 'Нужны оба ключа: access и secret.'; return; }
+    const companyBox = $('wf-company-box');
+    const company = companyBox.classList.contains('hidden') ? '' : $('wf-company').value;
+    $('wf-msg').textContent = 'Проверяю ключи…'; haptic('medium');
+    try {
+      await wfApi('/api/wfirma/connect', 'POST',
+        { access_key: access, secret_key: secret, company_id: company });
+      localStorage.setItem(WFKEY, '1');
+      $('wf-access').value = ''; $('wf-secret').value = '';
+      companyBox.classList.add('hidden');
+      $('wf-msg').textContent = 'Загружаю данные…';
+      load();
+      $('wf-msg').textContent = '';
+    } catch (e) {
+      if (e.status === 409 && e.data && e.data.companies) {
+        // у ключа несколько фирм — выбираем, какую показывать
+        $('wf-company').innerHTML = e.data.companies.map(c =>
+          `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+        companyBox.classList.remove('hidden');
+        $('wf-msg').textContent = 'У ключа несколько фирм — выбери свою и нажми «Подключить».';
+      } else {
+        $('wf-msg').textContent = e.message;
+      }
+    }
+  };
+
+  $('wf-disconnect').onclick = async () => {
+    try { await wfApi('/api/wfirma', 'DELETE'); } catch (e) {}
+    localStorage.removeItem(WFKEY);
+    $('wf-on').classList.add('hidden');
+    $('wf-off').classList.remove('hidden');
+  };
+})();
+
 const CHECKLISTS = {
   open: [
     { id: 'pesel', t: 'Получить PESEL', a: 'pesel' },
