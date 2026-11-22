@@ -210,3 +210,37 @@ def test_settle_hits_reservation_day_after_midnight(api):
     with monitor.db() as c:
         usd = c.execute("SELECT usd FROM ai_spend WHERE day='2026-01-01'").fetchone()[0]
     assert usd == pytest.approx(0.001)
+
+
+# ── контекст: нужные куски статьи, а не её начало ──────────────────────────
+def test_excerpt_keeps_answer_beyond_the_first_chars():
+    filler = "общий текст про взносы и регистрацию. " * 200          # ~7600 символов
+    text = "введение к статье. " + filler + "оплачивать zus нужно до 20 числа следующего месяца. " + filler
+    out = ai.excerpt(text, ai._query_words("до какого числа платить ZUS?"))
+    assert "до 20 числа" in out
+    assert out.startswith("введение к статье"), "начало статьи остаётся"
+    assert len(out) <= ai.CONTEXT_CHARS + 20
+
+
+def test_excerpt_short_text_unchanged():
+    assert ai.excerpt("коротко про zus", ["zus"]) == "коротко про zus"
+
+
+def test_zus_deadline_reaches_the_model(api):
+    """Живой корпус гайда: срок оплаты ZUS стоит далеко от начала статьи."""
+    if not ai._load_index():
+        pytest.skip("контент гайда не собран")
+    sent, _ = api
+    ask("до какого числа платить ZUS?")
+    assert sent, "вопрос по теме должен дойти до модели"
+    assert "20 числа" in sent[0]["messages"][0]["content"]
+
+
+def test_cache_key_changes_with_retrieval_version(api, monkeypatch):
+    sent, _ = api
+    ask("до какого числа платить ZUS?")
+    ask("до какого числа платить ZUS?")
+    assert len(sent) == 1, "второй раз — из кэша"
+    monkeypatch.setattr(ai, "RETRIEVAL_VERSION", ai.RETRIEVAL_VERSION + 1)
+    ask("до какого числа платить ZUS?")
+    assert len(sent) == 2, "новый способ собирать контекст — кэш не отдаём"

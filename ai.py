@@ -238,6 +238,50 @@ BM25_B = 0.6       # насколько сильно штрафуем длину
 TITLE_BOOST = 8.0
 
 
+def _query_words(question: str) -> list[str]:
+    # год — значащее слово, а не мусор: «база duży ZUS в 2025» и тот же вопрос
+    # про 2026 обязаны находить разные записи
+    raw = [w for w in re.findall(r"[a-zа-яё]{3,}|(?:19|20)\d{2}", question.lower())
+           if w not in STOP]
+    # грубый стемминг: длинные слова матчим по префиксу (банка/банком → банк)
+    return list({w if len(w) <= 6 else w[:6] for w in raw})
+
+
+# Меняется вместе со способом собирать контекст: ключ кэша ответа включает
+# эту версию, иначе ответ, построенный старым способом, жил бы ещё сутки
+RETRIEVAL_VERSION = 2
+EXCERPT_WINDOW = 1200
+
+
+def excerpt(text: str, words: list[str], limit: int = CONTEXT_CHARS) -> str:
+    """Фрагменты статьи, относящиеся к вопросу, а не её первые limit символов.
+
+    Раньше модели уходило начало статьи: в статье про ZUS срок оплаты («до 20
+    числа следующего месяца») стоит на 5778-м символе, и на вопрос «до какого
+    числа платить ZUS?» ассистент честно отвечал, что в гайде этого нет.
+    Начало статьи берём всегда (там определения и контекст), остальное —
+    окна с наибольшим числом слов вопроса, в порядке текста.
+    """
+    if len(text) <= limit:
+        return text
+    w = EXCERPT_WINDOW
+    starts = list(range(0, len(text), w))
+    score = {i: sum(min(text[i:i + w].count(q), 3) for q in words) for i in starts}
+    chosen, used = {0}, w
+    for i in sorted(starts[1:], key=lambda i: (-score[i], i)):
+        if used + w > limit or score[i] == 0:
+            break
+        chosen.add(i)
+        used += w
+    parts, prev_end = [], 0
+    for i in sorted(chosen):
+        if parts and i > prev_end:
+            parts.append(" … ")
+        parts.append(text[i:i + w])
+        prev_end = i + w
+    return "".join(parts)
+
+
 def retrieve(question: str, k: int = CONTEXT_ARTICLES, with_scores: bool = False):
     """Топ-k статей: BM25 (частота с насыщением, нормировка по длине) + заголовок.
 
@@ -248,13 +292,7 @@ def retrieve(question: str, k: int = CONTEXT_ARTICLES, with_scores: bool = False
     статье про бухгалтерию, а не к таблице ставок 2025 года.
     """
     import math
-    # год — значащее слово, а не мусор: «база duży ZUS в 2025» и тот же вопрос
-    # про 2026 обязаны находить разные записи. Токенизатор резал цифры целиком,
-    # и год молча исчезал из запроса
-    raw = [w for w in re.findall(r"[a-zа-яё]{3,}|(?:19|20)\d{2}", question.lower())
-           if w not in STOP]
-    # грубый стемминг: длинные слова матчим по префиксу (банка/банком → банк)
-    words = list({w if len(w) <= 6 else w[:6] for w in raw})
+    words = _query_words(question)
     if not words:
         return ([], 0.0) if with_scores else []
     idx = _load_index()
@@ -483,7 +521,8 @@ async def ask(user_id: int, question: str, profile: dict | None = None) -> dict:
     prof_sig = (f"{profile.get('form', '')}|{bool(profile.get('vat'))}"
                 if profile else "")
     qhash = hashlib.sha256(
-        f"{question.lower()}|{_corpus_fingerprint()}|{prof_sig}".encode()).hexdigest()
+        f"{question.lower()}|{_corpus_fingerprint()}|{prof_sig}|r{RETRIEVAL_VERSION}"
+        .encode()).hexdigest()
     with _db() as c:
         row = c.execute("SELECT answer, sources, ts FROM ai_cache WHERE qhash=?",
                         (qhash,)).fetchone()
@@ -508,8 +547,9 @@ async def ask(user_id: int, question: str, profile: dict | None = None) -> dict:
         return {"answer": refusal, "sources": [], "cached": False,
                 "off_topic": True, "left": quota_left(user_id)}
 
+    qwords = _query_words(question)
     ctx = "\n\n".join(
-        f"### Статья «{a['title']}» (id: {a['id']})\n{a['text'][:CONTEXT_CHARS]}"
+        f"### Статья «{a['title']}» (id: {a['id']})\n{excerpt(a['text'], qwords)}"
         for a in arts)
     prof = ""
     if profile:
