@@ -110,11 +110,14 @@ CEIDG (`CEIDG_TOKEN`). Недоступный реестр — это ошибк
 
 ## wFirma
 
-`wfirma.py`, API2 (`https://api2.wfirma.pl`). Включается ключом приложения
-`WFIRMA_APP_KEY` (appKey выдаёт wFirma интегратору); без него ручки отвечают 404,
-а в интерфейсе нет даже вкладки. Пользователь создаёт свои `accessKey` и
-`secretKey` (wFirma → Ustawienia → Bezpieczeństwo → Aplikacje → Klucze API),
-они хранятся вместе зашифрованными (Fernet), как ключ inFakt. Если у ключа
+`wfirma.py`, API2 (`https://api2.wfirma.pl`). Ключи вводятся в отдельном окне
+`webapp/wfirma.html`. Пользователь создаёт свои `accessKey` и `secretKey`
+(wFirma → Ustawienia → Bezpieczeństwo → Aplikacje → Klucze API). Третий ключ,
+`appKey`, берётся у пользователя, если он его ввёл, иначе из `.env`
+`WFIRMA_APP_KEY`; без обоих подключение отказывает до запроса в сеть.
+`health.wfirma_app_key` говорит окну, просить ли appKey. Все ключи хранятся
+вместе зашифрованными (Fernet), как ключ inFakt; `/api/wfirma/status` отдаёт
+только имя фирмы, дату, последние 4 знака accessKey и чей appKey. Если у ключа
 несколько фирм, API отвечает `COMPANY ID REQUIRED` — интерфейс предлагает выбор
 (`user_companies/find`), выбранный `company_id` хранится с ключами.
 
@@ -146,7 +149,7 @@ CEIDG (`CEIDG_TOKEN`). Недоступный реестр — это ошибк
 | `FERNET_KEY` | шифрование ключей inFakt |
 | `GUS_BIR_KEY`, `CEIDG_TOKEN` | реестры GUS и CEIDG |
 | `PKD_DIALOG_ENABLED` | точный подбор PKD (на проде включён) |
-| `WFIRMA_APP_KEY` | ключ приложения wFirma; пусто — интеграции нет |
+| `WFIRMA_APP_KEY` | ключ приложения wFirma; пусто — пользователь вводит свой appKey в окне ключей |
 | `DISABLE_BOT` | запуск без поллинга (локально и в тестах) |
 | `NO_NET` | тесты без живых запросов к реестрам |
 | `JDG_DB`, `JDG_PKD_DATA` | пути к базе и справочнику (для тестов) |
