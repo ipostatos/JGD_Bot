@@ -165,3 +165,21 @@ def test_cache_key_separates_profiles(tmp_path, monkeypatch):
 
     assert qhash({"form": "liniowy", "vat": True}) != qhash({"form": "ryczalt", "vat": False})
     assert qhash(None) != qhash({"form": "liniowy", "vat": True})
+
+
+def test_zus_deadline_question_reaches_the_guide_article():
+    # прод 23.11: «до какого числа платить ZUS» — три места контекста занимали
+    # короткие записи (ошибки DRA, порог 15 000 zł), статья «ZUS» была шестой,
+    # и ассистент отвечал, что срока в гайде нет
+    q = "До какого числа нужно платить ZUS каждый месяц?"
+    arts = ai.retrieve(q)
+    assert "zus" in [a["id"] for a in arts]
+    words = ai._query_words(q)
+    assert any("20 числа" in ai.excerpt(a["text"], words) for a in arts)
+
+
+def test_reference_entries_never_fill_the_whole_context():
+    for q in ["Когда платить ZUS?", "срок уплаты ZUS", "ошибка DRA ZUS месяц"]:
+        arts = ai.retrieve(q)
+        aux = [a for a in arts if a["id"].startswith(ai.AUX_PREFIXES)]
+        assert len(aux) <= ai.MAX_AUX and len(arts) - len(aux) >= 2, [a["id"] for a in arts]
