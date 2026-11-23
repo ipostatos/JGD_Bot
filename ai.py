@@ -35,8 +35,8 @@ ADMIN_ID = os.environ.get("ADMIN_CHAT_ID", "")
 DAILY_BUDGET_USD = float(os.environ.get("AI_DAILY_BUDGET_USD") or 0.50)
 MONTHLY_BUDGET_USD = float(os.environ.get("AI_MONTHLY_BUDGET_USD") or 5.00)
 OFF_TOPIC = "OFF_TOPIC"
-CONTEXT_ARTICLES = 3
-CONTEXT_CHARS = 5000
+CONTEXT_ARTICLES = 4     # из них справочных записей не больше MAX_AUX
+CONTEXT_CHARS = 3800     # 4 × 3800 ≈ прежние 3 × 5000: ответ не дороже
 
 FAQ_JSON = ROOT / "webapp" / "data" / "faq_data.json"
 ZUS_ERRORS_JSON = ROOT / "webapp" / "zus_errors.json"
@@ -236,6 +236,8 @@ STOP = {"как", "что", "это", "для", "или", "нужно", "мож�
 BM25_K1 = 1.5      # насыщение частоты: десятое вхождение слова уже мало что добавляет
 BM25_B = 0.6       # насколько сильно штрафуем длину документа
 TITLE_BOOST = 8.0
+AUX_PREFIXES = ("zuserr-", "banks-", "chatfaq-")
+MAX_AUX = 2
 
 
 def _query_words(question: str) -> list[str]:
@@ -249,7 +251,7 @@ def _query_words(question: str) -> list[str]:
 
 # Меняется вместе со способом собирать контекст: ключ кэша ответа включает
 # эту версию, иначе ответ, построенный старым способом, жил бы ещё сутки
-RETRIEVAL_VERSION = 2
+RETRIEVAL_VERSION = 3
 EXCERPT_WINDOW = 1200
 
 
@@ -315,7 +317,20 @@ def retrieve(question: str, k: int = CONTEXT_ARTICLES, with_scores: bool = False
         if score > 0:
             scored.append((score, art))
     scored.sort(key=lambda x: -x[0])
-    top = [a for _, a in scored[:k]]
+    # Короткие справочные записи (база ошибок ZUS, банки, FAQ чата) выигрывают
+    # у статей гайда длиной: 500 знаков с двумя словами вопроса весят больше
+    # 10 000 знаков с ответом. На «до какого числа платить ZUS» три места
+    # занимали ошибки DRA и порог 15 000 zł, а статья «ZUS» со сроком была
+    # шестой. Таким записям — одно место в контексте, остальное — гайду.
+    top, aux = [], 0
+    for _, a in scored:
+        if len(top) == k:
+            break
+        if a.get("id", "").startswith(AUX_PREFIXES):
+            if aux >= MAX_AUX:
+                continue
+            aux += 1
+        top.append(a)
     return (top, scored[0][0] if scored else 0.0) if with_scores else top
 
 
